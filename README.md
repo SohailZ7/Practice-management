@@ -1,7 +1,7 @@
 # Practice Management
 
-Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**.
-Requirements: the latest file in [specs/](specs/) (currently [requirements-v4.md](specs/requirements-v4.md)); older versions are kept.
+Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**, **Ledger**.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v9.md](specs/requirements-v9.md)); older versions are kept.
 Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.
@@ -44,6 +44,11 @@ Modeled on `bandbc-billing-app`. Providers (anyone with edit access to Billing) 
 date, program, ICD-10 codes, charge code or note. The Admin marks each encounter "Entered into GetIX" (needs an MRN; this
 locks it), manages programs, adds or fixes MRNs, merges duplicate records, restores deleted encounters and views edit
 history. Nothing is erased. Use made-up patients locally; see the BAA/hosting note in the spec before real patient data.
+
+## Ledger
+Business cash in / cash out, shaped like the practice's ledger spreadsheet: Date, Cash In, Cash Out, Transaction By,
+Category, Method, Comments. Edit in the grid, filter, see totals, view a Summary by category and month, export CSV.
+Categories, methods and names are editable under Ledger → Lists. Only the Admin has Ledger access until granted.
 
 ## Tests and checks
 ```bash

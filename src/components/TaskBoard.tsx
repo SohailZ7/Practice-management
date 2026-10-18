@@ -22,7 +22,7 @@ import { dueLabel } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { linkTypeMeta } from "@/lib/links";
-import { applyReorder, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { applyReorder, splitTasks, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 import {
   addCategory,
   addTaskLink,
@@ -47,8 +47,9 @@ type Props = {
   today: string;
 };
 
+const PAST = "past-due";
 const TODAY = "today";
-const NONE = "none";
+const BACKLOG = "backlog";
 const DONE = "completed";
 
 export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today }: Props) {
@@ -129,7 +130,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     }
   }
 
-  const open = useMemo(() => tasks.filter((t) => !t.completed), [tasks]);
+  const { pastDue, today: todayList, backlog, completed } = useMemo(() => splitTasks(tasks, today), [tasks, today]);
   const toggle = (id: string) =>
     setCollapsed((c) => {
       const n = new Set(c);
@@ -217,31 +218,24 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         <TaskAnalytics tasks={tasks} categories={categories} />
       ) : (
         <>
+          {pastDue.length > 0 && (
+            <Section id={PAST} name="Past due" urgent sortable={false} tasks={pastDue} {...sectionProps} />
+          )}
           <Section
             id={TODAY}
             name="Today"
-            tasks={open.filter((t) => t.inToday)}
+            tasks={todayList}
             onAdd={canEdit ? (title) => add(title, null, true) : undefined}
             {...sectionProps}
           />
-          {categories.map((c) => (
-            <Section
-              key={c.id}
-              id={c.id}
-              name={c.name}
-              tasks={open.filter((t) => t.categoryId === c.id)}
-              onAdd={canEdit ? (title) => add(title, c.id, false) : undefined}
-              {...sectionProps}
-            />
-          ))}
           <Section
-            id={NONE}
-            name="No category"
-            tasks={open.filter((t) => !t.categoryId)}
+            id={BACKLOG}
+            name="Backlog"
+            tasks={backlog}
             onAdd={canEdit ? (title) => add(title, null, false) : undefined}
             {...sectionProps}
           />
-          <Section id={DONE} name="Completed" tasks={tasks.filter((t) => t.completed)} {...sectionProps} />
+          <Section id={DONE} name="Completed" tasks={completed} {...sectionProps} />
         </>
       )}
     </div>
@@ -269,10 +263,16 @@ function Section({
   onReorder,
   onAdd,
   itemProps,
+  urgent = false,
+  sortable = true,
 }: {
   id: string;
   name: string;
   tasks: TaskDTO[];
+  /** Past-due styling: red heading and a high-priority flag on each task. */
+  urgent?: boolean;
+  /** False when the order is fixed (Past due is sorted by due date). */
+  sortable?: boolean;
   sensors: ReturnType<typeof useSensors>;
   canEdit: boolean;
   collapsed: Set<string>;
@@ -295,13 +295,13 @@ function Section({
   }
 
   return (
-    <section className="todo-section" id={`sec-${id}`}>
+    <section className={`todo-section ${urgent ? "urgent" : ""}`} id={`sec-${id}`}>
       <div className="todo-section-head">
         <button className="todo-section-toggle" onClick={() => onToggle(id)} aria-expanded={isOpen}>
           <span className={`chev ${isOpen ? "" : "closed"}`}>
             <Icon name="chevron" />
           </span>
-          <span className="name">{name}</span>
+          <span className="name">{urgent && <Icon name="flag" filled />}{name}</span>
         </button>
         {onAdd && (
           <button
@@ -331,7 +331,7 @@ function Section({
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
               {tasks.map((t) => (
-                <TaskItem key={t.id} task={t} canEdit={canEdit} {...itemProps} />
+                <TaskItem key={t.id} task={t} canEdit={canEdit} sortable={sortable} urgent={urgent} {...itemProps} />
               ))}
             </SortableContext>
           </DndContext>
@@ -391,10 +391,12 @@ function TaskItem({
   onDelete,
   onAddLink,
   onRemoveLink,
-}: ItemProps & { task: TaskDTO; canEdit: boolean }) {
+  sortable,
+  urgent,
+}: ItemProps & { task: TaskDTO; canEdit: boolean; sortable: boolean; urgent: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-    disabled: !canEdit,
+    disabled: !canEdit || !sortable,
   });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.title);
@@ -430,10 +432,15 @@ function TaskItem({
   return (
     <div ref={setNodeRef} style={style} className={`todo-item ${task.completed ? "completed" : ""}`}>
       <div className="todo-row">
-        {canEdit && (
+        {canEdit && sortable && (
           <button className="drag-handle" {...attributes} {...listeners} title="Drag to reorder" aria-label="Drag to reorder">
             ⠿
           </button>
+        )}
+        {urgent && (
+          <span className="prio-flag" title="High priority: past due" aria-label="High priority, past due">
+            <Icon name="flag" filled />
+          </span>
         )}
         <input
           type="checkbox"

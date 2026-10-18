@@ -120,3 +120,49 @@ describe("task analytics", () => {
     expect(r.avgPerDay).toBeCloseTo(0.1);
   });
 });
+
+import { splitTasks } from "../src/lib/taskTypes";
+
+describe("splitTasks (Past due / Today / Backlog / Completed)", () => {
+  const today = "2026-10-17";
+  const t = (id: string, over: Partial<{ completed: boolean; dueDate: string | null; inToday: boolean; sortOrder: number }> = {}) => ({
+    id,
+    completed: false,
+    dueDate: null as string | null,
+    inToday: false,
+    sortOrder: 0,
+    ...over,
+  });
+  const ids = (list: { id: string }[]) => list.map((x) => x.id);
+
+  it("puts overdue open tasks in Past due, most overdue first, and nowhere else", () => {
+    const r = splitTasks([t("a", { dueDate: "2026-10-16" }), t("b", { dueDate: "2026-10-01", inToday: true })], today);
+    expect(ids(r.pastDue)).toEqual(["b", "a"]);
+    expect(r.today).toEqual([]);
+    expect(r.backlog).toEqual([]);
+  });
+  it("shows tasks due today, or flagged for Today, in Today", () => {
+    const r = splitTasks([t("due", { dueDate: today }), t("flag", { inToday: true }), t("later", { dueDate: "2026-10-30" })], today);
+    expect(ids(r.today)).toEqual(["due", "flag"]);
+    expect(ids(r.backlog)).toEqual(["later"]);
+  });
+  it("keeps undated, unflagged tasks in Backlog and done tasks in Completed", () => {
+    const r = splitTasks([t("x"), t("done", { completed: true, dueDate: "2026-01-01" })], today);
+    expect(ids(r.backlog)).toEqual(["x"]);
+    expect(ids(r.completed)).toEqual(["done"]);
+    expect(r.pastDue).toEqual([]);
+  });
+});
+
+import { applyOrder } from "../src/lib/order";
+
+describe("applyOrder (remembered tab order)", () => {
+  const items = ["a", "b", "c", "d"].map((id) => ({ id }));
+  it("follows the saved order", () => {
+    expect(applyOrder(items, ["c", "a"]).map((i) => i.id)).toEqual(["c", "a", "b", "d"]);
+  });
+  it("ignores ids that no longer exist and keeps new items at the end", () => {
+    expect(applyOrder(items, ["zzz", "d", "b"]).map((i) => i.id)).toEqual(["d", "b", "a", "c"]);
+    expect(applyOrder(items, []).map((i) => i.id)).toEqual(["a", "b", "c", "d"]);
+  });
+});

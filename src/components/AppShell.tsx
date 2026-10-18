@@ -4,18 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 import { Icon, Logo, type IconName } from "./Icons";
 
 type Props = {
   name: string;
   email: string;
-  levels: { schedule: string; tasks: string; employees: string; billing: string };
+  levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string };
   isAdmin: boolean;
   children: ReactNode;
 };
 
 const PIN_KEY = "nav-pinned";
 const WIDTH_KEY = "nav-width";
+const ORDER_KEY = "nav-order";
 const DEFAULT_WIDTH = 250;
 const MIN_WIDTH = 200;
 
@@ -90,12 +103,32 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
     }
   };
 
-  const items: { href: string; label: string; icon: IconName }[] = [];
-  if (levels.schedule !== "none") items.push({ href: "/schedule", label: "Schedule", icon: "calendar" });
-  if (levels.tasks !== "none") items.push({ href: "/tasks", label: "Tasks", icon: "tasks" });
-  if (levels.employees !== "none") items.push({ href: "/employees", label: "Employees", icon: "users" });
-  if (levels.billing !== "none") items.push({ href: "/billing", label: "Billing", icon: "billing" });
-  if (isAdmin) items.push({ href: "/admin", label: "Access", icon: "shield" });
+  const items: { id: string; href: string; label: string; icon: IconName }[] = [];
+  if (levels.schedule !== "none") items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar" });
+  if (levels.tasks !== "none") items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks" });
+  if (levels.employees !== "none") items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users" });
+  if (levels.billing !== "none") items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing" });
+  if (levels.ledger !== "none") items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger" });
+  if (isAdmin) items.push({ id: "/admin", href: "/admin", label: "Access", icon: "shield" });
+
+  const [order, setOrder] = useState<string[]>([]);
+  useEffect(() => setOrder(readOrder(ORDER_KEY)), []);
+  const orderedItems = applyOrder(items, order);
+  const navSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onNavDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = orderedItems.map((i) => i.id);
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(ids, from, to);
+    setOrder(next);
+    writeOrder(ORDER_KEY, next);
+  };
 
   const link = (href: string, label: string, icon: IconName) => (
     <Link key={href} href={href} title={label} className={path.startsWith(href) ? "active" : ""}>
@@ -118,7 +151,7 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
           </Link>
           <button
             type="button"
-            className={`pin-toggle label ${pinned ? "on" : ""}`}
+            className={`pin-toggle ${pinned ? "on" : ""}`}
             onClick={togglePin}
             title={pinned ? "Unpin the navigation bar (collapse to icons)" : "Pin the navigation bar open"}
             aria-pressed={pinned}
@@ -132,7 +165,15 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
             <Icon name="home" />
             <span className="label">Home</span>
           </Link>
-          {items.map((i) => link(i.href, i.label, i.icon))}
+          <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
+            <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              {orderedItems.map((i) => (
+                <SortableNavItem key={i.id} id={i.id} label={i.label}>
+                  {link(i.href, i.label, i.icon)}
+                </SortableNavItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         </nav>
         <div className="foot">
           {link("/settings", "Settings", "settings")}
@@ -155,6 +196,22 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
           <div className="content-inner">{children}</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SortableNavItem({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className="nav-item"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 5 : undefined }}
+    >
+      {children}
+      <button className="nav-grip" title={`Drag to reorder (${label})`} aria-label={`Drag to reorder ${label}`} {...attributes} {...listeners}>
+        ⠿
+      </button>
     </div>
   );
 }

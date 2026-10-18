@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { todayISO } from "@/lib/dates";
 import { toTaskDTO } from "@/lib/taskTypes";
 import { TaskBoard } from "@/components/TaskBoard";
+import { EmployeeTabs } from "@/components/EmployeeTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -57,29 +57,13 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
       <h1>{isAdmin ? "Tasks" : "My tasks"}</h1>
 
       {isAdmin && (
-        <div className="tabs" role="tablist" aria-label="Employees">
-          {employees.map((e) => (
-            <Link
-              key={e.id}
-              href={`/tasks?emp=${e.id}`}
-              role="tab"
-              aria-selected={selected === e.id}
-              className={selected === e.id ? "tab on" : "tab"}
-            >
-              {e.name}
-              <span className="count">{openCounts.get(e.id) ?? 0}</span>
-            </Link>
-          ))}
-          <Link
-            href={`/tasks?emp=${UNASSIGNED}`}
-            role="tab"
-            aria-selected={selected === null}
-            className={selected === null ? "tab on" : "tab"}
-          >
-            Unassigned
-            <span className="count">{openCounts.get(null) ?? 0}</span>
-          </Link>
-        </div>
+        <EmployeeTabs
+          selectedId={selected ?? UNASSIGNED}
+          tabs={[
+            ...employees.map((e) => ({ id: e.id, label: e.name, count: openCounts.get(e.id) ?? 0, href: `/tasks?emp=${e.id}` })),
+            { id: UNASSIGNED, label: "Unassigned", count: openCounts.get(null) ?? 0, href: `/tasks?emp=${UNASSIGNED}` },
+          ]}
+        />
       )}
 
       {noProfile ? (

@@ -46,6 +46,12 @@ export default async function Home() {
             <div className="muted">Encounters and GetIX</div>
           </Link>
         )}
+        {lv.ledger !== "none" && (
+          <Link href="/ledger" className="card grow">
+            <strong>Ledger</strong>
+            <div className="muted">Business cash in and out</div>
+          </Link>
+        )}
         {canOpenAdmin(user) && (
           <Link href="/admin" className="card grow">
             <strong>Access</strong>

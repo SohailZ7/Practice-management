@@ -47,3 +47,30 @@ export function applyReorder<T extends { id: string }>(all: T[], orderedIds: str
   let cursor = 0;
   return all.map((t) => (inSet.has(t.id) ? (byId.get(orderedIds[cursor++]) ?? t) : t));
 }
+
+/**
+ * Splits tasks into the board's sections.
+ * - Past due: open, due date before today (most overdue first).
+ * - Today: open, due today or flagged for Today.
+ * - Backlog: every other open task.
+ * - Completed: done tasks.
+ */
+export function splitTasks<T extends Pick<TaskDTO, "id" | "completed" | "dueDate" | "inToday" | "sortOrder">>(
+  tasks: T[],
+  today: string,
+) {
+  const open = tasks.filter((t) => !t.completed);
+  const pastDue = open
+    .filter((t) => t.dueDate !== null && t.dueDate < today)
+    .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : a.sortOrder - b.sortOrder));
+  const past = new Set(pastDue.map((t) => t.id));
+  const rest = open.filter((t) => !past.has(t.id));
+  const todayList = rest.filter((t) => t.inToday || t.dueDate === today);
+  const inToday = new Set(todayList.map((t) => t.id));
+  return {
+    pastDue,
+    today: todayList,
+    backlog: rest.filter((t) => !inToday.has(t.id)),
+    completed: tasks.filter((t) => t.completed),
+  };
+}

@@ -93,3 +93,67 @@ describe("getixBlocker", () => {
     expect(getixBlocker({ mrn: "A1" }, { deletedAt: null, getixEntered: false })).toBeNull();
   });
 });
+
+import { editableMoney, formatMoney, parseMoney } from "../src/lib/ledger/money";
+import { csvField, ledgerEntryError, ledgerTotals } from "../src/lib/ledger/validate";
+import { byCategory, byMonth } from "../src/lib/ledger/summary";
+
+describe("ledger money", () => {
+  it("parses typed amounts into exact cents", () => {
+    expect(parseMoney("$1,000.00")).toEqual({ cents: 100000 });
+    expect(parseMoney("12.5")).toEqual({ cents: 1250 });
+    expect(parseMoney("0.07")).toEqual({ cents: 7 });
+    expect(parseMoney("-")).toEqual({ cents: 0 });
+    expect(parseMoney("")).toEqual({ cents: 0 });
+  });
+  it("rejects things that aren't amounts", () => {
+    expect("error" in parseMoney("abc")).toBe(true);
+    expect("error" in parseMoney("-5")).toBe(true);
+    expect("error" in parseMoney("1.234")).toBe(true);
+    expect("error" in parseMoney("99999999999999")).toBe(true);
+  });
+  it("formats cents back", () => {
+    expect(formatMoney(100000)).toBe("$1,000.00");
+    expect(formatMoney(7)).toBe("$0.07");
+    expect(formatMoney(-1250)).toBe("-$12.50");
+    expect(editableMoney(0)).toBe("");
+  });
+});
+
+describe("ledgerEntryError", () => {
+  const ok = { date: "2026-05-06", cashIn: 0, cashOut: 64700 };
+  it("accepts one-sided entries", () => {
+    expect(ledgerEntryError(ok)).toBeNull();
+    expect(ledgerEntryError({ ...ok, cashIn: 100, cashOut: 0 })).toBeNull();
+  });
+  it("needs a real date and exactly one positive amount", () => {
+    expect(ledgerEntryError({ ...ok, date: "2026-02-30" })).toMatch(/date/);
+    expect(ledgerEntryError({ ...ok, cashOut: 0 })).toMatch(/amount/);
+    expect(ledgerEntryError({ ...ok, cashIn: 5 })).toMatch(/not both/);
+    expect(ledgerEntryError({ ...ok, cashOut: -1 })).toMatch(/Amounts/);
+    expect(ledgerEntryError({ ...ok, cashOut: 1.5 })).toMatch(/Amounts/);
+  });
+});
+
+describe("ledger totals and summaries", () => {
+  const rows = [
+    { date: "2026-05-01", cashIn: 100000, cashOut: 0, categoryId: "dep" },
+    { date: "2026-05-06", cashIn: 0, cashOut: 64700, categoryId: "ins" },
+    { date: "2026-06-02", cashIn: 0, cashOut: 610, categoryId: null },
+  ];
+  it("adds exactly", () => {
+    expect(ledgerTotals(rows)).toEqual({ cashIn: 100000, cashOut: 65310, net: 34690, count: 3 });
+  });
+  it("groups by category (biggest spend first) and month (oldest first)", () => {
+    expect(byCategory(rows).map((b) => b.key)).toEqual(["ins", "", "dep"]);
+    expect(byMonth(rows).map((b) => [b.key, b.net])).toEqual([["2026-05", 35300], ["2026-06", -610]]);
+  });
+});
+
+describe("csvField", () => {
+  it("quotes fields and defuses spreadsheet formulas", () => {
+    expect(csvField('say "hi", ok')).toBe('"say ""hi"", ok"');
+    expect(csvField("=SUM(A1)")).toBe("'=SUM(A1)");
+    expect(csvField("plain")).toBe("plain");
+  });
+});

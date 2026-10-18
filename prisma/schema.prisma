@@ -221,3 +221,47 @@ model BillingHistory {
 
   @@index([entity, entityId, changedAt])
 }
+
+// ---- Ledger: business cash in / cash out (modeled on the practice's ledger spreadsheet) ----
+
+model LedgerCategory {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  sortOrder Int           @default(0)
+  entries   LedgerEntry[]
+}
+
+model LedgerMethod {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  sortOrder Int           @default(0)
+  entries   LedgerEntry[]
+}
+
+// "Transaction By" choices.
+model LedgerParty {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  sortOrder Int           @default(0)
+  entries   LedgerEntry[]
+}
+
+// Amounts are whole cents so totals are exact. date: YYYY-MM-DD.
+model LedgerEntry {
+  id          String          @id @default(cuid())
+  date        String
+  cashIn      Int             @default(0)
+  cashOut     Int             @default(0)
+  partyId     String?
+  categoryId  String?
+  methodId    String?
+  comments    String          @default("")
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
+  party       LedgerParty?    @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  category    LedgerCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  method      LedgerMethod?   @relation(fields: [methodId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+}
