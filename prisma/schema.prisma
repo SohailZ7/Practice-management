@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// role: ADMIN | PROVIDER | STAFF
+model User {
+  id        String         @id @default(cuid())
+  email     String         @unique
+  name      String
+  role      String         @default("STAFF")
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  access    ModuleAccess[]
+}
+
+// module: schedule | tasks | employees   level: none | view | edit
+model ModuleAccess {
+  id     String @id @default(cuid())
+  userId String
+  module String
+  level  String @default("none")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, module])
+}
+
+model Employee {
+  id     String   @id @default(cuid())
+  name   String
+  title  String   @default("")
+  email  String?  @unique
+  phone  String   @default("")
+  active Boolean  @default(true)
+  tasks  Task[]
+  provider Provider?
+}
+
+// Providers shown on the schedule. employeeId null = external provider.
+model Provider {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  contact      String   @default("")
+  npi          String   @default("")
+  zoomLink     String   @default("")
+  zoomPassword String   @default("")
+  hours        String   @default("")
+  notes        String   @default("")
+  employeeId   String?  @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  entries      ScheduleEntry[]
+}
+
+model TrackDef {
+  id        String @id @default(cuid())
+  name      String @unique
+  startTime String @default("")
+  endTime   String @default("")
+  sortOrder Int    @default(0)
+}
+
+model EntryType {
+  id   String @id @default(cuid())
+  name String @unique
+}
+
+// section: PSYCH_EVAL | TRACK    date: YYYY-MM-DD
+model ScheduleEntry {
+  id           String    @id @default(cuid())
+  date         String
+  section      String
+  timeLabel    String    @default("")
+  trackName    String    @default("")
+  typeName     String    @default("")
+  clientInfo   String    @default("")
+  providerId   String?
+  providerName String    @default("")
+  absent       Boolean   @default(false)
+  canceled     Boolean   @default(false)
+  completed    Boolean   @default(false)
+  missed       Boolean   @default(false)
+  dedupeKey    String    @default("")
+  importLogId  String?
+  createdAt    DateTime  @default(now())
+  provider     Provider? @relation(fields: [providerId], references: [id])
+
+  @@index([date])
+  @@index([dedupeKey])
+}
+
+model Category {
+  id        String @id @default(cuid())
+  name      String @unique
+  sortOrder Int    @default(0)
+  tasks     Task[]
+}
+
+// dueDate: YYYY-MM-DD
+model Task {
+  id              String         @id @default(cuid())
+  title           String
+  categoryId      String?
+  assigneeId      String?
+  dueDate         String?
+  completed       Boolean        @default(false)
+  inToday         Boolean        @default(false)
+  sortOrder       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  assignee        Employee?      @relation(fields: [assigneeId], references: [id])
+  links           TaskLink[]
+}
+
+// type: webex | pr | doc | markdown | link
+model TaskLink {
+  id     String @id @default(cuid())
+  taskId String
+  url    String
+  label  String
+  type   String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorEmail String
+  action     String
+  detail     String   @default("")
+  createdAt  DateTime @default(now())
+}
+
+model ImportLog {
+  id         String   @id @default(cuid())
+  fileName   String
+  sheet      String
+  userEmail  String
+  rowsFound  Int
+  created    Int
+  duplicates Int
+  skipped    Int
+  createdAt  DateTime @default(now())
+}
+
+// Parsed upload waiting for the user to confirm.
+model ImportDraft {
+  id        String   @id @default(cuid())
+  userEmail String
+  fileName  String
+  sheet     String
+  payload   String
+  createdAt DateTime @default(now())
+}

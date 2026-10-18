@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets and local data
+.env
+.env.local
+
+# never commit real workbooks
+*.xlsx
+*.xls
+!tests/fixtures/.gitkeep
