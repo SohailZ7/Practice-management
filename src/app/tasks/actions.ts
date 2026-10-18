@@ -85,6 +85,10 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO>
     if (patch.dueDate && !isISODate(patch.dueDate)) throw new Error("Invalid date");
     data.dueDate = patch.dueDate || null;
   }
+  if (patch.expiresAt !== undefined) {
+    if (patch.expiresAt && !isISODate(patch.expiresAt)) throw new Error("Invalid expiration date");
+    data.expiresAt = patch.expiresAt || null;
+  }
   if (patch.completed !== undefined) {
     data.completed = patch.completed === true;
     // Track when it was finished (used by Analytics); clear it if the task is reopened.
@@ -100,6 +104,12 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO>
     if ((to?.id ?? null) !== existing.assigneeId) {
       reassign = `"${existing.title}": ${existing.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`;
     }
+  }
+
+  const finalDue = (data.dueDate !== undefined ? data.dueDate : existing.dueDate) as string | null;
+  const finalExpires = (data.expiresAt !== undefined ? data.expiresAt : existing.expiresAt) as string | null;
+  if (finalDue && finalExpires && finalExpires < finalDue) {
+    throw new Error("The expiration date can't be before the due date");
   }
 
   const updated = await db.task.update({ where: { id }, data, include: { links: true } });

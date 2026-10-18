@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { dueLabel } from "@/lib/dates";
+import { dueLabel, formatShort } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { linkTypeMeta } from "@/lib/links";
@@ -53,12 +53,13 @@ const PAST = "past-due";
 const TODAY = "today";
 const BACKLOG = "backlog";
 const DONE = "completed";
+const EXPIRED = "expired";
 
 export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today, canReorder }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set([DONE]));
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set([DONE, EXPIRED]));
   const [tab, setTab] = useState<"todos" | "analytics">("todos");
   const [showCategories, setShowCategories] = useState(false);
 
@@ -132,7 +133,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     }
   }
 
-  const { pastDue, today: todayList, backlog, completed } = useMemo(() => splitTasks(tasks, today), [tasks, today]);
+  const { expired, pastDue, today: todayList, backlog, completed } = useMemo(() => splitTasks(tasks, today), [tasks, today]);
   const toggle = (id: string) =>
     setCollapsed((c) => {
       const n = new Set(c);
@@ -238,6 +239,9 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
             {...sectionProps}
           />
           <Section id={DONE} name="Completed" tasks={completed} {...sectionProps} />
+          {expired.length > 0 && (
+            <Section id={EXPIRED} name="Expired" muted sortable={false} tasks={expired} {...sectionProps} />
+          )}
         </>
       )}
     </div>
@@ -267,6 +271,7 @@ function Section({
   onAdd,
   itemProps,
   urgent = false,
+  muted = false,
   sortable = true,
 }: {
   id: string;
@@ -274,6 +279,8 @@ function Section({
   tasks: TaskDTO[];
   /** Past-due styling: red heading and a high-priority flag on each task. */
   urgent?: boolean;
+  /** Expired styling: dimmed, out of the queue. */
+  muted?: boolean;
   /** False when the order is fixed (Past due is sorted by due date). */
   sortable?: boolean;
   sensors: ReturnType<typeof useSensors>;
@@ -299,7 +306,7 @@ function Section({
   }
 
   return (
-    <section className={`todo-section ${urgent ? "urgent" : ""}`} id={`sec-${id}`}>
+    <section className={`todo-section ${urgent ? "urgent" : ""} ${muted ? "muted-section" : ""}`} id={`sec-${id}`}>
       <div className="todo-section-head">
         <button className="todo-section-toggle" onClick={() => onToggle(id)} aria-expanded={isOpen}>
           <span className={`chev ${isOpen ? "" : "closed"}`}>
@@ -407,6 +414,7 @@ function TaskItem({
   const [addingLink, setAddingLink] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const dateRef = useRef<HTMLInputElement>(null);
+  const expRef = useRef<HTMLInputElement>(null);
 
   const due = dueLabel(task.dueDate, today);
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -422,6 +430,15 @@ function TaskItem({
     if (u) onAddLink(task.id, u);
     setLinkDraft("");
     setAddingLink(false);
+  };
+  const openExpPicker = () => {
+    const input = expRef.current;
+    if (!input) return;
+    try {
+      input.showPicker();
+    } catch {
+      input.focus();
+    }
   };
   const openPicker = () => {
     const input = dateRef.current;
@@ -533,6 +550,34 @@ function TaskItem({
           tabIndex={-1}
           aria-label="Due date"
           onChange={(e) => onPatch(task.id, { dueDate: e.target.value || null })}
+        />
+        {task.expiresAt ? (
+          <span className={`exp-pill ${!task.completed && task.expiresAt < today ? "expired" : ""}`}>
+            <button type="button" onClick={openExpPicker} disabled={!canEdit} title="Change the expiration date">
+              {!task.completed && task.expiresAt < today ? "Expired" : "Expires"} {formatShort(task.expiresAt).replace(/^\w+, /, "")}
+            </button>
+            {canEdit && (
+              <button type="button" onClick={() => onPatch(task.id, { expiresAt: null })} title="No expiration" aria-label="Remove the expiration date">
+                ×
+              </button>
+            )}
+          </span>
+        ) : (
+          canEdit && (
+            <button className="icon-btn" title="Set an expiration date (no expiration by default)" aria-label="Set an expiration date" onClick={openExpPicker}>
+              <Icon name="hourglass" />
+            </button>
+          )
+        )}
+        <input
+          ref={expRef}
+          type="date"
+          className="due-date-hidden"
+          value={task.expiresAt ?? ""}
+          min={task.dueDate ?? undefined}
+          tabIndex={-1}
+          aria-label="Expiration date"
+          onChange={(e) => onPatch(task.id, { expiresAt: e.target.value || null })}
         />
         <button
           className={`icon-btn sun ${task.inToday ? "active" : ""}`}

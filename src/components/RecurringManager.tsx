@@ -37,6 +37,7 @@ export function RecurringManager({
   const [weekday, setWeekday] = useState(0);
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [startDate, setStart] = useState(today);
+  const [ends, setEnds] = useState(false);
   const [endDate, setEnd] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -55,7 +56,7 @@ export function RecurringManager({
         weekday: frequency === "WEEKLY" ? weekday : null,
         dayOfMonth: frequency === "MONTHLY" ? dayOfMonth : null,
         startDate,
-        endDate: endDate || null,
+        endDate: ends ? endDate || null : null,
       });
       setRows((rs) => [...rs, dto]);
       setTitle("");
@@ -134,9 +135,7 @@ export function RecurringManager({
           <label className="check">
             Starts <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)} />
           </label>
-          <label className="check">
-            Ends <input type="date" value={endDate} onChange={(e) => setEnd(e.target.value)} aria-label="End date (optional)" />
-          </label>
+          <EndControl ends={ends} endDate={endDate} onChange={(e, d) => { setEnds(e); setEnd(d); }} />
           <button type="submit" disabled={busy}>
             Add
           </button>
@@ -239,7 +238,15 @@ export function RecurringManager({
                     <input type="date" defaultValue={r.startDate} aria-label="Start date" onBlur={(e) => e.currentTarget.value && e.currentTarget.value !== r.startDate && patch(r, { startDate: e.currentTarget.value })} />
                   </td>
                   <td>
-                    <input type="date" defaultValue={r.endDate ?? ""} aria-label="End date" onBlur={(e) => e.currentTarget.value !== (r.endDate ?? "") && patch(r, { endDate: e.currentTarget.value || null })} />
+                    <EndControl
+                      ends={r.endDate !== null}
+                      endDate={r.endDate ?? ""}
+                      onChange={(ends, d) => {
+                        const next = ends ? d || null : null;
+                        if (ends && !d) return; // wait for a date to be picked
+                        if (next !== r.endDate) patch(r, { endDate: next });
+                      }}
+                    />
                   </td>
                   <td>
                     <input type="checkbox" checked={r.active} onChange={(e) => patch(r, { active: e.target.checked })} aria-label="Active" />
@@ -256,5 +263,29 @@ export function RecurringManager({
         </table>
       </div>
     </div>
+  );
+}
+
+/** "Never ends" or "Ends on <date>". */
+function EndControl({ ends, endDate, onChange }: { ends: boolean; endDate: string; onChange: (ends: boolean, date: string) => void }) {
+  const [localEnds, setLocalEnds] = useState(ends);
+  return (
+    <span className="row" style={{ gap: ".3rem", flexWrap: "nowrap" }}>
+      <select
+        value={localEnds ? "date" : "never"}
+        aria-label="End"
+        onChange={(e) => {
+          const wantsEnd = e.target.value === "date";
+          setLocalEnds(wantsEnd);
+          onChange(wantsEnd, wantsEnd ? endDate : "");
+        }}
+      >
+        <option value="never">Never ends</option>
+        <option value="date">Ends on…</option>
+      </select>
+      {localEnds && (
+        <input type="date" value={endDate} aria-label="End date" onChange={(e) => onChange(true, e.target.value)} />
+      )}
+    </span>
   );
 }

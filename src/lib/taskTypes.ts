@@ -8,6 +8,8 @@ export type TaskDTO = {
   categoryId: string | null;
   assigneeId: string | null;
   dueDate: string | null;
+  /** YYYY-MM-DD after which an unfinished task no longer applies; null = no expiration. */
+  expiresAt: string | null;
   completed: boolean;
   /** Epoch milliseconds when it was completed, or null (not done, or finished before dates were tracked). */
   completedAt: number | null;
@@ -19,7 +21,7 @@ export type TaskDTO = {
 };
 
 export type TaskPatch = Partial<
-  Pick<TaskDTO, "title" | "categoryId" | "assigneeId" | "dueDate" | "completed" | "inToday">
+  Pick<TaskDTO, "title" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "inToday">
 >;
 
 export type CategoryDTO = { id: string; name: string };
@@ -31,6 +33,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     categoryId: t.categoryId,
     assigneeId: t.assigneeId,
     dueDate: t.dueDate,
+    expiresAt: t.expiresAt,
     completed: t.completed,
     completedAt: t.completedAt ? t.completedAt.getTime() : null,
     inToday: t.inToday,
@@ -51,18 +54,24 @@ export function applyReorder<T extends { id: string }>(all: T[], orderedIds: str
   return all.map((t) => (inSet.has(t.id) ? (byId.get(orderedIds[cursor++]) ?? t) : t));
 }
 
+/** True when an unfinished task has passed its expiration date. */
+export const isExpired = (t: { completed: boolean; expiresAt: string | null }, today: string) =>
+  !t.completed && t.expiresAt !== null && t.expiresAt < today;
+
 /**
  * Splits tasks into the board's sections.
+ * - Expired: open, expiration date before today (out of the queue, kept visible and restorable).
  * - Past due: open, due date before today (most overdue first).
  * - Today: open, due today or flagged for Today.
  * - Backlog: every other open task.
  * - Completed: done tasks.
  */
-export function splitTasks<T extends Pick<TaskDTO, "id" | "completed" | "dueDate" | "inToday" | "sortOrder">>(
-  tasks: T[],
-  today: string,
-) {
-  const open = tasks.filter((t) => !t.completed);
+export function splitTasks<
+  T extends Pick<TaskDTO, "id" | "completed" | "dueDate" | "expiresAt" | "inToday" | "sortOrder">,
+>(tasks: T[], today: string) {
+  const expired = tasks.filter((t) => isExpired(t, today));
+  const expiredIds = new Set(expired.map((t) => t.id));
+  const open = tasks.filter((t) => !t.completed && !expiredIds.has(t.id));
   const pastDue = open
     .filter((t) => t.dueDate !== null && t.dueDate < today)
     .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : a.sortOrder - b.sortOrder));
@@ -71,6 +80,7 @@ export function splitTasks<T extends Pick<TaskDTO, "id" | "completed" | "dueDate
   const todayList = rest.filter((t) => t.inToday || t.dueDate === today);
   const inToday = new Set(todayList.map((t) => t.id));
   return {
+    expired,
     pastDue,
     today: todayList,
     backlog: rest.filter((t) => !inToday.has(t.id)),

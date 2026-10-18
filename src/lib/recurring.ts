@@ -6,7 +6,8 @@ export const RECURRING_CATEGORY = "Recurring tasks";
 
 /**
  * Creates the task instance for each active recurring task that has come due, in the assignee's
- * queue (due on the occurrence date, so it lands in Today and later Past due). Safe to call often:
+ * queue (due on the occurrence date, so it lands in Today and later Past due).  A recurring task shows up in the
+ * assignee's queue on its specific day, not before. Safe to call often:
  * each occurrence is created once (guarded by lastOccurrence and a unique key). Only the most recent
  * occurrence is created, so a long absence does not flood the queue.
  */

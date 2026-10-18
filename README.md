@@ -1,7 +1,7 @@
 # Practice Management
 
 Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**, **Ledger**.
-Requirements: the latest file in [specs/](specs/) (currently [requirements-v11.md](specs/requirements-v11.md)); older versions are kept.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v13.md](specs/requirements-v13.md)); older versions are kept.
 Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.

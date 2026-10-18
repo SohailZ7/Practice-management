@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { ensureRecurringTasks } from "@/lib/recurring";
+import { todayISO } from "@/lib/dates";
 import { EmployeeTabs, type TabDef } from "@/components/EmployeeTabs";
 import { TaskSwitch } from "@/components/TaskSwitch";
 
@@ -27,7 +28,7 @@ export default async function TasksLayout({ children }: { children: ReactNode })
   const [employees, me, grouped] = await Promise.all([
     db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.employee.findUnique({ where: { email: user.email } }),
-    db.task.groupBy({ by: ["assigneeId"], where: { completed: false }, _count: { _all: true } }),
+    db.task.groupBy({ by: ["assigneeId"], where: { completed: false, OR: [{ expiresAt: null }, { expiresAt: { gte: todayISO() } }] }, _count: { _all: true } }),
   ]);
   const open = new Map(grouped.map((g) => [g.assigneeId, g._count._all]));
 

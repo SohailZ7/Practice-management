@@ -108,6 +108,7 @@ model Task {
   categoryId      String?
   assigneeId      String?
   dueDate         String?
+  expiresAt       String?
   completed       Boolean        @default(false)
   completedAt     DateTime?
   inToday         Boolean        @default(false)

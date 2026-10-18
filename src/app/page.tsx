@@ -15,7 +15,11 @@ export default async function Home() {
     lv.schedule !== "none" ? db.scheduleEntry.count({ where: { date: today } }) : Promise.resolve(0),
     lv.tasks !== "none"
       ? db.task.count({
-          where: { completed: false, assignee: { email: user.email } },
+          where: {
+            completed: false,
+            assignee: { email: user.email },
+            OR: [{ expiresAt: null }, { expiresAt: { gte: today } }],
+          },
         })
       : Promise.resolve(0),
   ]);

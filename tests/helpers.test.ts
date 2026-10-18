@@ -125,10 +125,14 @@ import { splitTasks } from "../src/lib/taskTypes";
 
 describe("splitTasks (Past due / Today / Backlog / Completed)", () => {
   const today = "2026-10-17";
-  const t = (id: string, over: Partial<{ completed: boolean; dueDate: string | null; inToday: boolean; sortOrder: number }> = {}) => ({
+  const t = (
+    id: string,
+    over: Partial<{ completed: boolean; dueDate: string | null; expiresAt: string | null; inToday: boolean; sortOrder: number }> = {},
+  ) => ({
     id,
     completed: false,
     dueDate: null as string | null,
+    expiresAt: null as string | null,
     inToday: false,
     sortOrder: 0,
     ...over,
@@ -145,6 +149,20 @@ describe("splitTasks (Past due / Today / Backlog / Completed)", () => {
     const r = splitTasks([t("due", { dueDate: today }), t("flag", { inToday: true }), t("later", { dueDate: "2026-10-30" })], today);
     expect(ids(r.today)).toEqual(["due", "flag"]);
     expect(ids(r.backlog)).toEqual(["later"]);
+  });
+  it("moves open tasks past their expiration date to Expired, out of every other section", () => {
+    const r = splitTasks(
+      [
+        t("old", { dueDate: "2026-10-01", expiresAt: "2026-10-10" }),
+        t("still", { dueDate: "2026-10-01", expiresAt: "2026-10-17" }), // expires today: still active
+        t("none", { dueDate: "2026-10-01" }), // no expiration
+        t("done", { completed: true, expiresAt: "2026-10-01" }), // finished tasks never expire
+      ],
+      today,
+    );
+    expect(ids(r.expired)).toEqual(["old"]);
+    expect(ids(r.pastDue)).toEqual(["still", "none"]);
+    expect(ids(r.completed)).toEqual(["done"]);
   });
   it("keeps undated, unflagged tasks in Backlog and done tasks in Completed", () => {
     const r = splitTasks([t("x"), t("done", { completed: true, dueDate: "2026-01-01" })], today);

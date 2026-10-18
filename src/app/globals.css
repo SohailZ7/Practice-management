@@ -332,3 +332,12 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .recur-badge .svg-icon { width: 14px; height: 14px; }
 .recurring-table input:not([type=checkbox]):not([type=date]):not([type=number]) { width: 100%; min-width: 160px; }
 .recurring-table td { vertical-align: top; }
+
+/* expiration */
+.exp-pill { display: inline-flex; align-items: stretch; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--warn) 10%, var(--card)); font-size: .8rem; overflow: hidden; }
+.exp-pill button { background: transparent; color: var(--warn); border: 0; padding: .12rem .6rem; font-size: inherit; font-weight: 600; cursor: pointer; border-radius: 0; }
+.exp-pill button + button { padding-left: .2rem; padding-right: .5rem; color: var(--muted); }
+.exp-pill.expired { border-color: color-mix(in srgb, var(--muted) 50%, transparent); background: color-mix(in srgb, var(--muted) 14%, var(--card)); }
+.exp-pill.expired button { color: var(--muted); }
+.todo-section.muted-section { opacity: .7; }
+.todo-section.muted-section .todo-section-toggle { color: var(--muted); }
