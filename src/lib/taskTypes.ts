@@ -9,6 +9,8 @@ export type TaskDTO = {
   assigneeId: string | null;
   dueDate: string | null;
   completed: boolean;
+  /** Epoch milliseconds when it was completed, or null (not done, or finished before dates were tracked). */
+  completedAt: number | null;
   inToday: boolean;
   sortOrder: number;
   links: LinkDTO[];
@@ -28,6 +30,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     assigneeId: t.assigneeId,
     dueDate: t.dueDate,
     completed: t.completed,
+    completedAt: t.completedAt ? t.completedAt.getTime() : null,
     inToday: t.inToday,
     sortOrder: t.sortOrder,
     links: t.links.map((l) => ({ id: l.id, url: l.url, label: l.label, type: l.type })),

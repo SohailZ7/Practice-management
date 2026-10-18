@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { dueLabel } from "@/lib/dates";
 import { Icon } from "./Icons";
+import { TaskAnalytics } from "./TaskAnalytics";
 import { linkTypeMeta } from "@/lib/links";
 import { applyReorder, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 import {
@@ -55,6 +56,8 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set([DONE]));
+  const [tab, setTab] = useState<"todos" | "analytics">("todos");
+  const [showCategories, setShowCategories] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -81,7 +84,12 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     const leaves = patch.assigneeId !== undefined && patch.assigneeId !== boardAssigneeId;
     const next = leaves
       ? tasks.filter((t) => t.id !== id)
-      : tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
+      : tasks.map((t) => {
+          if (t.id !== id) return t;
+          const next = { ...t, ...patch };
+          if (patch.completed !== undefined) next.completedAt = patch.completed ? (t.completedAt ?? Date.now()) : null;
+          return next;
+        });
     return mutate(next, () => updateTask(id, patch));
   };
 
@@ -143,6 +151,28 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
 
   return (
     <div className="todo-board">
+      <div className="todo-toolbar">
+        <div className="tab-switcher" role="tablist" aria-label="Task views">
+          <button role="tab" aria-selected={tab === "todos"} className={`tab-btn ${tab === "todos" ? "active" : ""}`} onClick={() => setTab("todos")}>
+            Todos
+          </button>
+          <button role="tab" aria-selected={tab === "analytics"} className={`tab-btn ${tab === "analytics" ? "active" : ""}`} onClick={() => setTab("analytics")}>
+            Analytics
+          </button>
+        </div>
+        {canEdit && (
+          <button
+            className={`gear-btn ${showCategories ? "on" : ""}`}
+            title="Categories"
+            aria-label="Manage categories"
+            aria-pressed={showCategories}
+            onClick={() => setShowCategories((v) => !v)}
+          >
+            <Icon name="settings" />
+          </button>
+        )}
+      </div>
+
       {error && (
         <div className="error" role="alert">
           {error}{" "}
@@ -152,33 +182,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         </div>
       )}
 
-      <Section
-        id={TODAY}
-        name="Today"
-        tasks={open.filter((t) => t.inToday)}
-        onAdd={canEdit ? (title) => add(title, null, true) : undefined}
-        {...sectionProps}
-      />
-      {categories.map((c) => (
-        <Section
-          key={c.id}
-          id={c.id}
-          name={c.name}
-          tasks={open.filter((t) => t.categoryId === c.id)}
-          onAdd={canEdit ? (title) => add(title, c.id, false) : undefined}
-          {...sectionProps}
-        />
-      ))}
-      <Section
-        id={NONE}
-        name="No category"
-        tasks={open.filter((t) => !t.categoryId)}
-        onAdd={canEdit ? (title) => add(title, null, false) : undefined}
-        {...sectionProps}
-      />
-      <Section id={DONE} name="Completed" tasks={tasks.filter((t) => t.completed)} {...sectionProps} />
-
-      {canEdit && (
+      {canEdit && showCategories && (
         <CategoryManager
           categories={categories}
           onAdd={async (name) => {
@@ -207,6 +211,38 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
             }
           }}
         />
+      )}
+
+      {tab === "analytics" ? (
+        <TaskAnalytics tasks={tasks} categories={categories} />
+      ) : (
+        <>
+          <Section
+            id={TODAY}
+            name="Today"
+            tasks={open.filter((t) => t.inToday)}
+            onAdd={canEdit ? (title) => add(title, null, true) : undefined}
+            {...sectionProps}
+          />
+          {categories.map((c) => (
+            <Section
+              key={c.id}
+              id={c.id}
+              name={c.name}
+              tasks={open.filter((t) => t.categoryId === c.id)}
+              onAdd={canEdit ? (title) => add(title, c.id, false) : undefined}
+              {...sectionProps}
+            />
+          ))}
+          <Section
+            id={NONE}
+            name="No category"
+            tasks={open.filter((t) => !t.categoryId)}
+            onAdd={canEdit ? (title) => add(title, null, false) : undefined}
+            {...sectionProps}
+          />
+          <Section id={DONE} name="Completed" tasks={tasks.filter((t) => t.completed)} {...sectionProps} />
+        </>
       )}
     </div>
   );
@@ -435,6 +471,13 @@ function TaskItem({
             {task.title}
           </span>
         )}
+        {task.completed && (
+          <span className="completed-pill" title={task.completedAt ? new Date(task.completedAt).toLocaleString() : undefined}>
+            {task.completedAt
+              ? `Completed ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+              : "Completed (date unknown)"}
+          </span>
+        )}
         <select
           className="pick"
           value={task.categoryId ?? ""}
@@ -549,8 +592,8 @@ function CategoryManager({
 }) {
   const [name, setName] = useState("");
   return (
-    <details className="card" style={{ marginTop: "1rem" }}>
-      <summary>Manage categories</summary>
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <strong>Categories</strong>
       <div style={{ marginTop: ".5rem" }}>
         {categories.map((c) => (
           <div key={c.id} className="row" style={{ marginBottom: ".4rem" }}>
@@ -586,6 +629,6 @@ function CategoryManager({
           <button type="submit">Add category</button>
         </form>
       </div>
-    </details>
+    </div>
   );
 }

@@ -85,7 +85,11 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO>
     if (patch.dueDate && !isISODate(patch.dueDate)) throw new Error("Invalid date");
     data.dueDate = patch.dueDate || null;
   }
-  if (patch.completed !== undefined) data.completed = patch.completed === true;
+  if (patch.completed !== undefined) {
+    data.completed = patch.completed === true;
+    // Track when it was finished (used by Analytics); clear it if the task is reopened.
+    data.completedAt = patch.completed === true ? (existing.completed ? existing.completedAt : new Date()) : null;
+  }
   if (patch.inToday !== undefined) data.inToday = patch.inToday === true;
 
   let reassign = "";

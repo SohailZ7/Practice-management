@@ -14,6 +14,8 @@ type TodoState = {
     categoryId: string | null;
     dueDate: string | null;
     completed: boolean;
+    completedAt?: number | null;
+    createdAt?: number;
     inToday: boolean;
     links?: { url: string }[];
   }[];
@@ -76,6 +78,7 @@ async function main() {
             assigneeId: assignee.id,
             dueDate: t.dueDate,
             completed: t.completed,
+            completedAt: t.completed && t.completedAt ? new Date(t.completedAt) : null,
             inToday: t.inToday,
             sortOrder: order++,
             links: { create: links },

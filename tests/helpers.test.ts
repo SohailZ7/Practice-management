@@ -89,3 +89,34 @@ describe("theme", () => {
     expect(themeAttribute("dark")).toBe("dark");
   });
 });
+
+import { buildAnalytics, lastNDays, localDateKey, NO_CATEGORY } from "../src/lib/analytics";
+
+describe("task analytics", () => {
+  const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12).getTime();
+  const NOW = noon(2026, 10, 17);
+
+  it("builds the last N local days ending today", () => {
+    const days = lastNDays(3, NOW);
+    expect(days).toEqual(["2026-10-15", "2026-10-16", "2026-10-17"]);
+    expect(localDateKey(NOW)).toBe("2026-10-17");
+  });
+
+  it("counts completions per day and category, ignoring open, undated and out-of-window tasks", () => {
+    const tasks = [
+      { completed: true, completedAt: noon(2026, 10, 17), categoryId: "a" },
+      { completed: true, completedAt: noon(2026, 10, 17), categoryId: "a" },
+      { completed: true, completedAt: noon(2026, 10, 16), categoryId: null },
+      { completed: true, completedAt: null, categoryId: "a" }, // finished before dates were tracked
+      { completed: false, completedAt: null, categoryId: "a" },
+      { completed: true, completedAt: noon(2026, 8, 1), categoryId: "a" }, // outside the window
+    ];
+    const r = buildAnalytics(tasks, ["a", "b"], 30, NOW);
+    expect(r.totalCompleted).toBe(3);
+    expect(r.counts["2026-10-17"]["a"]).toBe(2);
+    expect(r.counts["2026-10-16"][NO_CATEGORY]).toBe(1);
+    expect(r.tracks).toEqual(["a", NO_CATEGORY]); // "b" has no completions
+    expect(r.maxDayTotal).toBe(2);
+    expect(r.avgPerDay).toBeCloseTo(0.1);
+  });
+});
