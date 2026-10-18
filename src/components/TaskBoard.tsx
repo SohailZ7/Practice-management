@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { dueLabel } from "@/lib/dates";
+import { Icon } from "./Icons";
 import { linkTypeMeta } from "@/lib/links";
 import { applyReorder, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 import {
@@ -245,6 +246,7 @@ function Section({
   itemProps: ItemProps;
 }) {
   const isOpen = !collapsed.has(id);
+  const [adding, setAdding] = useState(false);
   const ids = tasks.map((t) => t.id);
 
   function onDragEnd(e: DragEndEvent) {
@@ -258,13 +260,38 @@ function Section({
 
   return (
     <section className="todo-section" id={`sec-${id}`}>
-      <button className="todo-section-head" onClick={() => onToggle(id)} aria-expanded={isOpen}>
-        <span className="chev">{isOpen ? "▾" : "▸"}</span>
-        <span className="name">{name}</span>
+      <div className="todo-section-head">
+        <button className="todo-section-toggle" onClick={() => onToggle(id)} aria-expanded={isOpen}>
+          <span className={`chev ${isOpen ? "" : "closed"}`}>
+            <Icon name="chevron" />
+          </span>
+          <span className="name">{name}</span>
+        </button>
+        {onAdd && (
+          <button
+            className="plus-btn"
+            title={`Add a task to ${name}`}
+            aria-label={`Add a task to ${name}`}
+            onClick={() => {
+              setAdding(true);
+              if (!isOpen) onToggle(id);
+            }}
+          >
+            +
+          </button>
+        )}
         <span className="count">{tasks.length}</span>
-      </button>
+      </div>
       {isOpen && (
         <>
+          {adding && onAdd && (
+            <InlineAdd
+              placeholder={`Add a task to ${name}…`}
+              autoFocus
+              onAdd={onAdd}
+              onClose={() => setAdding(false)}
+            />
+          )}
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
               {tasks.map((t) => (
@@ -272,15 +299,24 @@ function Section({
               ))}
             </SortableContext>
           </DndContext>
-          {tasks.length === 0 && <div className="todo-empty">Nothing here.</div>}
-          {onAdd && <InlineAdd placeholder={`Add a task to ${name}…`} onAdd={onAdd} />}
+          {tasks.length === 0 && !adding && <div className="todo-empty">Nothing here.</div>}
         </>
       )}
     </section>
   );
 }
 
-function InlineAdd({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => void }) {
+function InlineAdd({
+  placeholder,
+  onAdd,
+  onClose,
+  autoFocus,
+}: {
+  placeholder: string;
+  onAdd: (title: string) => void;
+  onClose: () => void;
+  autoFocus?: boolean;
+}) {
   const [value, setValue] = useState("");
   return (
     <form
@@ -292,7 +328,19 @@ function InlineAdd({ placeholder, onAdd }: { placeholder: string; onAdd: (title:
         setValue("");
       }}
     >
-      <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} aria-label={placeholder} />
+      <input
+        value={value}
+        autoFocus={autoFocus}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          if (!value.trim()) onClose();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+        }}
+        placeholder={placeholder}
+        aria-label={placeholder}
+      />
     </form>
   );
 }
@@ -353,6 +401,7 @@ function TaskItem({
         )}
         <input
           type="checkbox"
+          className="todo-check"
           checked={task.completed}
           disabled={!canEdit}
           aria-label="Done"
@@ -427,22 +476,22 @@ function TaskItem({
           onChange={(e) => onPatch(task.id, { dueDate: e.target.value || null })}
         />
         <button
-          className={`icon-btn ${task.inToday ? "active" : ""}`}
+          className={`icon-btn sun ${task.inToday ? "active" : ""}`}
           title="Show in Today"
           aria-label="Show in Today"
           aria-pressed={task.inToday}
           disabled={!canEdit}
           onClick={() => onPatch(task.id, { inToday: !task.inToday })}
         >
-          ☀
+          <Icon name="sun" filled={task.inToday} />
         </button>
         {canEdit && (
           <>
             <button className="icon-btn" title="Attach a link" aria-label="Attach a link" onClick={() => setAddingLink((v) => !v)}>
-              🔗
+              <Icon name="link" />
             </button>
             <button className="icon-btn" title="Delete task" aria-label="Delete task" onClick={() => onDelete(task.id)}>
-              ×
+              <Icon name="close" />
             </button>
           </>
         )}

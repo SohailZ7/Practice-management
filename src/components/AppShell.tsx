@@ -29,14 +29,13 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
   }, []);
 
   const togglePin = () => {
-    setPinned((p) => {
-      try {
-        localStorage.setItem(PIN_KEY, p ? "0" : "1");
-      } catch {
-        // ignore
-      }
-      return !p;
-    });
+    const next = !pinned;
+    setPinned(next);
+    try {
+      localStorage.setItem(PIN_KEY, next ? "1" : "0");
+    } catch {
+      // ignore
+    }
   };
 
   const items: { href: string; label: string; icon: IconName }[] = [];
@@ -57,10 +56,22 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
     <div className={`shell ${pinned ? "pinned" : "rail"}`}>
       <div className="side-slot" />
       <aside className="side" aria-label="Main navigation">
-        <Link href="/" className="brand" title="Home">
-          <Logo />
-          <span className="label">Practice Management</span>
-        </Link>
+        <div className="brand-row">
+          <Link href="/" className="brand" title="Home">
+            <Logo />
+            <span className="label">Practice Management</span>
+          </Link>
+          <button
+            type="button"
+            className={`pin-toggle label ${pinned ? "on" : ""}`}
+            onClick={togglePin}
+            title={pinned ? "Unpin the navigation bar (collapse to icons)" : "Pin the navigation bar open"}
+            aria-pressed={pinned}
+            aria-label={pinned ? "Unpin navigation" : "Pin navigation"}
+          >
+            <Icon name="pin" filled={pinned} />
+          </button>
+        </div>
         <nav>
           <Link href="/" title="Home" className={path === "/" ? "active" : ""}>
             <Icon name="home" />
