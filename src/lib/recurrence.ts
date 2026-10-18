@@ -1,4 +1,5 @@
 // Recurrence rules for repeating tasks. Pure functions over YYYY-MM-DD strings.
+// "Daily" means weekdays only (Monday to Friday).
 import { addDays } from "./dates";
 
 export const FREQUENCIES = ["DAILY", "WEEKLY", "MONTHLY"] as const;
@@ -46,7 +47,9 @@ export function latestOccurrence(r: Rule, today: string): string | null {
   if (eff < r.startDate) return null;
   let cand: string;
   if (r.frequency === "DAILY") {
-    cand = eff;
+    // "Daily" means every weekday (Monday to Friday): a weekend rolls back to Friday.
+    const d = dow(eff);
+    cand = d >= 5 ? addDays(eff, -(d - 4)) : eff;
   } else if (r.frequency === "WEEKLY") {
     cand = addDays(eff, -((dow(eff) - (r.weekday ?? 0) + 7) % 7));
   } else {
@@ -66,6 +69,8 @@ export function nextOccurrenceAfter(r: Rule, date: string): string | null {
   let cand: string;
   if (r.frequency === "DAILY") {
     cand = addDays(from, 1);
+    const d = dow(cand);
+    if (d >= 5) cand = addDays(cand, 7 - d); // skip the weekend to Monday
   } else if (r.frequency === "WEEKLY") {
     cand = addDays(from, ((r.weekday ?? 0) - dow(from) + 7) % 7 || 7);
   } else {
@@ -87,7 +92,7 @@ const ordinal = (n: number) => {
 };
 
 export function describeRule(r: Pick<Rule, "frequency" | "weekday" | "dayOfMonth">): string {
-  if (r.frequency === "DAILY") return "Every day";
+  if (r.frequency === "DAILY") return "Every weekday (Mon–Fri)";
   if (r.frequency === "WEEKLY") return `Every ${WEEKDAYS[r.weekday ?? 0]}`;
   return `Monthly on the ${ordinal(r.dayOfMonth ?? 1)}`;
 }

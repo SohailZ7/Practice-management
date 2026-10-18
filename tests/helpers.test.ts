@@ -172,9 +172,15 @@ import { describeRule, latestOccurrence, nextOccurrenceAfter, ruleError } from "
 describe("recurrence rules", () => {
   const base = { weekday: null, dayOfMonth: null, startDate: "2026-01-01", endDate: null as string | null };
   // 2026-10-17 is a Saturday.
-  it("daily: the latest occurrence is today", () => {
-    expect(latestOccurrence({ ...base, frequency: "DAILY" }, "2026-10-17")).toBe("2026-10-17");
-    expect(nextOccurrenceAfter({ ...base, frequency: "DAILY" }, "2026-10-17")).toBe("2026-10-18");
+  it("daily means weekdays only: weekends roll back to Friday and the next one skips to Monday", () => {
+    const daily = { ...base, frequency: "DAILY" };
+    expect(latestOccurrence(daily, "2026-10-16")).toBe("2026-10-16"); // Friday
+    expect(latestOccurrence(daily, "2026-10-17")).toBe("2026-10-16"); // Saturday -> Friday
+    expect(latestOccurrence(daily, "2026-10-18")).toBe("2026-10-16"); // Sunday -> Friday
+    expect(latestOccurrence(daily, "2026-10-19")).toBe("2026-10-19"); // Monday
+    expect(nextOccurrenceAfter(daily, "2026-10-15")).toBe("2026-10-16"); // Thu -> Fri
+    expect(nextOccurrenceAfter(daily, "2026-10-16")).toBe("2026-10-19"); // Fri -> Mon
+    expect(nextOccurrenceAfter(daily, "2026-10-17")).toBe("2026-10-19"); // Sat -> Mon
   });
   it("weekly: the most recent matching weekday, and the next one", () => {
     const monday = { ...base, frequency: "WEEKLY", weekday: 0 };
@@ -197,8 +203,9 @@ describe("recurrence rules", () => {
     const rule = { ...base, frequency: "DAILY", startDate: "2026-10-20", endDate: "2026-10-25" };
     expect(latestOccurrence(rule, "2026-10-17")).toBeNull();
     expect(latestOccurrence(rule, "2026-10-22")).toBe("2026-10-22");
-    expect(latestOccurrence(rule, "2026-12-01")).toBe("2026-10-25");
-    expect(nextOccurrenceAfter(rule, "2026-10-25")).toBeNull();
+    expect(latestOccurrence(rule, "2026-12-01")).toBe("2026-10-23"); // ends Sunday the 25th -> last weekday is Friday the 23rd
+    expect(latestOccurrence({ ...rule, startDate: "2026-10-17", endDate: null }, "2026-10-18")).toBeNull(); // only a weekend in range so far
+    expect(nextOccurrenceAfter(rule, "2026-10-23")).toBeNull();
     expect(nextOccurrenceAfter(rule, "2026-10-10")).toBe("2026-10-20");
   });
   it("validates and describes rules", () => {
@@ -208,6 +215,7 @@ describe("recurrence rules", () => {
     expect(ruleError({ ...base, frequency: "DAILY", endDate: "2025-12-31" })).toMatch(/end date/);
     expect(ruleError({ ...base, frequency: "DAILY" })).toBeNull();
     expect(describeRule({ frequency: "WEEKLY", weekday: 2, dayOfMonth: null })).toBe("Every Wednesday");
+    expect(describeRule({ frequency: "DAILY", weekday: null, dayOfMonth: null })).toMatch(/weekday/);
     expect(describeRule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 1 })).toBe("Monthly on the 1st");
     expect(describeRule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 22 })).toBe("Monthly on the 22nd");
   });

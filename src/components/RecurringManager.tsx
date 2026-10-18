@@ -9,7 +9,7 @@ import type { RecurringDTO, RecurringPatch } from "@/lib/taskTypes";
 type Opt = { id: string; name: string };
 
 const FREQ = [
-  { value: "DAILY", label: "Daily" },
+  { value: "DAILY", label: "Daily (weekdays)" },
   { value: "WEEKLY", label: "Weekly" },
   { value: "MONTHLY", label: "Monthly" },
 ];
