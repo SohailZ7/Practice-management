@@ -221,9 +221,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         <TaskAnalytics tasks={tasks} categories={categories} />
       ) : (
         <>
-          {pastDue.length > 0 && (
-            <Section id={PAST} name="Past due" urgent sortable={false} tasks={pastDue} {...sectionProps} />
-          )}
+          <Section id={PAST} name="Past due" urgent sortable={false} tasks={pastDue} emptyText="Nothing past due." {...sectionProps} />
           <Section
             id={TODAY}
             name="Today"
@@ -272,6 +270,7 @@ function Section({
   itemProps,
   urgent = false,
   muted = false,
+  emptyText = "Nothing here.",
   sortable = true,
 }: {
   id: string;
@@ -279,6 +278,8 @@ function Section({
   tasks: TaskDTO[];
   /** Past-due styling: red heading and a high-priority flag on each task. */
   urgent?: boolean;
+  /** Shown when the section has no tasks. */
+  emptyText?: string;
   /** Expired styling: dimmed, out of the queue. */
   muted?: boolean;
   /** False when the order is fixed (Past due is sorted by due date). */
@@ -346,7 +347,7 @@ function Section({
               ))}
             </SortableContext>
           </DndContext>
-          {tasks.length === 0 && !adding && <div className="todo-empty">Nothing here.</div>}
+          {tasks.length === 0 && !adding && <div className="todo-empty">{emptyText}</div>}
         </>
       )}
     </section>

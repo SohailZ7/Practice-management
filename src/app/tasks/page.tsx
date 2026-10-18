@@ -4,6 +4,7 @@ import { canAccess } from "@/lib/access";
 import { todayISO } from "@/lib/dates";
 import { toTaskDTO } from "@/lib/taskTypes";
 import { ensureRecurringTasks } from "@/lib/recurring";
+import { canEditBoard, pickEmployee, viewableEmployeeIds } from "@/lib/taskAccess";
 import { TaskBoard } from "@/components/TaskBoard";
 
 export const dynamic = "force-dynamic";
@@ -12,29 +13,30 @@ const UNASSIGNED = "none";
 
 export default async function TasksPage({ searchParams }: { searchParams: { emp?: string } }) {
   const user = await requireAccess("tasks", "view");
-  const canEdit = canAccess(user, "tasks", "edit");
+  const moduleEdit = canAccess(user, "tasks", "edit");
   const isAdmin = user.role === "ADMIN";
 
   await ensureRecurringTasks();
-  const [categories, employees, me] = await Promise.all([
+  const [categories, employees, me, grants] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.employee.findUnique({ where: { email: user.email } }),
+    isAdmin ? Promise.resolve([]) : db.taskViewer.findMany({ where: { userId: user.id }, select: { employeeId: true } }),
   ]);
 
-  // TSK-6: non-admins only ever get their own tasks, whatever the URL says.
-  // TSK-7: the Admin gets a tab per employee (plus Unassigned).
-  let selected: string | null;
-  if (isAdmin) {
-    const wanted = searchParams.emp;
-    if (wanted === UNASSIGNED) selected = null;
-    else if (wanted && employees.some((e) => e.id === wanted)) selected = wanted;
-    else selected = me?.id ?? employees[0]?.id ?? null;
-  } else {
-    selected = me?.id ?? null;
-  }
+  // TSK-6: a non-admin only ever gets their own list and the lists the Admin granted them (read-only),
+  // whatever the URL says. TSK-7: the Admin gets every employee's list, plus Unassigned.
+  const allowed = viewableEmployeeIds({
+    isAdmin,
+    meId: me?.id ?? null,
+    grantedIds: grants.map((g) => g.employeeId),
+    allIds: employees.map((e) => e.id),
+  });
+  const wanted = searchParams.emp;
+  const selected: string | null = isAdmin && wanted === UNASSIGNED ? null : pickEmployee(wanted, allowed, me?.id ?? null);
 
   const noProfile = !isAdmin && !me;
+  const canEdit = canEditBoard({ isAdmin, moduleEdit, meId: me?.id ?? null, selected });
   const tasks = noProfile
     ? []
     : await db.task.findMany({
@@ -42,6 +44,8 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
         include: { links: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       });
+  const viewingOther = !isAdmin && selected !== null && selected !== me?.id;
+  const owner = employees.find((e) => e.id === selected);
 
   return (
     <>
@@ -53,16 +57,23 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
           </p>
         </div>
       ) : (
-        <TaskBoard
-          key={selected ?? UNASSIGNED}
-          initialTasks={tasks.map(toTaskDTO)}
-          categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-          employees={employees.map((e) => ({ id: e.id, name: e.name }))}
-          canEdit={canEdit}
-          boardAssigneeId={selected}
-          today={todayISO()}
-          canReorder={isAdmin}
-        />
+        <>
+          {viewingOther && (
+            <div className="notice" role="status">
+              You&apos;re viewing {owner?.name ?? "someone else"}&apos;s tasks. You can look but not change them.
+            </div>
+          )}
+          <TaskBoard
+            key={selected ?? UNASSIGNED}
+            initialTasks={tasks.map(toTaskDTO)}
+            categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+            employees={employees.map((e) => ({ id: e.id, name: e.name }))}
+            canEdit={canEdit}
+            boardAssigneeId={selected}
+            today={todayISO()}
+            canReorder={isAdmin}
+          />
+        </>
       )}
     </>
   );

@@ -17,6 +17,7 @@ model User {
   theme     String         @default("system")
   createdAt DateTime       @default(now())
   access    ModuleAccess[]
+  taskViewers TaskViewer[]
 }
 
 // module: schedule | tasks | employees   level: none | view | edit
@@ -40,6 +41,7 @@ model Employee {
   tasks  Task[]
   provider Provider?
   recurring RecurringTask[]
+  viewedBy  TaskViewer[]
 }
 
 // Providers shown on the schedule. employeeId null = external provider.
@@ -290,4 +292,15 @@ model RecurringTask {
   createdAt      DateTime  @default(now())
   assignee       Employee? @relation(fields: [assigneeId], references: [id])
   tasks          Task[]
+}
+
+// Lets a user see (read-only) the tasks of another employee, in addition to their own.
+model TaskViewer {
+  id         String   @id @default(cuid())
+  userId     String
+  employeeId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, employeeId])
 }

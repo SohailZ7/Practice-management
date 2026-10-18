@@ -32,7 +32,7 @@ const RECURRING = "recurring";
  * The Admin's tabs: one per employee, Unassigned, and Recurring. The default order puts the
  * admin's own tab first; drag the grip on a tab to reorder (remembered in this browser).
  */
-export function EmployeeTabs({ tabs, defaultId }: { tabs: TabDef[]; defaultId: string }) {
+export function EmployeeTabs({ tabs, defaultId, draggable = true }: { tabs: TabDef[]; defaultId: string; draggable?: boolean }) {
   const path = usePathname();
   const params = useSearchParams();
   const selectedId = path.startsWith("/tasks/recurring") ? RECURRING : (params.get("emp") ?? defaultId);
@@ -64,7 +64,7 @@ export function EmployeeTabs({ tabs, defaultId }: { tabs: TabDef[]; defaultId: s
       <SortableContext items={ordered.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
         <div className="tabs" role="tablist" aria-label="Employees">
           {ordered.map((t) => (
-            <SortableTab key={t.id} tab={t} on={t.id === selectedId} />
+            <SortableTab key={t.id} tab={t} on={t.id === selectedId} draggable={draggable} />
           ))}
         </div>
       </SortableContext>
@@ -72,17 +72,19 @@ export function EmployeeTabs({ tabs, defaultId }: { tabs: TabDef[]; defaultId: s
   );
 }
 
-function SortableTab({ tab, on }: { tab: TabDef; on: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
+function SortableTab({ tab, on, draggable }: { tab: TabDef; on: boolean; draggable: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id, disabled: !draggable });
   return (
     <div
       ref={setNodeRef}
       className={`tab-wrap ${on ? "on" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
     >
-      <button className="tab-grip" title="Drag to reorder tabs" aria-label={`Drag to reorder the ${tab.label} tab`} {...attributes} {...listeners}>
-        ⠿
-      </button>
+      {draggable && (
+        <button className="tab-grip" title="Drag to reorder tabs" aria-label={`Drag to reorder the ${tab.label} tab`} {...attributes} {...listeners}>
+          ⠿
+        </button>
+      )}
       <Link href={tab.href} role="tab" aria-selected={on} className={on ? "tab on" : "tab"}>
         {tab.label}
         {tab.count !== null && <span className="count">{tab.count}</span>}

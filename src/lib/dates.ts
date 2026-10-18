@@ -1,10 +1,15 @@
 // Dates are stored as "YYYY-MM-DD" strings so time zones never shift a day.
 
-export function todayISO(now = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+/** The practice's time zone (set PRACTICE_TIMEZONE; Washington State by default). */
+export const PRACTICE_TIMEZONE = process.env.PRACTICE_TIMEZONE || "America/Los_Angeles";
+
+/**
+ * Today's date in the practice's time zone, not the server's or the browser's, so "today", "past due"
+ * and recurring tasks mean the same thing for everybody. (A Cloud Run server runs in UTC, which would
+ * otherwise roll the date over at 5 pm Pacific.)
+ */
+export function todayISO(now = new Date(), timeZone = PRACTICE_TIMEZONE): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
 export function isISODate(value: string): boolean {

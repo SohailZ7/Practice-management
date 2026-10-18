@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { LEVELS, MODULES, ROLES } from "@/lib/access";
 import { Banner } from "@/components/Banner";
-import { addUser, setAccess, updateUser } from "./actions";
+import { addUser, setAccess, setTaskViewers, updateUser } from "./actions";
 
 export default async function AdminPage({
   searchParams,
@@ -10,8 +10,10 @@ export default async function AdminPage({
   searchParams: { error?: string; notice?: string };
 }) {
   await requireAdmin();
-  const [users, log] = await Promise.all([
+  const [users, employees, viewers, log] = await Promise.all([
     db.user.findMany({ orderBy: { createdAt: "asc" }, include: { access: true } }),
+    db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
+    db.taskViewer.findMany({ select: { userId: true, employeeId: true } }),
     db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
   ]);
 
@@ -112,6 +114,34 @@ export default async function AdminPage({
           </tbody>
         </table>
       </div>
+
+      <h2>Whose tasks each person can view</h2>
+      <p className="muted small">
+        Everyone sees and edits their own tasks. Tick the people whose task lists someone may also look at (read-only).
+        Admins see everyone&apos;s.
+      </p>
+      {users
+        .filter((u) => u.role !== "ADMIN")
+        .map((u) => {
+          const granted = new Set(viewers.filter((v) => v.userId === u.id).map((v) => v.employeeId));
+          return (
+            <form key={u.id} action={setTaskViewers} className="card row">
+              <input type="hidden" name="id" value={u.id} />
+              <strong style={{ minWidth: 130 }}>{u.name}</strong>
+              {employees
+                .filter((e) => e.email !== u.email)
+                .map((e) => (
+                  <label key={e.id} className="check">
+                    <input type="checkbox" name="employeeId" value={e.id} defaultChecked={granted.has(e.id)} /> {e.name}
+                  </label>
+                ))}
+              <span className="grow" />
+              <button type="submit" className="secondary">
+                Save
+              </button>
+            </form>
+          );
+        })}
 
       <h2>Add a user</h2>
       <form action={addUser} className="card row">

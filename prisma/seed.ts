@@ -13,6 +13,7 @@ const MODULES = ["schedule", "tasks", "employees", "billing", "ledger"];
 
 // Non-admins start with edit on schedule and tasks, view on employees. Admin changes this in the app.
 const DEFAULT_LEVEL: Record<string, string> = { schedule: "edit", tasks: "edit", employees: "view", billing: "none", ledger: "none" };
+// Office Managers record billing encounters too (only the Admin marks them entered into GetIX).
 // Dr Khalid records billing encounters; Office Managers get Billing only when the Admin grants it.
 const PROVIDER_BILLING = "edit";
 
@@ -54,7 +55,7 @@ async function main() {
         create: {
           userId: user.id,
           module,
-          level: module === "billing" && p.role === "PROVIDER" ? PROVIDER_BILLING : DEFAULT_LEVEL[module],
+          level: module === "billing" && p.role !== "ADMIN" ? PROVIDER_BILLING : DEFAULT_LEVEL[module],
         },
       });
     }
@@ -100,6 +101,23 @@ async function main() {
   for (const name of ENTRY_TYPES) {
     await db.entryType.upsert({ where: { name }, update: {}, create: { name } });
   }
+  // Razak and Muntaha can see each other's tasks (read-only).
+  const byEmail = async (email: string) => ({
+    user: await db.user.findUnique({ where: { email } }),
+    employee: await db.employee.findUnique({ where: { email } }),
+  });
+  const razak = await byEmail("razakahmed19@gmail.com");
+  const muntaha = await byEmail("muntahastar@gmail.com");
+  for (const [viewer, viewed] of [[razak, muntaha], [muntaha, razak]] as const) {
+    if (viewer.user && viewed.employee) {
+      await db.taskViewer.upsert({
+        where: { userId_employeeId: { userId: viewer.user.id, employeeId: viewed.employee.id } },
+        update: {},
+        create: { userId: viewer.user.id, employeeId: viewed.employee.id },
+      });
+    }
+  }
+
   // Ledger lists (editable in the app). Admins have Ledger access automatically; others only if granted.
   for (const [i, name] of ["Deposit", "Rent", "Utilities", "Insurance", "Taxes", "Payroll", "Supplies", "Software", "Professional fees", "Other expenses"].entries()) {
     await db.ledgerCategory.upsert({ where: { name }, update: {}, create: { name, sortOrder: i } });

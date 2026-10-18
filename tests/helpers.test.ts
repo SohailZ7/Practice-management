@@ -299,3 +299,53 @@ describe("planReconcile (editing a recurring task keeps the queue in line)", () 
     expect(plan.deleteIds).toEqual(["future"]);
   });
 });
+
+import { canEditBoard, pickEmployee, viewableEmployeeIds } from "../src/lib/taskAccess";
+import { todayISO } from "../src/lib/dates";
+
+describe("practice time zone for today", () => {
+  // 03:00 UTC on Oct 18 is still the evening of Oct 17 in Los Angeles.
+  const instant = new Date("2026-10-18T03:00:00Z");
+  it("uses the practice zone, not the server's, so everybody gets the same 'today'", () => {
+    expect(todayISO(instant, "America/Los_Angeles")).toBe("2026-10-17");
+    expect(todayISO(instant, "UTC")).toBe("2026-10-18");
+    expect(todayISO(new Date("2026-10-18T08:00:00Z"), "America/Los_Angeles")).toBe("2026-10-18");
+  });
+  it("handles the daylight-saving change", () => {
+    expect(todayISO(new Date("2026-11-01T08:30:00Z"), "America/Los_Angeles")).toBe("2026-11-01");
+    expect(todayISO(new Date("2026-11-01T07:30:00Z"), "America/Los_Angeles")).toBe("2026-11-01");
+  });
+});
+
+describe("task visibility", () => {
+  const allIds = ["sohail", "razak", "muntaha", "khalid", "lucy"];
+  it("the Admin sees everyone", () => {
+    expect(viewableEmployeeIds({ isAdmin: true, meId: "sohail", grantedIds: [], allIds })).toEqual(allIds);
+  });
+  it("others see their own list first, plus any granted lists", () => {
+    expect(viewableEmployeeIds({ isAdmin: false, meId: "razak", grantedIds: ["muntaha"], allIds })).toEqual(["razak", "muntaha"]);
+    expect(viewableEmployeeIds({ isAdmin: false, meId: "khalid", grantedIds: [], allIds })).toEqual(["khalid"]);
+  });
+  it("ignores grants to unknown or inactive employees and duplicates of themselves", () => {
+    expect(viewableEmployeeIds({ isAdmin: false, meId: "razak", grantedIds: ["razak", "ghost", "muntaha", "muntaha"], allIds })).toEqual(["razak", "muntaha"]);
+  });
+  it("a login with no employee record sees nothing but their grants", () => {
+    expect(viewableEmployeeIds({ isAdmin: false, meId: null, grantedIds: ["muntaha"], allIds })).toEqual(["muntaha"]);
+    expect(viewableEmployeeIds({ isAdmin: false, meId: null, grantedIds: [], allIds })).toEqual([]);
+  });
+  it("a requested list outside the allowed set falls back to the user's own", () => {
+    const allowed = ["razak", "muntaha"];
+    expect(pickEmployee("muntaha", allowed, "razak")).toBe("muntaha");
+    expect(pickEmployee("khalid", allowed, "razak")).toBe("razak"); // not allowed: URL tampering
+    expect(pickEmployee(undefined, allowed, "razak")).toBe("razak");
+    expect(pickEmployee("khalid", [], null)).toBeNull();
+  });
+  it("other people's lists are read-only; your own is editable with edit access", () => {
+    expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: "razak" })).toBe(true);
+    expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: "muntaha" })).toBe(false);
+    expect(canEditBoard({ isAdmin: false, moduleEdit: false, meId: "razak", selected: "razak" })).toBe(false);
+    expect(canEditBoard({ isAdmin: true, moduleEdit: true, meId: "sohail", selected: "muntaha" })).toBe(true);
+    expect(canEditBoard({ isAdmin: true, moduleEdit: true, meId: "sohail", selected: null })).toBe(true); // Unassigned
+    expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: null })).toBe(false);
+  });
+});

@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireAccess } from "@/lib/session";
+import { requireAccess, requireAdmin } from "@/lib/session";
 import { bool, flash, str } from "@/lib/flash";
-import { normalizeEmail } from "@/lib/access";
+import { DEFAULT_ACCESS, MODULES, normalizeEmail } from "@/lib/access";
 
 const BACK = "/employees";
 
@@ -54,4 +54,23 @@ export async function updateEmployee(form: FormData) {
   await audit(user.email, "employee.update", name);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved ${name}.`);
+}
+
+/** Admin: let an employee with an email sign in (Google), with the default access for a new login. */
+export async function giveLogin(form: FormData) {
+  const admin = await requireAdmin();
+  const id = str(form, "id");
+  const employee = await db.employee.findUnique({ where: { id } });
+  if (!employee) flash(BACK, "error", "Employee not found.");
+  if (!employee!.email) flash(BACK, "error", "Add an email address first (it must be their Google account).");
+  const email = employee!.email!;
+  if (await db.user.findUnique({ where: { email } })) flash(BACK, "error", "They already have a login.");
+
+  const user = await db.user.create({ data: { email, name: employee!.name, role: "STAFF" } });
+  await db.moduleAccess.createMany({
+    data: MODULES.map((module) => ({ userId: user.id, module, level: DEFAULT_ACCESS[module] })),
+  });
+  await audit(admin.email, "user.add", `${email} (from Employees)`);
+  revalidatePath(BACK);
+  flash(BACK, "notice", `${employee!.name} can now sign in with ${email}. Adjust their access under Access.`);
 }

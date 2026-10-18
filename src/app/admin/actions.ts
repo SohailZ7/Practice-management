@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
 import {
+  DEFAULT_ACCESS,
   MODULES,
   isLevel,
   isModule,
@@ -33,11 +34,18 @@ export async function addUser(form: FormData) {
 
   const user = await db.user.create({ data: { email, name, role } });
   await db.moduleAccess.createMany({
-    data: MODULES.map((module) => ({ userId: user.id, module, level: "none" })),
+    data: MODULES.map((module) => ({ userId: user.id, module, level: DEFAULT_ACCESS[module] })),
   });
+  // Everyone with a login gets an employee record (linked by email), so they have a task list.
+  let linked = "";
+  const employee = await db.employee.findUnique({ where: { email } });
+  if (!employee) {
+    await db.employee.create({ data: { name, email } });
+    linked = " and an employee record";
+  }
   await audit(admin.email, "user.add", `${email} as ${role}`);
   revalidatePath(BACK);
-  flash(BACK, "notice", `Added ${email}. Set their module access below.`);
+  flash(BACK, "notice", `Added ${email}${linked}. They can open Tasks, Schedule and Employees; change their access below.`);
 }
 
 export async function updateUser(form: FormData) {
@@ -78,4 +86,23 @@ export async function setAccess(form: FormData) {
   await audit(admin.email, "access.set", `${target!.email}: ${changes.join(", ")}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved access for ${target!.email}.`);
+}
+
+/** Lets a user see (read-only) the tasks of the chosen employees, besides their own. */
+export async function setTaskViewers(form: FormData) {
+  const admin = await requireAdmin();
+  const userId = str(form, "id");
+  const target = await db.user.findUnique({ where: { id: userId } });
+  if (!target) flash(BACK, "error", "User not found.");
+  const own = await db.employee.findUnique({ where: { email: target!.email }, select: { id: true } });
+  const chosen = form.getAll("employeeId").filter((v): v is string => typeof v === "string" && v !== own?.id);
+  const valid = await db.employee.findMany({ where: { id: { in: chosen } }, select: { id: true } });
+
+  await db.$transaction([
+    db.taskViewer.deleteMany({ where: { userId } }),
+    db.taskViewer.createMany({ data: valid.map((e) => ({ userId, employeeId: e.id })) }),
+  ]);
+  await audit(admin.email, "taskviewers.set", `${target!.email}: ${valid.length} employee(s)`);
+  revalidatePath(BACK);
+  flash(BACK, "notice", `Saved whose tasks ${target!.email} can view.`);
 }

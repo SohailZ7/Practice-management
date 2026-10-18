@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { Banner } from "@/components/Banner";
-import { addEmployee, updateEmployee } from "./actions";
+import { addEmployee, giveLogin, updateEmployee } from "./actions";
 
 export default async function EmployeesPage({
   searchParams,
@@ -11,6 +11,7 @@ export default async function EmployeesPage({
 }) {
   const user = await requireAccess("employees", "view");
   const canEdit = canAccess(user, "employees", "edit");
+  const isAdmin = user.role === "ADMIN";
   const [employees, users] = await Promise.all([
     db.employee.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),
     db.user.findMany({ select: { email: true } }),
@@ -53,6 +54,13 @@ export default async function EmployeesPage({
                         Save
                       </button>
                     </form>
+                    {isAdmin && e.email && !loginEmails.has(e.email) && (
+                      <form action={giveLogin} style={{ marginTop: ".35rem" }}>
+                        <input type="hidden" name="id" value={e.id} />
+                        <button type="submit">Give login ({e.email})</button>
+                        <span className="muted small"> so they can sign in with Google and see their own tasks</span>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ) : (

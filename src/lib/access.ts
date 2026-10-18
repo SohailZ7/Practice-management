@@ -66,3 +66,15 @@ export function wouldRemoveLastAdmin(
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
+
+/**
+ * What a newly added login can open until the Admin changes it: their own tasks and the schedule and
+ * employee directory. Billing and Ledger are granted deliberately.
+ */
+export const DEFAULT_ACCESS: Record<ModuleName, Level> = {
+  schedule: "edit",
+  tasks: "edit",
+  employees: "view",
+  billing: "none",
+  ledger: "none",
+};
