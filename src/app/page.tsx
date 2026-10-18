@@ -3,11 +3,13 @@ import { requireUser, levels } from "@/lib/session";
 import { canOpenAdmin } from "@/lib/access";
 import { db } from "@/lib/db";
 import { todayISO } from "@/lib/dates";
+import { ensureRecurringTasks } from "@/lib/recurring";
 
 export default async function Home() {
   const user = await requireUser();
   const lv = levels(user);
   const today = todayISO();
+  await ensureRecurringTasks();
 
   const [entryCount, myOpen] = await Promise.all([
     lv.schedule !== "none" ? db.scheduleEntry.count({ where: { date: today } }) : Promise.resolve(0),

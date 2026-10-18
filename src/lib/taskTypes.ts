@@ -13,6 +13,8 @@ export type TaskDTO = {
   completedAt: number | null;
   inToday: boolean;
   sortOrder: number;
+  /** Created by a recurring task. */
+  recurring: boolean;
   links: LinkDTO[];
 };
 
@@ -33,6 +35,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     completedAt: t.completedAt ? t.completedAt.getTime() : null,
     inToday: t.inToday,
     sortOrder: t.sortOrder,
+    recurring: t.recurringId !== null,
     links: t.links.map((l) => ({ id: l.id, url: l.url, label: l.label, type: l.type })),
   };
 }
@@ -74,3 +77,18 @@ export function splitTasks<T extends Pick<TaskDTO, "id" | "completed" | "dueDate
     completed: tasks.filter((t) => t.completed),
   };
 }
+
+export type RecurringDTO = {
+  id: string;
+  title: string;
+  assigneeId: string | null;
+  frequency: string;
+  weekday: number | null;
+  dayOfMonth: number | null;
+  startDate: string;
+  endDate: string | null;
+  active: boolean;
+};
+
+export type RecurringInput = Omit<RecurringDTO, "id" | "active">;
+export type RecurringPatch = Partial<Omit<RecurringDTO, "id">>;

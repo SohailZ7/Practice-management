@@ -45,6 +45,8 @@ type Props = {
   /** The employee whose tab this is (null = Unassigned). */
   boardAssigneeId: string | null;
   today: string;
+  /** Drag and drop is available to the Admin only. */
+  canReorder: boolean;
 };
 
 const PAST = "past-due";
@@ -52,7 +54,7 @@ const TODAY = "today";
 const BACKLOG = "backlog";
 const DONE = "completed";
 
-export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today }: Props) {
+export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today, canReorder }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
@@ -148,7 +150,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     onAddLink: addLink,
     onRemoveLink: removeLink,
   };
-  const sectionProps = { sensors, canEdit, collapsed, onToggle: toggle, onReorder: reorder, itemProps };
+  const sectionProps = { sensors, canEdit, canReorder, collapsed, onToggle: toggle, onReorder: reorder, itemProps };
 
   return (
     <div className="todo-board">
@@ -258,6 +260,7 @@ function Section({
   tasks,
   sensors,
   canEdit,
+  canReorder,
   collapsed,
   onToggle,
   onReorder,
@@ -275,6 +278,7 @@ function Section({
   sortable?: boolean;
   sensors: ReturnType<typeof useSensors>;
   canEdit: boolean;
+  canReorder: boolean;
   collapsed: Set<string>;
   onToggle: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
@@ -331,7 +335,7 @@ function Section({
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
               {tasks.map((t) => (
-                <TaskItem key={t.id} task={t} canEdit={canEdit} sortable={sortable} urgent={urgent} {...itemProps} />
+                <TaskItem key={t.id} task={t} canEdit={canEdit} sortable={sortable && canReorder} urgent={urgent} {...itemProps} />
               ))}
             </SortableContext>
           </DndContext>
@@ -436,6 +440,11 @@ function TaskItem({
           <button className="drag-handle" {...attributes} {...listeners} title="Drag to reorder" aria-label="Drag to reorder">
             ⠿
           </button>
+        )}
+        {task.recurring && (
+          <span className="recur-badge" title="Recurring task" aria-label="Recurring task">
+            <Icon name="repeat" />
+          </span>
         )}
         {urgent && (
           <span className="prio-flag" title="High priority: past due" aria-label="High priority, past due">

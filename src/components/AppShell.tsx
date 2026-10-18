@@ -165,15 +165,19 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
             <Icon name="home" />
             <span className="label">Home</span>
           </Link>
-          <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
-            <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-              {orderedItems.map((i) => (
-                <SortableNavItem key={i.id} id={i.id} label={i.label}>
-                  {link(i.href, i.label, i.icon)}
-                </SortableNavItem>
-              ))}
-            </SortableContext>
-          </DndContext>
+          {isAdmin ? (
+            <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
+              <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                {orderedItems.map((i) => (
+                  <SortableNavItem key={i.id} id={i.id} label={i.label}>
+                    {link(i.href, i.label, i.icon)}
+                  </SortableNavItem>
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            items.map((i) => link(i.href, i.label, i.icon))
+          )}
         </nav>
         <div className="foot">
           {link("/settings", "Settings", "settings")}

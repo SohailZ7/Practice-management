@@ -166,3 +166,49 @@ describe("applyOrder (remembered tab order)", () => {
     expect(applyOrder(items, []).map((i) => i.id)).toEqual(["a", "b", "c", "d"]);
   });
 });
+
+import { describeRule, latestOccurrence, nextOccurrenceAfter, ruleError } from "../src/lib/recurrence";
+
+describe("recurrence rules", () => {
+  const base = { weekday: null, dayOfMonth: null, startDate: "2026-01-01", endDate: null as string | null };
+  // 2026-10-17 is a Saturday.
+  it("daily: the latest occurrence is today", () => {
+    expect(latestOccurrence({ ...base, frequency: "DAILY" }, "2026-10-17")).toBe("2026-10-17");
+    expect(nextOccurrenceAfter({ ...base, frequency: "DAILY" }, "2026-10-17")).toBe("2026-10-18");
+  });
+  it("weekly: the most recent matching weekday, and the next one", () => {
+    const monday = { ...base, frequency: "WEEKLY", weekday: 0 };
+    expect(latestOccurrence(monday, "2026-10-17")).toBe("2026-10-12");
+    expect(latestOccurrence(monday, "2026-10-12")).toBe("2026-10-12");
+    expect(nextOccurrenceAfter(monday, "2026-10-17")).toBe("2026-10-19");
+    expect(nextOccurrenceAfter(monday, "2026-10-12")).toBe("2026-10-19");
+    expect(latestOccurrence({ ...base, frequency: "WEEKLY", weekday: 5 }, "2026-10-17")).toBe("2026-10-17"); // Saturday
+  });
+  it("monthly: the most recent day-of-month, clamping short months", () => {
+    const m15 = { ...base, frequency: "MONTHLY", dayOfMonth: 15 };
+    expect(latestOccurrence(m15, "2026-10-17")).toBe("2026-10-15");
+    expect(latestOccurrence(m15, "2026-10-10")).toBe("2026-09-15");
+    expect(nextOccurrenceAfter(m15, "2026-10-17")).toBe("2026-11-15");
+    const m31 = { ...base, frequency: "MONTHLY", dayOfMonth: 31 };
+    expect(latestOccurrence(m31, "2026-03-05")).toBe("2026-02-28");
+    expect(nextOccurrenceAfter(m31, "2026-01-31")).toBe("2026-02-28");
+  });
+  it("respects the start and end dates", () => {
+    const rule = { ...base, frequency: "DAILY", startDate: "2026-10-20", endDate: "2026-10-25" };
+    expect(latestOccurrence(rule, "2026-10-17")).toBeNull();
+    expect(latestOccurrence(rule, "2026-10-22")).toBe("2026-10-22");
+    expect(latestOccurrence(rule, "2026-12-01")).toBe("2026-10-25");
+    expect(nextOccurrenceAfter(rule, "2026-10-25")).toBeNull();
+    expect(nextOccurrenceAfter(rule, "2026-10-10")).toBe("2026-10-20");
+  });
+  it("validates and describes rules", () => {
+    expect(ruleError({ ...base, frequency: "WEEKLY" })).toMatch(/day of the week/);
+    expect(ruleError({ ...base, frequency: "MONTHLY", dayOfMonth: 32 })).toMatch(/day of the month/);
+    expect(ruleError({ ...base, frequency: "YEARLY" })).toMatch(/daily, weekly or monthly/);
+    expect(ruleError({ ...base, frequency: "DAILY", endDate: "2025-12-31" })).toMatch(/end date/);
+    expect(ruleError({ ...base, frequency: "DAILY" })).toBeNull();
+    expect(describeRule({ frequency: "WEEKLY", weekday: 2, dayOfMonth: null })).toBe("Every Wednesday");
+    expect(describeRule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 1 })).toBe("Monthly on the 1st");
+    expect(describeRule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 22 })).toBe("Monthly on the 22nd");
+  });
+});

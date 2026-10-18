@@ -326,3 +326,9 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .nav-item:hover .nav-grip, .nav-grip:focus-visible { opacity: .8; }
 .nav-item > a.active ~ .nav-grip { color: #fff; }
 .shell.rail .side:not(:hover) .nav-grip { display: none; }
+
+/* recurring */
+.recur-badge { color: var(--accent); display: inline-flex; margin-left: .25rem; }
+.recur-badge .svg-icon { width: 14px; height: 14px; }
+.recurring-table input:not([type=checkbox]):not([type=date]):not([type=number]) { width: 100%; min-width: 160px; }
+.recurring-table td { vertical-align: top; }

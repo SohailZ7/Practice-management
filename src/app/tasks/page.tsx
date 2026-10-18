@@ -3,8 +3,8 @@ import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { todayISO } from "@/lib/dates";
 import { toTaskDTO } from "@/lib/taskTypes";
+import { ensureRecurringTasks } from "@/lib/recurring";
 import { TaskBoard } from "@/components/TaskBoard";
-import { EmployeeTabs } from "@/components/EmployeeTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
   const canEdit = canAccess(user, "tasks", "edit");
   const isAdmin = user.role === "ADMIN";
 
+  await ensureRecurringTasks();
   const [categories, employees, me] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -42,30 +43,8 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       });
 
-  const openCounts = new Map<string | null, number>();
-  if (isAdmin) {
-    const grouped = await db.task.groupBy({
-      by: ["assigneeId"],
-      where: { completed: false },
-      _count: { _all: true },
-    });
-    grouped.forEach((g) => openCounts.set(g.assigneeId, g._count._all));
-  }
-
   return (
     <>
-      <h1>{isAdmin ? "Tasks" : "My tasks"}</h1>
-
-      {isAdmin && (
-        <EmployeeTabs
-          selectedId={selected ?? UNASSIGNED}
-          tabs={[
-            ...employees.map((e) => ({ id: e.id, label: e.name, count: openCounts.get(e.id) ?? 0, href: `/tasks?emp=${e.id}` })),
-            { id: UNASSIGNED, label: "Unassigned", count: openCounts.get(null) ?? 0, href: `/tasks?emp=${UNASSIGNED}` },
-          ]}
-        />
-      )}
-
       {noProfile ? (
         <div className="card">
           <p>
@@ -82,6 +61,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
           canEdit={canEdit}
           boardAssigneeId={selected}
           today={todayISO()}
+          canReorder={isAdmin}
         />
       )}
     </>

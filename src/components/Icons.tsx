@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag";
+export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag" | "repeat";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: (
@@ -71,6 +71,14 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="3" width="16" height="18" rx="2.5" />
       <path d="M8 8h8M8 12h8M8 16h5" />
+    </>
+  ),
+  repeat: (
+    <>
+      <path d="M17 2l3 3-3 3" />
+      <path d="M4 11V9a4 4 0 0 1 4-4h12" />
+      <path d="M7 22l-3-3 3-3" />
+      <path d="M20 13v2a4 4 0 0 1-4 4H4" />
     </>
   ),
   flag: (

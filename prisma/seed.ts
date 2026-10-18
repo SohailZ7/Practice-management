@@ -75,6 +75,18 @@ async function main() {
     }
   }
 
+  // Employees without a login (they get a task tab, and Dr. Lucy is also a schedule provider).
+  for (const name of ["Dr Lucy", "Dr Irfan"]) {
+    if (!(await db.employee.findFirst({ where: { name } }))) {
+      await db.employee.create({ data: { name, title: "Doctor" } });
+    }
+  }
+  const lucy = await db.employee.findFirst({ where: { name: "Dr Lucy" } });
+  const lucyProvider = await db.provider.findUnique({ where: { name: "Dr. Lucy" } });
+  if (lucy && lucyProvider && !lucyProvider.employeeId) {
+    await db.provider.update({ where: { id: lucyProvider.id }, data: { employeeId: lucy.id } });
+  }
+
   // External provider (not an employee).
   await db.provider.upsert({ where: { name: "Dr. Lucy" }, update: {}, create: { name: "Dr. Lucy" } });
 
@@ -98,6 +110,7 @@ async function main() {
   for (const [i, p] of PEOPLE.entries()) {
     await db.ledgerParty.upsert({ where: { name: p.name }, update: {}, create: { name: p.name, sortOrder: i } });
   }
+  await db.category.upsert({ where: { name: "Recurring tasks" }, update: {}, create: { name: "Recurring tasks", sortOrder: 99 } });
   await db.category.upsert({
     where: { name: "B & BC" },
     update: {},

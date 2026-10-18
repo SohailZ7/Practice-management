@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   DndContext,
@@ -21,12 +22,21 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 
-export type TabDef = { id: string; label: string; count: number; href: string };
+export type TabDef = { id: string; label: string; count: number | null; href: string };
 
-const KEY = "task-tab-order";
+// v2: the first tab is now always the signed-in admin's own, so an older saved order is discarded.
+const KEY = "task-tab-order-v2";
+const RECURRING = "recurring";
 
-/** The Admin's per-employee tabs. Drag the grip to reorder; the order is remembered in this browser. */
-export function EmployeeTabs({ tabs, selectedId }: { tabs: TabDef[]; selectedId: string }) {
+/**
+ * The Admin's tabs: one per employee, Unassigned, and Recurring. The default order puts the
+ * admin's own tab first; drag the grip on a tab to reorder (remembered in this browser).
+ */
+export function EmployeeTabs({ tabs, defaultId }: { tabs: TabDef[]; defaultId: string }) {
+  const path = usePathname();
+  const params = useSearchParams();
+  const selectedId = path.startsWith("/tasks/recurring") ? RECURRING : (params.get("emp") ?? defaultId);
+
   const [ordered, setOrdered] = useState(tabs);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -75,7 +85,7 @@ function SortableTab({ tab, on }: { tab: TabDef; on: boolean }) {
       </button>
       <Link href={tab.href} role="tab" aria-selected={on} className={on ? "tab on" : "tab"}>
         {tab.label}
-        <span className="count">{tab.count}</span>
+        {tab.count !== null && <span className="count">{tab.count}</span>}
       </Link>
     </div>
   );

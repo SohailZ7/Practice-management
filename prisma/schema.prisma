@@ -39,6 +39,7 @@ model Employee {
   active Boolean  @default(true)
   tasks  Task[]
   provider Provider?
+  recurring RecurringTask[]
 }
 
 // Providers shown on the schedule. employeeId null = external provider.
@@ -116,6 +117,11 @@ model Task {
   category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   assignee        Employee?      @relation(fields: [assigneeId], references: [id])
   links           TaskLink[]
+  recurringId     String?
+  occurrenceDate  String?
+  recurring       RecurringTask? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+
+  @@unique([recurringId, occurrenceDate])
 }
 
 // type: webex | pr | doc | markdown | link
@@ -264,4 +270,23 @@ model LedgerEntry {
   method      LedgerMethod?   @relation(fields: [methodId], references: [id], onDelete: SetNull)
 
   @@index([date])
+}
+
+// A task that repeats. weekday: 0 = Monday .. 6 = Sunday. dayOfMonth: 1..31 (short months use the last day).
+// An instance (a normal Task, due on the occurrence date) is created in the assignee's queue when it comes due.
+model RecurringTask {
+  id             String    @id @default(cuid())
+  title          String
+  assigneeId     String?
+  frequency      String
+  weekday        Int?
+  dayOfMonth     Int?
+  startDate      String
+  endDate        String?
+  active         Boolean   @default(true)
+  lastOccurrence String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  assignee       Employee? @relation(fields: [assigneeId], references: [id])
+  tasks          Task[]
 }

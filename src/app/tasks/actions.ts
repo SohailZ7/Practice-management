@@ -116,18 +116,13 @@ export async function deleteTask(id: string): Promise<void> {
   revalidatePath("/tasks");
 }
 
-/** Persists drag-and-drop order. The ids keep the same set of sort slots, in the new order. */
+/** Persists drag-and-drop order. Reordering (drag and drop) is an Admin-only ability (TSK-10). */
 export async function reorderTasks(orderedIds: string[]): Promise<void> {
   const user = await requireAccess("tasks", "edit");
+  if (!isAdmin(user)) throw new Error("Only the administrator can reorder tasks");
   if (orderedIds.length === 0) return;
-  const tasks = await db.task.findMany({
-    where: { id: { in: orderedIds } },
-    include: { assignee: true },
-  });
+  const tasks = await db.task.findMany({ where: { id: { in: orderedIds } } });
   if (tasks.length !== new Set(orderedIds).size) throw new Error("Task not found");
-  if (!isAdmin(user) && tasks.some((t) => t.assignee?.email !== user.email)) {
-    throw new Error("That task is not assigned to you");
-  }
   const slots = tasks.map((t) => t.sortOrder).sort((a, b) => a - b);
   const distinct = slots.every((v, i) => i === 0 || v > slots[i - 1]);
   const base = slots[0] ?? 0;
