@@ -7,13 +7,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// role: ADMIN | PROVIDER | STAFF
+// role: ADMIN | PROVIDER | STAFF    theme: system | light | dark
 model User {
   id        String         @id @default(cuid())
   email     String         @unique
   name      String
   role      String         @default("STAFF")
   active    Boolean        @default(true)
+  theme     String         @default("system")
   createdAt DateTime       @default(now())
   access    ModuleAccess[]
 }
@@ -153,4 +154,68 @@ model ImportDraft {
   sheet     String
   payload   String
   createdAt DateTime @default(now())
+}
+
+// ---- Billing (modeled on bandbc-billing-app) ----
+
+model Program {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  encounters Encounter[]
+}
+
+// MRN is optional; an admin can add it later. mergedIntoId keeps merged records instead of erasing them.
+model BillingPatient {
+  id           String      @id @default(cuid())
+  mrn          String?     @unique
+  lastName     String
+  firstName    String
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  mergedIntoId String?
+  encounters   Encounter[]
+
+  @@index([lastName, firstName])
+}
+
+// encounterDate: YYYY-MM-DD. icd10Codes: in order, first = primary.
+model Encounter {
+  id               String         @id @default(cuid())
+  patientId        String
+  encounterDate    String
+  programId        String
+  icd10Codes       String[]
+  chargeCode       String         @default("")
+  note             String         @default("")
+  getixEntered     Boolean        @default(false)
+  getixEnteredAt   DateTime?
+  getixEnteredById String?
+  createdById      String
+  createdAt        DateTime       @default(now())
+  updatedById      String?
+  updatedAt        DateTime?
+  deletedAt        DateTime?
+  deletedById      String?
+  patient          BillingPatient @relation(fields: [patientId], references: [id])
+  program          Program        @relation(fields: [programId], references: [id])
+
+  @@index([patientId, encounterDate])
+  @@index([createdById])
+  @@index([encounterDate])
+}
+
+// Append-only (through the app): the previous version of a record, saved before every change.
+model BillingHistory {
+  id          String   @id @default(cuid())
+  entity      String
+  entityId    String
+  action      String
+  snapshot    Json
+  changedById String
+  changedAt   DateTime @default(now())
+
+  @@index([entity, entityId, changedAt])
 }

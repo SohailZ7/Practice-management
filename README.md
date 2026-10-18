@@ -1,7 +1,8 @@
 # Practice Management
 
-Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**.
-Requirements: [specs/requirements-v1.md](specs/requirements-v1.md).
+Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v4.md](specs/requirements-v4.md)); older versions are kept.
+Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.
 
@@ -37,6 +38,12 @@ Only emails listed under **Access** can sign in; everyone else is denied.
 Schedule → Import. Upload an `.xlsx` shaped like the Outpatient Board, pick the sheet (e.g. `Doc& HP 8.10-8.22`),
 review the preview (new / duplicate / skipped counts, provider matching), then confirm. Re-importing the same sheet
 adds nothing twice. Nothing is imported until you do this; real workbooks are git-ignored.
+
+## Billing
+Modeled on `bandbc-billing-app`. Providers (anyone with edit access to Billing) record encounters: patient, optional MRN,
+date, program, ICD-10 codes, charge code or note. The Admin marks each encounter "Entered into GetIX" (needs an MRN; this
+locks it), manages programs, adds or fixes MRNs, merges duplicate records, restores deleted encounters and views edit
+history. Nothing is erased. Use made-up patients locally; see the BAA/hosting note in the spec before real patient data.
 
 ## Tests and checks
 ```bash

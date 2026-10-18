@@ -50,5 +50,6 @@ export function levels(user: CurrentUser) {
     schedule: levelFor(user, "schedule"),
     tasks: levelFor(user, "tasks"),
     employees: levelFor(user, "employees"),
+    billing: levelFor(user, "billing"),
   };
 }

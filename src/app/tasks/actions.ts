@@ -3,14 +3,26 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireAccess } from "@/lib/session";
-import { flash, str } from "@/lib/flash";
+import { requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
+import { toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
-function back(form: FormData) {
-  const scope = str(form, "scope");
-  return scope ? `/tasks?scope=${encodeURIComponent(scope)}` : "/tasks";
+// Visibility rule (TSK-6): a non-admin may only see and change tasks assigned to them.
+// Every action below checks it on the server.
+
+const isAdmin = (user: CurrentUser) => user.role === "ADMIN";
+
+async function myEmployeeId(user: CurrentUser): Promise<string | null> {
+  const e = await db.employee.findUnique({ where: { email: user.email }, select: { id: true } });
+  return e?.id ?? null;
+}
+
+async function loadAccessibleTask(user: CurrentUser, id: string) {
+  const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
+  if (!task) throw new Error("Task not found");
+  if (!isAdmin(user) && task.assignee?.email !== user.email) throw new Error("That task is not assigned to you");
+  return task;
 }
 
 async function nextOrder(): Promise<number> {
@@ -18,166 +30,158 @@ async function nextOrder(): Promise<number> {
   return (top._max.sortOrder ?? 0) + 1;
 }
 
-export async function addTask(form: FormData) {
+export async function createTask(input: {
+  title: string;
+  categoryId?: string | null;
+  assigneeId?: string | null;
+  inToday?: boolean;
+}): Promise<TaskDTO> {
   const user = await requireAccess("tasks", "edit");
-  const title = str(form, "title");
-  if (!title) flash(back(form), "error", "Enter a task title.");
+  const title = (input.title ?? "").trim().slice(0, 300);
+  if (!title) throw new Error("Enter a task title");
+
+  // Non-admins create tasks for themselves; the Admin can create for anyone.
+  let assigneeId = input.assigneeId || null;
+  if (!isAdmin(user)) assigneeId = await myEmployeeId(user);
+  if (assigneeId && !(await db.employee.findUnique({ where: { id: assigneeId } }))) {
+    throw new Error("Employee not found");
+  }
+  if (input.categoryId && !(await db.category.findUnique({ where: { id: input.categoryId } }))) {
+    throw new Error("Category not found");
+  }
+
   const task = await db.task.create({
     data: {
       title,
-      categoryId: str(form, "categoryId") || null,
-      assigneeId: str(form, "assigneeId") || null,
-      inToday: str(form, "inToday") === "1",
+      categoryId: input.categoryId || null,
+      assigneeId,
+      inToday: input.inToday === true,
       sortOrder: await nextOrder(),
     },
+    include: { links: true },
   });
-  await audit(user.email, "task.add", task.title);
+  await audit(user.email, "task.add", title);
   revalidatePath("/tasks");
+  return toTaskDTO(task);
 }
 
-export async function toggleComplete(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const id = str(form, "id");
-  const task = await db.task.findUnique({ where: { id } });
-  if (!task) return;
-  await db.task.update({ where: { id }, data: { completed: !task.completed } });
-  revalidatePath("/tasks");
-}
-
-export async function setTitle(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const title = str(form, "title");
-  if (!title) flash(back(form), "error", "A task title cannot be blank.");
-  await db.task.update({ where: { id: str(form, "id") }, data: { title } });
-  revalidatePath("/tasks");
-}
-
-export async function setCategory(form: FormData) {
-  await requireAccess("tasks", "edit");
-  await db.task.update({
-    where: { id: str(form, "id") },
-    data: { categoryId: str(form, "categoryId") || null },
-  });
-  revalidatePath("/tasks");
-}
-
-/** Tasks can be reassigned at any time; every change is audited. */
-export async function setAssignee(form: FormData) {
+export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO> {
   const user = await requireAccess("tasks", "edit");
-  const id = str(form, "id");
-  const assigneeId = str(form, "assigneeId") || null;
-  const [task, to] = await Promise.all([
-    db.task.findUnique({ where: { id }, include: { assignee: true } }),
-    assigneeId ? db.employee.findUnique({ where: { id: assigneeId } }) : Promise.resolve(null),
-  ]);
-  if (!task) return;
-  await db.task.update({ where: { id }, data: { assigneeId } });
-  await audit(
-    user.email,
-    "task.reassign",
-    `"${task.title}": ${task.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`,
-  );
+  const existing = await loadAccessibleTask(user, id);
+  const data: Record<string, unknown> = {};
+
+  if (patch.title !== undefined) {
+    const title = patch.title.trim().slice(0, 300);
+    if (!title) throw new Error("A task title cannot be blank");
+    data.title = title;
+  }
+  if (patch.categoryId !== undefined) {
+    if (patch.categoryId && !(await db.category.findUnique({ where: { id: patch.categoryId } }))) {
+      throw new Error("Category not found");
+    }
+    data.categoryId = patch.categoryId || null;
+  }
+  if (patch.dueDate !== undefined) {
+    if (patch.dueDate && !isISODate(patch.dueDate)) throw new Error("Invalid date");
+    data.dueDate = patch.dueDate || null;
+  }
+  if (patch.completed !== undefined) data.completed = patch.completed === true;
+  if (patch.inToday !== undefined) data.inToday = patch.inToday === true;
+
+  let reassign = "";
+  if (patch.assigneeId !== undefined) {
+    const to = patch.assigneeId ? await db.employee.findUnique({ where: { id: patch.assigneeId } }) : null;
+    if (patch.assigneeId && !to) throw new Error("Employee not found");
+    data.assigneeId = to?.id ?? null;
+    if ((to?.id ?? null) !== existing.assigneeId) {
+      reassign = `"${existing.title}": ${existing.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`;
+    }
+  }
+
+  const updated = await db.task.update({ where: { id }, data, include: { links: true } });
+  if (reassign) await audit(user.email, "task.reassign", reassign);
   revalidatePath("/tasks");
+  return toTaskDTO(updated);
 }
 
-export async function setDue(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const due = str(form, "dueDate");
-  if (due && !isISODate(due)) flash(back(form), "error", "Invalid date.");
-  await db.task.update({ where: { id: str(form, "id") }, data: { dueDate: due || null } });
-  revalidatePath("/tasks");
-}
-
-export async function toggleToday(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const id = str(form, "id");
-  const task = await db.task.findUnique({ where: { id } });
-  if (!task) return;
-  await db.task.update({ where: { id }, data: { inToday: !task.inToday } });
-  revalidatePath("/tasks");
-}
-
-export async function deleteTask(form: FormData) {
+export async function deleteTask(id: string): Promise<void> {
   const user = await requireAccess("tasks", "edit");
-  const id = str(form, "id");
-  const task = await db.task.findUnique({ where: { id } });
-  await db.task.delete({ where: { id } }).catch(() => undefined);
-  if (task) await audit(user.email, "task.delete", task.title);
+  const task = await loadAccessibleTask(user, id);
+  await db.task.delete({ where: { id } });
+  await audit(user.email, "task.delete", task.title);
   revalidatePath("/tasks");
 }
 
-export async function addLink(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const url = normalizeUrl(str(form, "url"));
-  if (!url) flash(back(form), "error", "Enter a valid http(s) link.");
-  const type = detectLinkType(url);
-  await db.taskLink.create({
-    data: { taskId: str(form, "id"), url, type, label: linkTypeMeta(type).label },
+/** Persists drag-and-drop order. The ids keep the same set of sort slots, in the new order. */
+export async function reorderTasks(orderedIds: string[]): Promise<void> {
+  const user = await requireAccess("tasks", "edit");
+  if (orderedIds.length === 0) return;
+  const tasks = await db.task.findMany({
+    where: { id: { in: orderedIds } },
+    include: { assignee: true },
   });
-  revalidatePath("/tasks");
-}
-
-export async function removeLink(form: FormData) {
-  await requireAccess("tasks", "edit");
-  await db.taskLink.delete({ where: { id: str(form, "linkId") } }).catch(() => undefined);
-  revalidatePath("/tasks");
-}
-
-/** Moves a task up or down within the visible list it sits in. `order` is that list's ids. */
-export async function moveTask(form: FormData) {
-  await requireAccess("tasks", "edit");
-  const id = str(form, "id");
-  const dir = str(form, "dir") === "up" ? -1 : 1;
-  const ids = str(form, "order").split(",").filter(Boolean);
-  const from = ids.indexOf(id);
-  const to = from + dir;
-  if (from < 0 || to < 0 || to >= ids.length) return;
-
-  const rows = await db.task.findMany({ where: { id: { in: ids } }, select: { id: true, sortOrder: true } });
-  const orderById = new Map(rows.map((r) => [r.id, r.sortOrder]));
-  const slots = ids.map((i) => orderById.get(i) ?? 0).sort((a, b) => a - b);
+  if (tasks.length !== new Set(orderedIds).size) throw new Error("Task not found");
+  if (!isAdmin(user) && tasks.some((t) => t.assignee?.email !== user.email)) {
+    throw new Error("That task is not assigned to you");
+  }
+  const slots = tasks.map((t) => t.sortOrder).sort((a, b) => a - b);
+  const distinct = slots.every((v, i) => i === 0 || v > slots[i - 1]);
   const base = slots[0] ?? 0;
-  const reordered = [...ids];
-  [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
-  const strictlyIncreasing = slots.every((v, i) => i === 0 || v > slots[i - 1]);
   await db.$transaction(
-    reordered.map((taskId, i) =>
-      db.task.update({
-        where: { id: taskId },
-        data: { sortOrder: strictlyIncreasing ? slots[i] : base + i },
-      }),
-    ),
+    orderedIds.map((id, i) => db.task.update({ where: { id }, data: { sortOrder: distinct ? slots[i] : base + i } })),
   );
   revalidatePath("/tasks");
 }
 
-export async function addCategory(form: FormData) {
+export async function addTaskLink(taskId: string, rawUrl: string): Promise<LinkDTO> {
   const user = await requireAccess("tasks", "edit");
-  const name = str(form, "name");
-  if (!name) flash(back(form), "error", "Enter a category name.");
-  if (await db.category.findUnique({ where: { name } })) flash(back(form), "error", "That category already exists.");
-  await db.category.create({ data: { name, sortOrder: await db.category.count() } });
+  await loadAccessibleTask(user, taskId);
+  const url = normalizeUrl(rawUrl);
+  if (!url) throw new Error("Enter a valid http(s) link");
+  const type = detectLinkType(url);
+  const link = await db.taskLink.create({
+    data: { taskId, url, type, label: linkTypeMeta(type).label },
+  });
+  revalidatePath("/tasks");
+  return { id: link.id, url: link.url, label: link.label, type: link.type };
+}
+
+export async function removeTaskLink(linkId: string): Promise<void> {
+  const user = await requireAccess("tasks", "edit");
+  const link = await db.taskLink.findUnique({ where: { id: linkId } });
+  if (!link) return;
+  await loadAccessibleTask(user, link.taskId);
+  await db.taskLink.delete({ where: { id: linkId } });
+  revalidatePath("/tasks");
+}
+
+export async function addCategory(rawName: string): Promise<CategoryDTO> {
+  const user = await requireAccess("tasks", "edit");
+  const name = rawName.trim().slice(0, 80);
+  if (!name) throw new Error("Enter a category name");
+  if (await db.category.findUnique({ where: { name } })) throw new Error("That category already exists");
+  const cat = await db.category.create({ data: { name, sortOrder: await db.category.count() } });
   await audit(user.email, "category.add", name);
   revalidatePath("/tasks");
+  return { id: cat.id, name: cat.name };
 }
 
-export async function renameCategory(form: FormData) {
+export async function renameCategory(id: string, rawName: string): Promise<void> {
   await requireAccess("tasks", "edit");
-  const name = str(form, "name");
-  if (!name) flash(back(form), "error", "Category name cannot be blank.");
-  const id = str(form, "id");
+  const name = rawName.trim().slice(0, 80);
+  if (!name) throw new Error("Category name cannot be blank");
   const other = await db.category.findUnique({ where: { name } });
-  if (other && other.id !== id) flash(back(form), "error", "That category already exists.");
+  if (other && other.id !== id) throw new Error("That category already exists");
   await db.category.update({ where: { id }, data: { name } });
   revalidatePath("/tasks");
 }
 
 /** Deleting a category un-categorizes its tasks (the relation is SET NULL). */
-export async function deleteCategory(form: FormData) {
+export async function deleteCategory(id: string): Promise<void> {
   const user = await requireAccess("tasks", "edit");
-  const id = str(form, "id");
   const cat = await db.category.findUnique({ where: { id } });
-  await db.category.delete({ where: { id } }).catch(() => undefined);
-  if (cat) await audit(user.email, "category.delete", cat.name);
+  if (!cat) return;
+  await db.category.delete({ where: { id } });
+  await audit(user.email, "category.delete", cat.name);
   revalidatePath("/tasks");
 }

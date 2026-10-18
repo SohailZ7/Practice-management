@@ -40,6 +40,12 @@ export default async function Home() {
             <div className="muted">Directory</div>
           </Link>
         )}
+        {lv.billing !== "none" && (
+          <Link href="/billing" className="card grow">
+            <strong>Billing</strong>
+            <div className="muted">Encounters and GetIX</div>
+          </Link>
+        )}
         {canOpenAdmin(user) && (
           <Link href="/admin" className="card grow">
             <strong>Access</strong>

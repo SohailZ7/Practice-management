@@ -9,10 +9,12 @@ const PEOPLE = [
   { name: "Muntaha", email: "muntahastar@gmail.com", role: "STAFF", title: "Office Manager" },
 ];
 
-const MODULES = ["schedule", "tasks", "employees"];
+const MODULES = ["schedule", "tasks", "employees", "billing"];
 
 // Non-admins start with edit on schedule and tasks, view on employees. Admin changes this in the app.
-const DEFAULT_LEVEL: Record<string, string> = { schedule: "edit", tasks: "edit", employees: "view" };
+const DEFAULT_LEVEL: Record<string, string> = { schedule: "edit", tasks: "edit", employees: "view", billing: "none" };
+// Dr Khalid records billing encounters; Office Managers get Billing only when the Admin grants it.
+const PROVIDER_BILLING = "edit";
 
 const TRACKS = [
   ["Track 1 IOP", "8:30", "11:00"],
@@ -49,17 +51,32 @@ async function main() {
       await db.moduleAccess.upsert({
         where: { userId_module: { userId: user.id, module } },
         update: {},
-        create: { userId: user.id, module, level: DEFAULT_LEVEL[module] },
+        create: {
+          userId: user.id,
+          module,
+          level: module === "billing" && p.role === "PROVIDER" ? PROVIDER_BILLING : DEFAULT_LEVEL[module],
+        },
       });
     }
     if (p.role === "PROVIDER") {
-      await db.provider.upsert({
-        where: { name: p.name },
-        update: {},
-        create: { name: p.name, employeeId: employee.id },
-      });
+      // Dr Khalid is the employee; on the schedule he appears as "Dr. Khalid Ahmed".
+      const existing = await db.provider.findUnique({ where: { employeeId: employee.id } });
+      if (existing) {
+        if (existing.name === "Dr Khalid") {
+          await db.provider.update({ where: { id: existing.id }, data: { name: "Dr. Khalid Ahmed" } });
+        }
+      } else {
+        await db.provider.upsert({
+          where: { name: "Dr. Khalid Ahmed" },
+          update: { employeeId: employee.id },
+          create: { name: "Dr. Khalid Ahmed", employeeId: employee.id },
+        });
+      }
     }
   }
+
+  // External provider (not an employee).
+  await db.provider.upsert({ where: { name: "Dr. Lucy" }, update: {}, create: { name: "Dr. Lucy" } });
 
   for (const [i, [name, startTime, endTime]] of TRACKS.entries()) {
     await db.trackDef.upsert({

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { getCurrentUser, levels } from "@/lib/session";
 import { canOpenAdmin } from "@/lib/access";
-import { Nav } from "@/components/Nav";
+import { normalizeTheme, themeAttribute } from "@/lib/theme";
+import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,17 +16,20 @@ export const dynamic = "force-dynamic";
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
   return (
-    <html lang="en">
+    <html lang="en" data-theme={user ? themeAttribute(normalizeTheme(user.theme)) : undefined}>
       <body>
-        {user && (
-          <Nav
+        {user ? (
+          <AppShell
             name={user.name}
             email={user.email}
             levels={levels(user)}
             isAdmin={canOpenAdmin(user)}
-          />
+          >
+            {children}
+          </AppShell>
+        ) : (
+          <main style={{ padding: "0 16px" }}>{children}</main>
         )}
-        <main>{children}</main>
       </body>
     </html>
   );

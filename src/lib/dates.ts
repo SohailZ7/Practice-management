@@ -65,3 +65,48 @@ export function excelSerialToISO(serial: number): string {
   const ms = Math.round(serial * 86400000);
   return new Date(Date.UTC(1899, 11, 30) + ms).toISOString().slice(0, 10);
 }
+
+export function startOfMonth(iso: string): string {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+/** First day of the month `n` months away from the month containing `iso`. */
+export function addMonths(iso: string, n: number): string {
+  const [y, m] = iso.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return d.toISOString().slice(0, 10);
+}
+
+export function endOfMonth(iso: string): string {
+  return addDays(addMonths(iso, 1), -1);
+}
+
+/** Weeks (Monday first) covering the month containing `iso`, as arrays of 7 ISO dates. */
+export function monthWeeks(iso: string): string[][] {
+  const first = startOfMonth(iso);
+  const last = endOfMonth(iso);
+  const weeks: string[][] = [];
+  let cursor = startOfWeek(first);
+  while (cursor <= last) {
+    weeks.push(Array.from({ length: 7 }, (_, i) => addDays(cursor, i)));
+    cursor = addDays(cursor, 7);
+  }
+  return weeks;
+}
+
+export function formatShort(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function formatMonth(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

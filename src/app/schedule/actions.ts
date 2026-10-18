@@ -4,101 +4,108 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
-import { bool, flash, str } from "@/lib/flash";
 import { isISODate } from "@/lib/dates";
 import { makeDedupeKey } from "@/lib/import/outpatientBoard";
+import { toEntryDTO, type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
 
-function boardPath(date: string, provider?: string) {
-  const q = new URLSearchParams({ date });
-  if (provider) q.set("provider", provider);
-  return `/schedule?${q.toString()}`;
+const MAX_TEXT = 500;
+
+function clean(value: unknown, max = MAX_TEXT): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-async function resolveProvider(providerId: string, fallbackName: string) {
-  if (!providerId) return { providerId: null, providerName: fallbackName };
+function asSection(value: unknown): Section {
+  if (value === "PSYCH_EVAL" || value === "TRACK") return value;
+  throw new Error("Invalid section");
+}
+
+async function providerFor(providerId: string | null | undefined) {
+  if (!providerId) return { providerId: null, providerName: "" };
   const p = await db.provider.findUnique({ where: { id: providerId } });
-  return p ? { providerId: p.id, providerName: p.name } : { providerId: null, providerName: fallbackName };
+  if (!p) throw new Error("Provider not found");
+  return { providerId: p.id, providerName: p.name };
 }
 
-export async function addEntry(form: FormData) {
+export async function createEntry(input: {
+  date: string;
+  section: Section;
+  timeLabel?: string;
+  typeName?: string;
+  clientInfo: string;
+  providerId?: string | null;
+}): Promise<EntryDTO> {
   const user = await requireAccess("schedule", "edit");
-  const date = str(form, "date");
-  const section = str(form, "section");
-  const back = boardPath(date, str(form, "filterProvider"));
-  if (!isISODate(date)) flash("/schedule", "error", "Invalid date.");
-  if (section !== "PSYCH_EVAL" && section !== "TRACK") flash(back, "error", "Invalid section.");
-  const clientInfo = str(form, "clientInfo");
-  if (!clientInfo) flash(back, "error", "Enter client info.");
+  if (!isISODate(input.date)) throw new Error("Invalid date");
+  const section = asSection(input.section);
+  const clientInfo = clean(input.clientInfo);
+  if (!clientInfo) throw new Error("Enter the client's name or info");
+  const timeLabel = clean(input.timeLabel, 120);
+  const { providerId, providerName } = await providerFor(input.providerId);
 
-  const timeLabel = str(form, "timeLabel");
-  const { providerId, providerName } = await resolveProvider(str(form, "providerId"), "");
   const entry = await db.scheduleEntry.create({
     data: {
-      date,
+      date: input.date,
       section,
       timeLabel,
       trackName: section === "TRACK" ? timeLabel : "",
-      typeName: str(form, "typeName"),
+      typeName: clean(input.typeName, 120),
       clientInfo,
       providerId,
       providerName,
-      dedupeKey: makeDedupeKey({ date, section, timeLabel, providerName, clientInfo }),
+      dedupeKey: makeDedupeKey({ date: input.date, section, timeLabel, providerName, clientInfo }),
     },
   });
   await audit(user.email, "schedule.add", `${entry.date} ${section} ${timeLabel}`);
   revalidatePath("/schedule");
-  flash(back, "notice", "Entry added.");
+  return toEntryDTO(entry);
 }
 
-export async function saveEntry(form: FormData) {
+export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryDTO> {
   const user = await requireAccess("schedule", "edit");
-  const id = str(form, "id");
-  const date = str(form, "date");
-  const back = boardPath(date, str(form, "filterProvider"));
-  const clientInfo = str(form, "clientInfo");
-  if (!clientInfo) flash(back, "error", "Client info cannot be blank.");
-
   const existing = await db.scheduleEntry.findUnique({ where: { id } });
-  if (!existing) flash(back, "error", "Entry not found.");
-  const timeLabel = str(form, "timeLabel");
-  const { providerId, providerName } = await resolveProvider(
-    str(form, "providerId"),
-    str(form, "providerName"),
-  );
-  await db.scheduleEntry.update({
+  if (!existing) throw new Error("Entry not found");
+
+  const section = patch.section !== undefined ? asSection(patch.section) : asSection(existing.section);
+  const timeLabel = patch.timeLabel !== undefined ? clean(patch.timeLabel, 120) : existing.timeLabel;
+  const clientInfo = patch.clientInfo !== undefined ? clean(patch.clientInfo) : existing.clientInfo;
+  if (!clientInfo) throw new Error("Client info cannot be blank");
+  const prov =
+    patch.providerId !== undefined
+      ? await providerFor(patch.providerId)
+      : { providerId: existing.providerId, providerName: existing.providerName };
+
+  const updated = await db.scheduleEntry.update({
     where: { id },
     data: {
+      section,
       timeLabel,
-      trackName: existing!.section === "TRACK" ? timeLabel : "",
-      typeName: str(form, "typeName"),
+      trackName: section === "TRACK" ? timeLabel : "",
+      typeName: patch.typeName !== undefined ? clean(patch.typeName, 120) : existing.typeName,
       clientInfo,
-      providerId,
-      providerName,
-      absent: bool(form, "absent"),
-      canceled: bool(form, "canceled"),
-      completed: bool(form, "completed"),
-      missed: bool(form, "missed"),
+      providerId: prov.providerId,
+      providerName: prov.providerName,
+      absent: patch.absent ?? existing.absent,
+      canceled: patch.canceled ?? existing.canceled,
+      completed: patch.completed ?? existing.completed,
+      missed: patch.missed ?? existing.missed,
       dedupeKey: makeDedupeKey({
-        date: existing!.date,
-        section: existing!.section,
+        date: existing.date,
+        section,
         timeLabel,
-        providerName,
+        providerName: prov.providerName,
         clientInfo,
       }),
     },
   });
-  await audit(user.email, "schedule.update", `${existing!.date} ${timeLabel}`);
+  await audit(user.email, "schedule.update", `${existing.date} ${Object.keys(patch).join(",")}`);
   revalidatePath("/schedule");
-  flash(back, "notice", "Entry saved.");
+  return toEntryDTO(updated);
 }
 
-export async function deleteEntry(form: FormData) {
+export async function removeEntry(id: string): Promise<void> {
   const user = await requireAccess("schedule", "edit");
-  const id = str(form, "id");
-  const date = str(form, "date");
-  const back = boardPath(date, str(form, "filterProvider"));
+  const existing = await db.scheduleEntry.findUnique({ where: { id } });
   await db.scheduleEntry.delete({ where: { id } }).catch(() => undefined);
-  await audit(user.email, "schedule.delete", `${date} ${id}`);
+  if (existing) await audit(user.email, "schedule.delete", `${existing.date} ${existing.timeLabel}`);
   revalidatePath("/schedule");
-  flash(back, "notice", "Entry deleted.");
 }
