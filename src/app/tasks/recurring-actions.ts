@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { ruleError } from "@/lib/recurrence";
-import { ensureRecurringTasks } from "@/lib/recurring";
+import { ensureRecurringTasks, reconcileRecurring } from "@/lib/recurring";
 import type { RecurringDTO, RecurringInput, RecurringPatch } from "@/lib/taskTypes";
 
 // Same visibility rule as tasks (TSK-6): non-admins only create and change their own.
@@ -79,7 +79,8 @@ export async function createRecurring(input: RecurringInput): Promise<RecurringD
     },
   });
   await audit(user.email, "recurring.add", `${row.id}: ${row.frequency}`);
-  await ensureRecurringTasks(); // if it is already due, the first task appears right away
+  await reconcileRecurring(row.id); // sets where generation starts: its specific day, not earlier
+  await ensureRecurringTasks(); // if today is one of its days, the task appears right away // if it is already due, the first task appears right away
   revalidatePath("/tasks", "layout");
   return toDTO(row);
 }
@@ -118,6 +119,7 @@ export async function updateRecurring(id: string, patch: RecurringPatch): Promis
     data: { ...merged, ...n, assigneeId },
   });
   await audit(user.email, "recurring.edit", `${id}: ${Object.keys(patch).join(",")}`);
+  await reconcileRecurring(id, existing.title); // drop tasks the new rule no longer produces
   await ensureRecurringTasks();
   revalidatePath("/tasks", "layout");
   return toDTO(row);

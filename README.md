@@ -1,7 +1,7 @@
 # Practice Management
 
 Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**, **Ledger**.
-Requirements: the latest file in [specs/](specs/) (currently [requirements-v13.md](specs/requirements-v13.md)); older versions are kept.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v14.md](specs/requirements-v14.md)); older versions are kept.
 Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.
@@ -55,6 +55,7 @@ Categories, methods and names are editable under Ledger → Lists. Only the Admi
 npm test          # access rules, importer (synthetic data only), helpers
 npm run typecheck
 npm run build
+npm run verify:recurring   # end-to-end recurring-task check against the database (synthetic data)
 ```
 
 ## Deploy to Google Cloud Run (recommended)

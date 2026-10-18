@@ -238,3 +238,64 @@ describe("recurrence rules", () => {
     expect(describeRule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 22 })).toBe("Monthly on the 22nd");
   });
 });
+
+import { isOccurrence, planReconcile } from "../src/lib/recurrence";
+
+describe("isOccurrence", () => {
+  const base = { weekday: null, dayOfMonth: null, startDate: "2026-10-05", endDate: null as string | null };
+  it("daily is weekdays inside the start and end dates", () => {
+    const d = { ...base, frequency: "DAILY", endDate: "2026-10-30" };
+    expect(isOccurrence(d, "2026-10-19")).toBe(true); // Monday
+    expect(isOccurrence(d, "2026-10-17")).toBe(false); // Saturday
+    expect(isOccurrence(d, "2026-10-02")).toBe(false); // before start
+    expect(isOccurrence(d, "2026-11-02")).toBe(false); // after end
+  });
+  it("weekly and monthly match their day", () => {
+    expect(isOccurrence({ ...base, frequency: "WEEKLY", weekday: 0 }, "2026-10-19")).toBe(true);
+    expect(isOccurrence({ ...base, frequency: "WEEKLY", weekday: 0 }, "2026-10-20")).toBe(false);
+    expect(isOccurrence({ ...base, frequency: "MONTHLY", dayOfMonth: 15 }, "2026-10-15")).toBe(true);
+    expect(isOccurrence({ ...base, frequency: "MONTHLY", dayOfMonth: 31 }, "2026-11-30")).toBe(true); // short month clamps
+    expect(isOccurrence({ ...base, frequency: "MONTHLY", dayOfMonth: 31 }, "2026-11-29")).toBe(false);
+  });
+});
+
+describe("planReconcile (editing a recurring task keeps the queue in line)", () => {
+  const today = "2026-10-19"; // Monday
+  const rule = (o: object = {}) => ({ frequency: "WEEKLY", weekday: 0, dayOfMonth: null, startDate: "2026-10-12", endDate: null as string | null, active: true, ...o });
+  const inst = (id: string, occurrenceDate: string, completed = false) => ({ id, occurrenceDate, completed });
+
+  it("removes today's open task when the start date moves later (the reported bug)", () => {
+    const plan = planReconcile(rule({ startDate: "2026-10-26" }), [inst("a", "2026-10-19")], today);
+    expect(plan.deleteIds).toEqual(["a"]);
+    expect(plan.lastOccurrence).toBeNull(); // nothing to skip: the first one is generated on 10/26
+  });
+  it("keeps finished tasks as history", () => {
+    const plan = planReconcile(rule({ startDate: "2026-10-26" }), [inst("done", "2026-10-19", true)], today);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.lastOccurrence).toBe("2026-10-19"); // so today's finished task is not re-created
+  });
+  it("removes open tasks after a new, earlier end date", () => {
+    const plan = planReconcile(rule({ frequency: "DAILY", endDate: "2026-10-14" }), [inst("a", "2026-10-13"), inst("b", "2026-10-16")], today);
+    expect(plan.deleteIds).toEqual(["b"]);
+  });
+  it("removes open tasks on the old weekday or day of month when that changes", () => {
+    expect(planReconcile(rule({ weekday: 2 }), [inst("mon", "2026-10-19")], today).deleteIds).toEqual(["mon"]);
+    expect(planReconcile(rule({ frequency: "MONTHLY", weekday: null, dayOfMonth: 20 }), [inst("fifteenth", "2026-10-15")], today).deleteIds).toEqual(["fifteenth"]);
+  });
+  it("keeps an open task that is still a valid occurrence of the new rule", () => {
+    const plan = planReconcile(rule({ frequency: "DAILY" }), [inst("a", "2026-10-14")], today); // Wed, valid weekday
+    expect(plan.deleteIds).toEqual([]);
+  });
+  it("does not back-fill earlier occurrences just because the rule changed", () => {
+    const plan = planReconcile(rule({ weekday: 2 }), [], today); // Wednesdays; the last one, 10/14, is already past
+    expect(plan.lastOccurrence).toBe("2026-10-14");
+  });
+  it("leaves today's occurrence to be generated when the rule now includes today", () => {
+    const plan = planReconcile(rule({ weekday: 0, startDate: "2026-10-01" }), [], today);
+    expect(plan.lastOccurrence).toBe("2026-10-12"); // today (10/19) is after it, so it will be generated
+  });
+  it("paused: removes tasks that are not due yet but keeps current and overdue ones", () => {
+    const plan = planReconcile(rule({ active: false }), [inst("future", "2026-10-26"), inst("today", "2026-10-19"), inst("past", "2026-10-12")], today);
+    expect(plan.deleteIds).toEqual(["future"]);
+  });
+});

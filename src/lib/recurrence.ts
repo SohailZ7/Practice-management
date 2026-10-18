@@ -96,3 +96,45 @@ export function describeRule(r: Pick<Rule, "frequency" | "weekday" | "dayOfMonth
   if (r.frequency === "WEEKLY") return `Every ${WEEKDAYS[r.weekday ?? 0]}`;
   return `Monthly on the ${ordinal(r.dayOfMonth ?? 1)}`;
 }
+
+/** Is `date` one of the rule's occurrences (inside the start/end dates and on the right day)? */
+export function isOccurrence(r: Rule, date: string): boolean {
+  if (date < r.startDate || (r.endDate && date > r.endDate)) return false;
+  if (r.frequency === "DAILY") return dow(date) < 5;
+  if (r.frequency === "WEEKLY") return dow(date) === (r.weekday ?? 0);
+  const [y, m] = date.split("-").map(Number);
+  return date === monthDay(y, m, r.dayOfMonth ?? 1);
+}
+
+export type Instance = { id: string; occurrenceDate: string; completed: boolean };
+
+export type ReconcilePlan = {
+  /** Open tasks that the rule no longer produces, to remove from the queue. */
+  deleteIds: string[];
+  /** The newest occurrence that must not be generated again (see below). */
+  lastOccurrence: string | null;
+};
+
+/**
+ * Brings the tasks already generated in line with the rule after it was created or edited.
+ *
+ * - Finished tasks are history and always stay.
+ * - An open task is removed when its date is no longer an occurrence (the start date moved later, the
+ *   end date moved earlier, the weekday or day of month changed, ...), or when the recurring task is
+ *   paused and the task is not due yet.
+ * - Recurring tasks show up on their specific day: occurrences before today are never back-filled just
+ *   because the rule was created or changed. So `lastOccurrence` is set to the newest occurrence before
+ *   today (or the newest surviving task), and only occurrences after it are generated.
+ */
+export function planReconcile(rule: Rule & { active: boolean }, instances: Instance[], today: string): ReconcilePlan {
+  const deleteIds = instances
+    .filter((i) => !i.completed && (!isOccurrence(rule, i.occurrenceDate) || (!rule.active && i.occurrenceDate > today)))
+    .map((i) => i.id);
+  const gone = new Set(deleteIds);
+  const survivors = instances.filter((i) => !gone.has(i.id) && i.occurrenceDate <= today).map((i) => i.occurrenceDate);
+
+  const yesterday = addDays(today, -1);
+  const baseline = latestOccurrence(rule, yesterday);
+  const candidates = [baseline, ...survivors].filter((d): d is string => d !== null);
+  return { deleteIds, lastOccurrence: candidates.length ? candidates.reduce((a, b) => (a > b ? a : b)) : null };
+}

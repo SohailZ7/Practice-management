@@ -12,7 +12,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "import:todo": "tsx scripts/import-todo.ts"
+    "import:todo": "tsx scripts/import-todo.ts",
+    "verify:recurring": "tsx scripts/verify-recurring.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
