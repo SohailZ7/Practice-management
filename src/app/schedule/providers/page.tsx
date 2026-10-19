@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
+import { audit } from "@/lib/audit";
 import { canAccess } from "@/lib/access";
 import { Banner } from "@/components/Banner";
 import { addProvider, saveProvider } from "./actions";
@@ -12,6 +13,7 @@ export default async function ProvidersPage({
 }) {
   const user = await requireAccess("schedule", "view");
   const canEdit = canAccess(user, "schedule", "edit");
+  await audit(user.email, "providers.view", canEdit ? "with NPI and Zoom details" : "directory only");
   const [providers, employees] = await Promise.all([
     db.provider.findMany({ orderBy: { name: "asc" }, include: { employee: true } }),
     db.employee.findMany({ where: { active: true, provider: null }, orderBy: { name: "asc" } }),

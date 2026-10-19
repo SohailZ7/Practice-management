@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "../session";
+import { auditDenied, getCurrentUser } from "../session";
 import { canAccess } from "../access";
 
 /** IMP-9: importing needs edit access to Schedule. Returns the user or a ready-made error response. */
@@ -7,6 +7,7 @@ export async function requireImportUser() {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not signed in" }, { status: 401 }) } as const;
   if (!canAccess(user, "schedule", "edit")) {
+    await auditDenied(user.email, "schedule:edit (import API)");
     return { error: NextResponse.json({ error: "No access" }, { status: 403 }) } as const;
   }
   return { user } as const;

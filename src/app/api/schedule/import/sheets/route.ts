@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listSheets } from "@/lib/import/workbook";
+import { audit, clip } from "@/lib/audit";
 import { readUpload, requireImportUser } from "@/lib/import/api";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ export async function POST(req: Request) {
   if ("error" in upload) return upload.error;
   try {
     const sheets = await listSheets(await upload.file.arrayBuffer());
+    await audit(auth.user.email, "import.sheets", `${clip(upload.file.name)}: ${sheets.length} sheet(s)`);
     return NextResponse.json({ sheets });
   } catch {
     return NextResponse.json({ error: "Could not read that workbook" }, { status: 400 });

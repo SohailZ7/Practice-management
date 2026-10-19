@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { audit } from "@/lib/audit";
+import { auditDenied, getCurrentUser } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { isISODate } from "@/lib/dates";
 import { ledgerWhere, defaultLedgerFilters } from "@/lib/ledger/queries";
@@ -15,7 +16,10 @@ const cents = (n: number) => (n ? (n / 100).toFixed(2) : "");
 export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  if (!canAccess(user, "ledger", "view")) return NextResponse.json({ error: "No access" }, { status: 403 });
+  if (!canAccess(user, "ledger", "view")) {
+    await auditDenied(user.email, "ledger:view (export)");
+    return NextResponse.json({ error: "No access" }, { status: 403 });
+  }
 
   const q = new URL(req.url).searchParams;
   const get = (k: string) => q.get(k) ?? "";
@@ -55,6 +59,7 @@ export async function GET(req: Request) {
       ].join(","),
     );
   }
+  await audit(user.email, "export.csv", `ledger: ${rows.length} row(s)`);
   return new NextResponse(lines.join("\r\n") + "\r\n", {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

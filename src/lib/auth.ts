@@ -40,6 +40,7 @@ export const authOptions: NextAuthOptions = {
         await audit(email, "signin.denied", "not on allowlist or inactive");
         return false;
       }
+      await db.user.update({ where: { id: record.id }, data: { lastLoginAt: new Date() } });
       await audit(email, "signin.ok");
       return true;
     },

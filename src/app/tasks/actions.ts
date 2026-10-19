@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireAccess, type CurrentUser } from "@/lib/session";
+import { auditDenied, requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
 import { MAX_NOTES, toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
@@ -21,7 +21,10 @@ async function myEmployeeId(user: CurrentUser): Promise<string | null> {
 async function loadAccessibleTask(user: CurrentUser, id: string) {
   const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
   if (!task) throw new Error("Task not found");
-  if (!isAdmin(user) && task.assignee?.email !== user.email) throw new Error("That task is not assigned to you");
+  if (!isAdmin(user) && task.assignee?.email !== user.email) {
+    await auditDenied(user.email, `task ${id}`);
+    throw new Error("That task is not assigned to you");
+  }
   return task;
 }
 
@@ -60,7 +63,7 @@ export async function createTask(input: {
     },
     include: { links: true },
   });
-  await audit(user.email, "task.add", title);
+  await audit(user.email, "task.add", `task ${task.id}`);
   revalidatePath("/tasks");
   return toTaskDTO(task);
 }
@@ -107,7 +110,7 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO>
     if (patch.assigneeId && !to) throw new Error("Employee not found");
     data.assigneeId = to?.id ?? null;
     if ((to?.id ?? null) !== existing.assigneeId) {
-      reassign = `"${existing.title}": ${existing.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`;
+      reassign = `task ${id}: ${existing.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`;
     }
   }
 
@@ -127,7 +130,7 @@ export async function deleteTask(id: string): Promise<void> {
   const user = await requireAccess("tasks", "edit");
   const task = await loadAccessibleTask(user, id);
   await db.task.delete({ where: { id } });
-  await audit(user.email, "task.delete", task.title);
+  await audit(user.email, "task.delete", `task ${id}`);
   revalidatePath("/tasks");
 }
 

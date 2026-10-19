@@ -55,7 +55,7 @@ export async function createEntry(input: {
       dedupeKey: makeDedupeKey({ date: input.date, section, timeLabel, providerName, clientInfo }),
     },
   });
-  await audit(user.email, "schedule.add", `${entry.date} ${section} ${timeLabel}`);
+  await audit(user.email, "schedule.add", `entry ${entry.id} ${entry.date} ${section}`);
   revalidatePath("/schedule");
   return toEntryDTO(entry);
 }
@@ -97,7 +97,7 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
       }),
     },
   });
-  await audit(user.email, "schedule.update", `${existing.date} ${Object.keys(patch).join(",")}`);
+  await audit(user.email, "schedule.update", `entry ${id} ${existing.date} fields=${Object.keys(patch).join(",")}`);
   revalidatePath("/schedule");
   return toEntryDTO(updated);
 }
@@ -106,6 +106,6 @@ export async function removeEntry(id: string): Promise<void> {
   const user = await requireAccess("schedule", "edit");
   const existing = await db.scheduleEntry.findUnique({ where: { id } });
   await db.scheduleEntry.delete({ where: { id } }).catch(() => undefined);
-  if (existing) await audit(user.email, "schedule.delete", `${existing.date} ${existing.timeLabel}`);
+  if (existing) await audit(user.email, "schedule.delete", `entry ${id} ${existing.date}`);
   revalidatePath("/schedule");
 }

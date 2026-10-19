@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { authOptions } from "./auth";
+import { audit } from "./audit";
 import { db } from "./db";
 import { checkSession, sessionPolicy } from "./sessionExpiry";
 import {
@@ -48,14 +50,31 @@ export async function requireUser(): Promise<CurrentUser> {
 /** AUTH-5: call at the top of every page and server action. */
 export async function requireAccess(module: ModuleName, needed: Level): Promise<CurrentUser> {
   const user = await requireUser();
-  if (!canAccess(user, module, needed)) redirect("/denied");
+  if (!canAccess(user, module, needed)) {
+    await auditDenied(user.email, `${module}:${needed}`);
+    redirect("/denied");
+  }
   return user;
 }
 
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (!canOpenAdmin(user)) redirect("/denied");
+  if (!canOpenAdmin(user)) {
+    await auditDenied(user.email, "admin");
+    redirect("/denied");
+  }
   return user;
+}
+
+/** A signed-in user reached a page or action they may not use. Path only, never the query string. */
+export async function auditDenied(email: string, needed: string): Promise<void> {
+  let path = "";
+  try {
+    path = headers().get("x-pathname") ?? "";
+  } catch {
+    // outside a request
+  }
+  await audit(email, "access.denied", `needed ${needed}${path ? ` at ${path.slice(0, 120)}` : ""}`);
 }
 
 export function levels(user: CurrentUser) {

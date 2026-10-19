@@ -29,7 +29,9 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  const res = NextResponse.next();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
   // Only a real request counts as activity (prefetches never reach this function, see the matcher below).
   // No timer ever extends the session.
   const lastActive = token.lastActive as number;

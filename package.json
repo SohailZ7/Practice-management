@@ -10,10 +10,12 @@
     "test": "vitest run",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
+    "setup": "prisma generate && prisma db push && npm run db:harden && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "import:todo": "tsx scripts/import-todo.ts",
-    "verify:recurring": "tsx scripts/verify-recurring.ts"
+    "verify:recurring": "tsx scripts/verify-recurring.ts",
+    "db:harden": "tsx scripts/db-harden.ts",
+    "verify:audit": "tsx scripts/verify-audit-append-only.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

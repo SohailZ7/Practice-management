@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { readGrid } from "@/lib/import/workbook";
 import { parseOutpatientBoard } from "@/lib/import/outpatientBoard";
 import { buildPreview } from "@/lib/import/service";
+import { audit, clip } from "@/lib/audit";
 import { readUpload, requireImportUser } from "@/lib/import/api";
 
 export const runtime = "nodejs";
@@ -41,6 +42,11 @@ export async function POST(req: Request) {
       },
     });
     const preview = await buildPreview(parsed);
+    await audit(
+      auth.user.email,
+      "import.preview",
+      `${clip(upload.file.name)} / ${clip(sheet, 60)}: ${preview.counts.new} new, ${preview.counts.duplicates} duplicates, ${preview.counts.skipped} skipped, draft ${draft.id}`,
+    );
     return NextResponse.json({ draftId: draft.id, ...preview });
   } catch (err) {
     console.error("import preview failed", err);

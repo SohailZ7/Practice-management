@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireAccess } from "@/lib/session";
+import { auditDenied, requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { canChangeEncounter, isAdmin } from "@/lib/billing/rules";
 import { patientScope } from "@/lib/billing/scope";
@@ -14,7 +14,10 @@ export default async function PatientPage({ params }: { params: { id: string } }
   const user = await requireAccess("billing", "view");
   const admin = isAdmin(user);
   const patient = await db.billingPatient.findFirst({ where: { id: params.id, ...patientScope(user) } });
-  if (!patient) notFound();
+  if (!patient) {
+    await auditDenied(user.email, `billing patient ${params.id}`);
+    notFound();
+  }
 
   const encounters = await db.encounter.findMany({
     where: { patientId: patient.id, ...(admin ? {} : { deletedAt: null }) },

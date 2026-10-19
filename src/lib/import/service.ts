@@ -1,7 +1,7 @@
 // Preview and commit logic for schedule imports. Kept separate from the route handlers.
 
 import { db } from "../db";
-import { audit } from "../audit";
+import { audit, clip } from "../audit";
 import { matchProvider } from "./match";
 import type { ParseResult } from "./outpatientBoard";
 
@@ -213,7 +213,7 @@ export async function commitImport(args: {
   await audit(
     args.userEmail,
     "import.commit",
-    `${draft.fileName} / ${draft.sheet}: ${result.created} new, ${result.duplicates} duplicates`,
+    `${clip(draft.fileName)} / ${clip(draft.sheet, 60)}: ${result.created} new, ${result.duplicates} duplicates, ${result.skipped} skipped, ${result.providersCreated} providers created, ${result.providersUpdated} updated, draft ${draft.id}`,
   );
   return result;
 }

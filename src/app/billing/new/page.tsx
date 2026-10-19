@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { patientScope } from "@/lib/billing/scope";
 import { todayInPractice } from "@/lib/billing/validate";
@@ -11,6 +12,7 @@ export default async function NewEncounterPage({ searchParams }: { searchParams:
     ? await db.billingPatient.findFirst({ where: { id: searchParams.patient, ...patientScope(user) } })
     : null;
 
+  if (patient) await audit(user.email, "billing.patient.view", `patient ${patient.id} (new encounter form)`);
   return (
     <>
       <h2 style={{ marginTop: 0 }}>New encounter</h2>

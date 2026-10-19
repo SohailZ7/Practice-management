@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { audit } from "@/lib/audit";
 import { LEVELS, MODULES, ROLES } from "@/lib/access";
 import { Banner } from "@/components/Banner";
 import { addUser, setAccess, setTaskViewers, updateUser } from "./actions";
@@ -9,7 +10,7 @@ export default async function AdminPage({
 }: {
   searchParams: { error?: string; notice?: string };
 }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const [users, employees, viewers, log] = await Promise.all([
     db.user.findMany({ orderBy: { createdAt: "asc" }, include: { access: true } }),
     db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
@@ -17,6 +18,7 @@ export default async function AdminPage({
     db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
   ]);
 
+  await audit(admin.email, "audit.view", "recent activity on the Access page (50 rows)");
   return (
     <>
       <h1>Access</h1>

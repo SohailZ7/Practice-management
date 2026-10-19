@@ -17,8 +17,8 @@ export async function addProvider(form: FormData) {
   if (employeeId && (await db.provider.findUnique({ where: { employeeId } }))) {
     flash(BACK, "error", "That employee is already linked to a provider.");
   }
-  await db.provider.create({ data: { name, employeeId } });
-  await audit(user.email, "provider.add", name);
+  const created = await db.provider.create({ data: { name, employeeId } });
+  await audit(user.email, "provider.add", `provider ${created.id}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Added ${name}.`);
 }
@@ -42,7 +42,7 @@ export async function saveProvider(form: FormData) {
       notes: str(form, "notes"),
     },
   });
-  await audit(user.email, "provider.update", name);
+  await audit(user.email, "provider.update", `provider ${id}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved ${name}.`);
 }

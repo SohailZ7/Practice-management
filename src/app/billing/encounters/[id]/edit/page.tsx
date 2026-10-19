@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAccess } from "@/lib/session";
+import { audit } from "@/lib/audit";
+import { auditDenied, requireAccess } from "@/lib/session";
 import { canChangeEncounter } from "@/lib/billing/rules";
 import { patientScope } from "@/lib/billing/scope";
 import { todayInPractice } from "@/lib/billing/validate";
@@ -12,9 +13,14 @@ export default async function EditEncounterPage({ params }: { params: { id: stri
   const enc = await db.encounter.findUnique({ where: { id: params.id }, include: { patient: true } });
   if (!enc) notFound();
   const visible = await db.billingPatient.findFirst({ where: { id: enc.patientId, ...patientScope(user) } });
-  if (!visible) notFound();
+  if (!visible) {
+    await auditDenied(user.email, `billing encounter ${params.id}`);
+    notFound();
+  }
 
+  await audit(user.email, "billing.encounter.view", `encounter ${enc.id}`);
   if (!canChangeEncounter(user, enc)) {
+    await auditDenied(user.email, `edit encounter ${enc.id}`);
     return (
       <div className="card">
         <p>
