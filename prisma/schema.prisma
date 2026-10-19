@@ -149,6 +149,9 @@ model AuditLog {
   action     String
   detail     String   @default("")
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorEmail])
 }
 
 model ImportLog {

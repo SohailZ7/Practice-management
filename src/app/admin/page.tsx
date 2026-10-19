@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { audit } from "@/lib/audit";
@@ -26,6 +27,11 @@ export default async function AdminPage({
       <p className="muted">
         Only people listed here can sign in (with their Google account). Choose what each person can
         open. Admins can open everything.
+      </p>
+
+      <p>
+        <Link href="/admin/access-review">Access review</Link>{" "}
+        <span className="muted small">— who can sign in, last sign-ins, flags, and the full audit log (quarterly review recommended)</span>
       </p>
 
       <h2>Users</h2>

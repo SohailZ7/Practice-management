@@ -43,7 +43,7 @@ export function ruleFor(method: string, pathname: string, isServerAction: boolea
   if (/^\/api\/auth\/(callback|signin)(\/|$)/.test(pathname)) return { name: "signin", limit: 30, windowMs: 10 * 60_000, by: "ip" };
   if (pathname === "/api/auth/signout" || pathname === "/api/auth/csrf") return { name: "auth", limit: 60, windowMs: 10 * 60_000, by: "ip" };
   if (/^\/api\/schedule\/import(\/|$)/.test(pathname)) return { name: "import", limit: 20, windowMs: 60_000, by: "user" };
-  if (pathname === "/ledger/export") return { name: "export", limit: 10, windowMs: 60_000, by: "user" };
+  if (pathname === "/ledger/export" || /^\/admin\/access-review\/[a-z-]+\.csv$/.test(pathname)) return { name: "export", limit: 10, windowMs: 60_000, by: "user" };
   if (pathname === "/api/session/touch") return { name: "touch", limit: 30, windowMs: 60_000, by: "user" };
   if (isServerAction && method === "POST") return { name: "action", limit: 300, windowMs: 60_000, by: "user" };
   return null;
