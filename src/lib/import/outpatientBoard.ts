@@ -11,6 +11,7 @@
 // The parser works on a plain 2D grid so it can be tested without Excel files.
 
 import { excelSerialToISO, isISODate } from "../dates";
+import { phi } from "../crypto/phi";
 
 export type Grid = unknown[][];
 
@@ -97,7 +98,15 @@ export function makeDedupeKey(e: {
   timeLabel: string;
   providerName: string;
   clientInfo: string;
-}): string {
+}, digest: (text: string) => string = (t) => phi().digest(t)): string {
+  // The client text never reaches the database: only a keyed HMAC of it does ("h1:" + 43 chars), so duplicates are
+  // still recognised (same text -> same digest) but the key reveals nothing without the secret.
+  const plain = [e.date, e.section, e.timeLabel, e.providerName].map(normalizeKeyPart);
+  return [...plain, `h1:${digest(normalizeKeyPart(e.clientInfo))}`].join("|");
+}
+
+/** The key format used before client text was hashed. Only the rollback path of db:encrypt-phi needs it. */
+export function legacyDedupeKey(e: { date: string; section: string; timeLabel: string; providerName: string; clientInfo: string }): string {
   return [e.date, e.section, e.timeLabel, e.providerName, e.clientInfo].map(normalizeKeyPart).join("|");
 }
 

@@ -1,6 +1,7 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Db as Client } from "../db";
 
-type Db = PrismaClient | Prisma.TransactionClient;
+/** The app client or a transaction client: anything that has the billingHistory model. */
+type Db = Pick<Client, "billingHistory">;
 
 /** Saves the previous version of a record before it changes. Append-only through the app. */
 export async function recordHistory(
