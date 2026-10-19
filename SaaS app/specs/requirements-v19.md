@@ -331,7 +331,7 @@ Serves the Mac Desktop App (separate spec in `Desktop App/specs/`). The Desktop 
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | PAT-1 | A schedule entry can optionally be linked to a patient. The patient record is the existing Billing patient (last name, first name, optional MRN), so Schedule and Billing share one patient list. | Must |
-| PAT-2 | In the schedule grid, the Client cell offers a patient picker (type to search by last or first name or MRN) and a "new patient" action. Choosing a patient sets the linked patient and fills the visible client text as "Last, First". Unlinked rows keep working with free text. | Must |
+| PAT-2 | In the schedule grid, the Client cell offers a patient picker (type to search by last or first name or MRN) and a "new patient" action. Choosing a patient sets the linked patient and fills the visible client text as "Last, First". Unlinked rows keep working with free text. Editing the client text of a linked row by hand removes the link, because the text no longer matches the patient. | Must |
 | PAT-3 | The Excel import (IMP-6) does not link patients automatically. After an import, rows that look like "Last, First" can be matched to existing patients with a one-click suggestion that the user confirms; nothing is linked without confirmation. | Should |
 | PAT-4 | Merged patients (Billing mergedIntoId) resolve to the surviving record everywhere, including linked schedule entries. | Must |
 | PAT-5 | Patient names and MRNs are not written to logs, URLs, analytics or error reports. | Must |
@@ -357,8 +357,8 @@ Serves the Mac Desktop App (separate spec in `Desktop App/specs/`). The Desktop 
 | API-3 | Every endpoint enforces the same module levels as the web UI (AUTH-4, AUTH-5) on the server. A token for a user without Schedule access gets 403. | Must |
 | API-4 | `GET schedule?date=YYYY-MM-DD` returns that day's entries: time or track, appointment type, program (track name), provider, status flags, linked patient (last, first, id) if any, and consent badge. Dates are practice-time-zone `YYYY-MM-DD` strings. | Must |
 | API-5 | `GET providers` returns the provider list the schedule uses. Zoom password and NPI are never returned (SCH-3). | Must |
-| API-6 | `GET patients/{id}/consent`, `PUT patients/{id}/consent` and `DELETE patients/{id}/consent` read, set and withdraw consent (Schedule edit access for writes). | Must |
-| API-7 | `POST recordings/check` with a patient id returns allowed or not allowed (CON-4, CON-8). | Must |
+| API-6 | `GET patients/{id}/consent`, `PUT patients/{id}/consent` and `DELETE patients/{id}/consent` read, set and withdraw consent (Schedule edit access for writes). Setting consent for a patient who already has it returns 409. | Must |
+| API-7 | `POST recordings/check` with a patient id returns allowed or not allowed (CON-4, CON-8). The caller needs Schedule edit access, or the Provider role with at least Schedule view. | Must |
 | API-8 | All Desktop API calls and every consent change are audit-logged (user, action, time). Patient names do not appear in the log text. | Must |
 | API-9 | Users can see and revoke their Desktop App sessions from Settings; the Admin can revoke anyone's. Deactivating a user (AUTH-3) revokes their tokens at once. | Must |
 | API-10 | The Desktop API is read-only for the schedule. Creating or editing schedule entries stays in the web app in this version. | Must |

@@ -9,7 +9,8 @@ type Ctx = { params: { id: string } };
 
 const failure = (errors: Record<string, string>) => {
   const [field, message] = Object.entries(errors)[0] ?? ["error", "Invalid"];
-  return json({ error: "invalid", field, message }, field === "patient" ? 404 : 400);
+  const status = field !== "patient" ? 400 : /already/.test(message) ? 409 : 404;
+  return json({ error: "invalid", field, message }, status);
 };
 
 export const GET = (req: Request, { params }: Ctx) =>
