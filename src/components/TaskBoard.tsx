@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { dueLabel, formatShort } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
+import { TaskNotesDialog } from "./TaskNotesDialog";
 import { linkTypeMeta } from "@/lib/links";
 import { applyReorder, splitTasks, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 import {
@@ -413,6 +414,7 @@ function TaskItem({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.title);
   const [addingLink, setAddingLink] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const dateRef = useRef<HTMLInputElement>(null);
   const expRef = useRef<HTMLInputElement>(null);
@@ -580,6 +582,16 @@ function TaskItem({
           aria-label="Expiration date"
           onChange={(e) => onPatch(task.id, { expiresAt: e.target.value || null })}
         />
+        {(canEdit || task.notes) && (
+          <button
+            className={`icon-btn notes ${task.notes ? "active" : ""}`}
+            title={task.notes ? (canEdit ? "Edit notes" : "View notes") : "Add notes"}
+            aria-label={task.notes ? "Notes" : "Add notes"}
+            onClick={() => setEditingNotes(true)}
+          >
+            <Icon name="note" />
+          </button>
+        )}
         <button
           className={`icon-btn sun ${task.inToday ? "active" : ""}`}
           title="Show in Today"
@@ -601,6 +613,15 @@ function TaskItem({
           </>
         )}
       </div>
+      {editingNotes && (
+        <TaskNotesDialog
+          title={task.title}
+          notes={task.notes}
+          readOnly={!canEdit}
+          onSave={(notes) => onPatch(task.id, { notes })}
+          onClose={() => setEditingNotes(false)}
+        />
+      )}
       {(task.links.length > 0 || addingLink) && (
         <div className="todo-links">
           {task.links.map((l) => {

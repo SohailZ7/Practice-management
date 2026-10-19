@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
-import { toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { MAX_NOTES, toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
 // Visibility rule (TSK-6): a non-admin may only see and change tasks assigned to them.
 // Every action below checks it on the server.
@@ -74,6 +74,11 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO>
     const title = patch.title.trim().slice(0, 300);
     if (!title) throw new Error("A task title cannot be blank");
     data.title = title;
+  }
+  if (patch.notes !== undefined) {
+    if (typeof patch.notes !== "string") throw new Error("Invalid notes");
+    if (patch.notes.length > MAX_NOTES) throw new Error(`Keep notes to ${MAX_NOTES.toLocaleString()} characters or fewer`);
+    data.notes = patch.notes; // editing notes also refreshes the task's updatedAt (Prisma @updatedAt)
   }
   if (patch.categoryId !== undefined) {
     if (patch.categoryId && !(await db.category.findUnique({ where: { id: patch.categoryId } }))) {

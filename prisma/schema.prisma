@@ -107,6 +107,7 @@ model Category {
 model Task {
   id              String         @id @default(cuid())
   title           String
+  notes           String         @default("")
   categoryId      String?
   assigneeId      String?
   dueDate         String?

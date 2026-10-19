@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag" | "repeat" | "hourglass";
+export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag" | "repeat" | "hourglass" | "note";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: (
@@ -71,6 +71,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="3" width="16" height="18" rx="2.5" />
       <path d="M8 8h8M8 12h8M8 16h5" />
+    </>
+  ),
+  note: (
+    <>
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M14 3v5h5M9 12h7M9 16h7" />
     </>
   ),
   hourglass: (

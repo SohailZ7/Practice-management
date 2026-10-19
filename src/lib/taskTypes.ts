@@ -5,6 +5,8 @@ export type LinkDTO = { id: string; url: string; label: string; type: string };
 export type TaskDTO = {
   id: string;
   title: string;
+  /** Free-text notes shown in the notes popup. */
+  notes: string;
   categoryId: string | null;
   assigneeId: string | null;
   dueDate: string | null;
@@ -21,8 +23,10 @@ export type TaskDTO = {
 };
 
 export type TaskPatch = Partial<
-  Pick<TaskDTO, "title" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "inToday">
+  Pick<TaskDTO, "title" | "notes" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "inToday">
 >;
+
+export const MAX_NOTES = 20000;
 
 export type CategoryDTO = { id: string; name: string };
 
@@ -30,6 +34,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
   return {
     id: t.id,
     title: t.title,
+    notes: t.notes,
     categoryId: t.categoryId,
     assigneeId: t.assigneeId,
     dueDate: t.dueDate,

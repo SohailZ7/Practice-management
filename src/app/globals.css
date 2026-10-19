@@ -193,6 +193,7 @@ label.check { display: inline-flex; gap: .25rem; align-items: center; font-size:
 .due-date-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; border: 0; padding: 0; }
 .icon-btn { background: transparent; color: var(--muted); border: 1px solid transparent; padding: .2rem .3rem; display: inline-flex; align-items: center; }
 .todo-row .svg-icon, .todo-links .svg-icon { width: 15px; height: 15px; }
+.todo-row .icon-btn.sun .svg-icon { width: 20px; height: 20px; }
 .icon-btn:hover:not(:disabled) { border-color: var(--line); }
 .icon-btn.sun { color: color-mix(in srgb, var(--muted) 45%, transparent); }
 .icon-btn.sun.active { color: #f08c00; }
@@ -341,3 +342,18 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .exp-pill.expired button { color: var(--muted); }
 .todo-section.muted-section { opacity: .7; }
 .todo-section.muted-section .todo-section-toggle { color: var(--muted); }
+
+/* task notes popup (ported from the Todo App) */
+.icon-btn.notes { opacity: .5; }
+.icon-btn.notes:hover, .icon-btn.notes.active { opacity: 1; }
+.icon-btn.notes.active { color: var(--accent); }
+.notes-overlay { position: fixed; inset: 0; background: rgba(8, 14, 30, .5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.notes-dialog { background: var(--card); color: var(--text); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); width: min(600px, calc(100vw - 32px)); max-height: min(75vh, 600px); display: flex; flex-direction: column; padding: 14px 16px; gap: 10px; }
+.notes-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.notes-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-close { background: none; border: 0; color: var(--muted); font-size: 1.6rem; line-height: 1; cursor: pointer; padding: 0 .25rem; }
+.notes-close:hover { color: var(--text); }
+.notes-textarea { flex: 1; min-height: 240px; resize: none; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: inherit; line-height: 1.5; background: var(--bg); color: var(--text); }
+.notes-textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color: var(--accent); }
+.notes-footer { display: flex; justify-content: flex-end; align-items: center; gap: .75rem; }
+.notes-done { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px; padding: .4rem 1.1rem; font-weight: 600; cursor: pointer; }
