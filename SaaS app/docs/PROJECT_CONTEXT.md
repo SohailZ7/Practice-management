@@ -7,9 +7,9 @@ A web app ("the SaaS app") for the Brain & Behavior Center, an outpatient behavi
 
 ## 2. Repo layout and git state
 - Repo root `/Users/szafar/Documents/GitHub/Practice-management` (GitHub `SohailZ7/Practice-management`, branch `main` only). Contains `SaaS app/` (the web app), `Desktop App/` (desktop requirements/architecture, owned by another session), `Templates/` (psychiatric note templates, `.docx`), and a root `README.md`.
-- `SaaS app/` holds everything for the web app: `src/`, `prisma/`, `specs/` (requirements v1 to v19, never edited in place), `docs/` (`hipaa-readiness.md`, this file), `scripts/`, `tests/`.
+- `SaaS app/` holds everything for the web app: `src/`, `prisma/`, `specs/` (requirements v1 to v20, never edited in place), `docs/` (`hipaa-readiness.md`, this file), `scripts/`, `tests/`.
 - Last pushed commit `dd7484e`. Five later commits from the Desktop session are local and unpushed (`26693ed`, `2e2fcba`, `1628fa6`, `5955f69`, `dd370d5`); the last two add the desktop-API schema (`DesktopSession`, patient link on schedule entries, patient consent) plus consent and token rules with tests. This file and the `AGENTS.md` pointer were written afterwards and are uncommitted. Re-check `git log` for anything newer.
-- **Known spec problem:** the Desktop session edited `specs/requirements-v19.md` in place. It now describes the desktop API, patients on the schedule and AI consent, but the **31 security requirements (SEC-1 to SEC-31) and the PHI-guard rows (TSK-56, TSK-57) that v19 had after the HIPAA merge are gone** (they are in commit `3d2bba3`). The code still has all of that. Fix by restoring them into a new `requirements-v20.md` (versioning rule below).
+- **Spec history note:** the Desktop session edited `specs/requirements-v19.md` in place and dropped the 31 security requirements (SEC-1 to SEC-31) and TSK-56/57. They were restored in **`specs/requirements-v20.md`** (the current version: v19 plus the restored security section, now 5.8). v19 itself is left as it was. The Desktop spec links to web-app v19 for the API; v20 contains the same API/patient/consent requirements.
 
 ## 3. Running it
 - Work inside `SaaS app/`. Postgres: `docker compose up -d` (container `practice-management-db-1`, volume `practice-management_pgdata`; `docker-compose.yml` pins `name: practice-management` so moving folders never orphans the data). First time: `npm install`, `npm run setup`, `npm run dev` on http://localhost:3000.
@@ -43,11 +43,11 @@ Sohail (Admin, Administrator); Dr Khalid (Provider/Doctor, provider "Dr. Khalid 
 
 ## 8. Not verified / open
 1. **Real Google sign-in has never been tested in a browser after the HIPAA merge** (agents used minted cookies). Run the checklist in `docs/hipaa-readiness.md`. Everyone must sign in again after the session-format change.
-2. Restore the lost SEC/TSK-56-57 requirements (section 2) into a new `requirements-v20.md`, and confirm the Desktop session's schema changes (already committed) are applied to the local database (`npx prisma db push`) and that all tests still pass.
+2. Confirm the Desktop session's schema changes (committed) are applied to the local database (`npx prisma db push`) and that all tests still pass. (Security requirements are restored in v20.)
 3. Dr Lucy and Dr Irfan emails; whether they get Billing access.
 4. Deployment: accept Google's BAA for `practice-mgmt-sz`, Cloud SQL, Secret Manager, IAP/Cloud Armor, `PHI_ENCRYPTION_KEY`, Cloud Run service account needs Cloud Datastore Viewer on `sohail-todo-app` for the Todo App sync. Steps for applying to a real database are in `docs/hipaa-readiness.md`.
 5. Todo App sync has only been dry-run; the owner clicks the button when ready. Other categories (Studio, Integrations, Personal) are not synced.
-6. Open spec questions (v19 section 10): Ledger import, running balance, Office Managers marking GetIX, ICD-10 official-list check, etc.
+6. Open spec questions (v20 section 10): Ledger import, running balance, Office Managers marking GetIX, ICD-10 official-list check, etc.
 
 ## 9. Gotchas learned
 - `prisma db push` asks for `--accept-data-loss` when adding unique constraints (safe when existing values are NULL).
