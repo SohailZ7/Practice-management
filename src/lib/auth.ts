@@ -20,6 +20,7 @@ export const authOptions: NextAuthOptions = {
   // from the lastActive stamp, which only real requests refresh (see src/middleware.ts).
   session: { strategy: "jwt", maxAge: Math.floor(policy.maxMs / 1000), updateAge: Math.floor(policy.maxMs / 1000) },
   pages: { signIn: "/login", error: "/login" },
+  useSecureCookies: secure,
   cookies: {
     sessionToken: {
       name: sessionCookieName(secure),

@@ -16,7 +16,8 @@ export async function requireImportUser() {
 export const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 
 export async function readUpload(req: Request): Promise<{ file: File; form: FormData } | { error: NextResponse }> {
-  const form = await req.formData();
+  const form = await req.formData().catch(() => null);
+  if (!form) return { error: NextResponse.json({ error: "Upload a .xlsx file" }, { status: 400 }) };
   const file = form.get("file");
   if (!(file instanceof File)) return { error: NextResponse.json({ error: "No file uploaded" }, { status: 400 }) };
   if (!/\.xlsx$/i.test(file.name)) {

@@ -5,6 +5,9 @@ import { audit, clip } from "../audit";
 import { matchProvider } from "./match";
 import type { ParseResult } from "./outpatientBoard";
 
+/** Errors whose message is safe to show the user (never contains row data). */
+export class ImportError extends Error {}
+
 export type NameDecision = {
   action: "auto" | "create" | "map" | "none";
   providerId?: string;
@@ -17,6 +20,13 @@ export type CommitOptions = {
 };
 
 const CHUNK = 500;
+/** Uploaded client data is not kept: unconfirmed drafts are deleted after an hour, and a draft goes as soon as it is committed. */
+export const DRAFT_TTL_MS = 60 * 60 * 1000;
+
+export async function purgeStaleDrafts(now = Date.now()): Promise<number> {
+  const { count } = await db.importDraft.deleteMany({ where: { createdAt: { lt: new Date(now - DRAFT_TTL_MS) } } });
+  return count;
+}
 
 function chunks<T>(items: T[], size = CHUNK): T[][] {
   const out: T[][] = [];
@@ -77,8 +87,9 @@ export async function commitImport(args: {
   userEmail: string;
   options: CommitOptions;
 }) {
+  await purgeStaleDrafts();
   const draft = await db.importDraft.findUnique({ where: { id: args.draftId } });
-  if (!draft || draft.userEmail !== args.userEmail) throw new Error("Import draft not found. Upload the file again.");
+  if (!draft || draft.userEmail !== args.userEmail) throw new ImportError("Import draft not found. Upload the file again.");
   const parsed = JSON.parse(draft.payload) as ParseResult;
   const { options } = args;
 

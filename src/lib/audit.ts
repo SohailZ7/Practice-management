@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { logError } from "./safeLog";
 
 /** Trims and flattens free text (a file name, say) before it goes into an audit detail. */
 export function clip(value: string, max = 120): string {
@@ -14,6 +15,6 @@ export async function audit(actorEmail: string, action: string, detail = ""): Pr
     await db.auditLog.create({ data: { actorEmail, action, detail } });
   } catch (err) {
     // Auditing must never take the app down. Log the error text only, in case it echoes values.
-    console.error("audit log write failed:", err instanceof Error ? err.name : "unknown error");
+    logError("audit log write failed", err);
   }
 }
