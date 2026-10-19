@@ -8,16 +8,11 @@ Supersedes: [requirements-v18.md](requirements-v18.md) (and v1 to v17), which ar
 There are no phased milestones; each version is delivered in a single release.
 
 ## Changes since v18
-**Security and HIPAA technical safeguards.** The app is made ready to hold PHI. Software cannot make an organization HIPAA compliant: these are the technical safeguards, and everything left for the organization is listed in [docs/hipaa-readiness.md](../docs/hipaa-readiness.md). New section 5.7 (SEC-1 to SEC-31).
-- **Automatic logoff:** idle timeout (default 15 min) and absolute session limit (default 12 h), enforced on the server; browser warning two minutes before (SEC-1 to SEC-5). AUTH-6 is made specific.
-- **Audit of every PHI access:** Schedule views, providers page, import preview and commit, CSV exports, Billing views and lists, denied access, sign-in and sign-out (SEC-6 to SEC-9); the audit tables are append-only in the database; `User.lastLoginAt` is recorded (SEC-10, SEC-11).
-- **Hardening:** Content-Security-Policy with a nonce, security headers, `no-store`, secure cookies, rate limits, same-origin checks, PHI-free logs, import drafts purged after an hour (SEC-12 to SEC-18).
-- **Field-level encryption** (AES-256-GCM, rotatable key) of client info, Zoom passwords, task notes and import drafts; keyed-hash dedupe keys; backfill and rollback scripts (SEC-19 to SEC-24).
-- **PHI guard in Tasks:** warning text and a server-side detector that blocks likely identifiers unless the user confirms (SEC-25 to SEC-27).
-- **Access review (Admin):** `/admin/access-review` with user and access table, flags, audit-log viewer and CSV exports, all audited (SEC-28 to SEC-30).
-- **Documentation:** `docs/hipaa-readiness.md` (SEC-31).
-- Data model: `User.lastLoginAt`; audit-log indexes; encrypted columns; keyed dedupe key format (section 7).
-- Task titles and notes, and recurring-task titles, are checked for patient identifiers (TSK-56, TSK-57).
+Prepares the web app for the new Mac **Desktop App** (see `../../Desktop App/specs/requirements-v1.md`). Nothing changes for current web users except one optional patient pick on schedule rows and a consent badge.
+- **Desktop API** (API-1 to API-10): a small, versioned, token-authenticated API used only by the Desktop App: sign-in token exchange, schedule for a day, provider list, patient consent get/set. Until now the web app had only server actions.
+- **Patients on the schedule** (PAT-1 to PAT-6): schedule entries can be linked to a patient record. The existing patient record from Billing is reused (last name, first name, optional MRN), so there is one list of patients. The free-text client info is kept.
+- **AI documentation consent** (CON-1 to CON-8): one consent record per patient, set and withdrawn by users with Schedule edit access, audit-logged, and checked on the server before the Desktop App may start a recording.
+- Data model, integrations, decisions and open questions updated.
 
 ## Changes in v18 (since v17)
 - **Team Analytics tab for everybody with Tasks access** (TSK-49 to TSK-55): a new **Analytics** tab in the Tasks tab strip shows task velocity per employee. The Admin sees everybody (plus Unassigned); everyone else sees only themselves and the employees the Admin granted them read-only (TSK-6, TSK-38), enforced on the server.
@@ -162,9 +157,9 @@ Reference: [assets/ui-reference-v3.png](assets/ui-reference-v3.png).
 | AUTH-3 | Admin can add, deactivate, and reactivate users. | Must |
 | AUTH-4 | Admin sets each user's access per module (Schedule, Tasks, Employees, Billing, Ledger) as none, view, or edit. Admin role has edit on everything plus the Access module. | Must |
 | AUTH-5 | Access is enforced on the server for every page and action, not only by hiding navigation. | Must |
-| AUTH-6 | Sessions expire after inactivity (default 15 minutes) and after a maximum length (default 12 hours), enforced on the server (SEC-1 to SEC-5); users can sign out. | Must |
+| AUTH-6 | Sessions expire after inactivity; users can sign out. | Must |
 | AUTH-7 | The last active Admin cannot be deactivated or demoted. | Must |
-| AUTH-8 | Audit log records sign-ins (success and denied), sign-outs, user changes, and access changes: who, what, when. Admin can view and export it (SEC-28 to SEC-30). | Must |
+| AUTH-8 | Audit log records sign-ins (success and denied), user changes, and access changes: who, what, when. Admin can view it. | Should |
 | AUTH-10 | The Admin can grant a user **read-only access to other employees' task lists**. Others' lists open as extra tabs after the user's own; the tasks cannot be changed, added to, or reordered by the viewer, enforced on the server. Seed: Razak and Muntaha can view each other's. | Must |
 | AUTH-11 | A new login starts with Schedule (edit), Tasks (edit), Employees (view), Billing (none) and Ledger (none). Billing is granted to Razak and Muntaha. | Must |
 | AUTH-12 | Adding a user creates a linked employee record if none exists for that email, so every login has a task list. | Must |
@@ -178,7 +173,7 @@ Modeled on the sheet "Doc& HP 8.10-8.22" in the practice's Outpatient Board work
 |----|-------------|----------|
 | SCH-1 | Maintain providers with: name, contact number, NPI, Zoom link, Zoom password, working hours text (e.g. "M, T 8-2:00"), notes. | Must |
 | SCH-2 | A provider may be linked to an employee or exist as an external provider (not an employee). | Must |
-| SCH-3 | Zoom password and NPI are shown only to users with edit access to Schedule. The Zoom password is encrypted in the database (SEC-19). | Must |
+| SCH-3 | Zoom password and NPI are shown only to users with edit access to Schedule. | Must |
 
 **Schedule grid**
 | ID | Requirement | Priority |
@@ -199,7 +194,7 @@ Modeled on the sheet "Doc& HP 8.10-8.22" in the practice's Outpatient Board work
 | IMP-3 | Skip empty rows and template placeholders such as "Select Time", "Select Type", "Select Provider". | Must |
 | IMP-4 | Match provider names to existing providers; unmatched names are listed and can be created as external providers or mapped to an existing one before commit. | Must |
 | IMP-5 | Preview shows counts (rows found, new, duplicates, skipped, unmatched providers) and any row-level warnings. | Must |
-| IMP-6 | Commit is explicit. Re-importing the same file does not create duplicates (match on date, time or track, provider, client info; the client part is compared by a keyed hash, SEC-21). | Must |
+| IMP-6 | Commit is explicit. Re-importing the same file does not create duplicates (match on date, time or track, provider, client info). | Must |
 | IMP-7 | Each import is logged: file name, sheet, who, when, counts. | Should |
 | IMP-8 | Importing provider table rows is optional (checkbox) and never overwrites existing Zoom passwords unless chosen. | Should |
 | IMP-9 | Only users with edit access to Schedule can import. | Must |
@@ -255,8 +250,6 @@ The experience follows the existing Sohail Todo App (`Sohail_Todo_App`, a React 
 | TSK-45 | Fields the Todo App does not own are left alone: assignee, expiration date, and the category label. Changes made here to the fields in TSK-44 are replaced by the Todo App's version at the next sync (the button's tooltip says so). | Must |
 | TSK-46 | An open mirrored task whose todo was deleted (or moved out of B & BC) in the Todo App is removed; finished mirrored tasks are kept as history. | Must |
 | TSK-47 | The page shows the result of each sync (new, updated, removed, unchanged) and when it last ran. Every sync is audit-logged. | Must |
-| TSK-56 | Task titles and notes (and recurring-task titles) are free text, so staff are told next to the add box and in the notes dialog: "Don't enter patient names or other identifying health information here. Use Billing or Schedule." | Must |
-| TSK-57 | The server checks titles and notes for likely identifiers (MRN-like tokens, SSN-like numbers, a date after "DOB", phone numbers, emails other than staff emails) and refuses to save unless the user ticks "I confirm this contains no patient information" (SEC-25 to SEC-27). | Must |
 | TSK-48 | The sync reads the Todo App's Firestore document read-only. Locally it uses the signed-in `gcloud` account; on Cloud Run it uses the service account, which needs Cloud Datastore Viewer on the Todo App's Google Cloud project. Only the Admin can run it. The planning rules are covered by automated tests. | Must |
 | TSK-49 | **Analytics tab.** Everybody with Tasks access gets an **Analytics** tab in the Tasks tab strip (after Recurring; for people without the employee tabs it sits beside My tasks and Recurring), opening `/tasks/analytics`. The per-board Todos \| Analytics switcher (TSK-15) stays. | Must |
 | TSK-50 | **Who is included.** The Admin sees every employee, deactivated ones too while they still have completions in the window, plus an **Unassigned** row (Admin only; shown when it has completions or open tasks). A non-admin sees their own numbers and, only for employees the Admin granted them read-only task access, those people. Nobody else's counts are queried, sent to the browser or reachable by changing the URL; the only URL setting is the window. | Must |
@@ -331,46 +324,48 @@ Tracks the business's cash in and cash out, in the same shape as the practice's 
 | LED-13 | The ledger is for business records only; no patient information belongs in it. | Must |
 | LED-14 | Importing the existing ledger spreadsheet is not part of v7. | Could |
 
-### 5.7 Security and HIPAA technical safeguards (SEC)
-These requirements implement technical safeguards. They do not by themselves make the organization compliant (see docs/hipaa-readiness.md).
+### 5.7 Desktop API, patients and consent
+Serves the Mac Desktop App (separate spec in `Desktop App/specs/`). The Desktop App shows the day's schedule, records a visit only when the patient's consent is on file, and writes the note on the provider's Mac. This section covers only what the web app must provide.
 
+**Patients on the schedule**
 | ID | Requirement | Priority |
-|---|---|---|
-| SEC-1 | **Idle timeout.** A session with no real request for 15 minutes (`SESSION_IDLE_MINUTES`) is signed out. The check is on the server (middleware and `getCurrentUser`), from a last-activity stamp inside the encrypted session cookie; the browser is not trusted. | Must |
-| SEC-2 | **Absolute limit.** A session older than 12 hours (`SESSION_MAX_HOURS`) is signed out however active it was. Expiry is exact: at the limit the session is already invalid. Sessions without the stamps (issued before this feature) are invalid. | Must |
-| SEC-3 | The last-activity stamp is refreshed only by real requests (page loads, server actions, API calls, "Stay signed in"). Link prefetches and timers never refresh it. | Must |
-| SEC-4 | The browser tracks mouse, keyboard, touch, scroll and request activity, warns in a modal two minutes before logoff with a "Stay signed in" button, and signs out at the deadline (also warns before the absolute limit). A keep-alive request is sent only because a person acted, at most once a minute. | Must |
-| SEC-5 | An expired session redirects to the sign-in page with an explanation. | Must |
-| SEC-6 | **Audit every PHI access.** One audit entry per Schedule page load (view, date range, provider filter id, entry count; never client names); Providers page views; schedule entry create, update, delete. | Must |
-| SEC-7 | Audit entries for Excel import (list sheets, preview, commit: file name, sheet, counts, draft id), CSV exports (row counts), Billing patient and encounter views, patient and encounter lists and searches (counts and which filters, never the search text), history views, and Billing changes. | Must |
-| SEC-8 | Audit entries for denied access: a signed-in user reaching a page, action or API route they lack access to (`access.denied`, with the module and path), and for denied and successful sign-ins and sign-outs. User and access changes remain audited (AUTH-8). | Must |
-| SEC-9 | Audit details hold ids, counts, dates and flags. They never hold patient names, MRNs, client info, notes or codes. Task titles are no longer written to the audit log. | Must |
-| SEC-10 | `AuditLog` and `BillingHistory` are append-only at the database level: triggers reject UPDATE, DELETE and TRUNCATE. Applied by the idempotent `npm run db:harden` (also run by `npm run setup`) and checked by `npm run verify:audit`. | Must |
-| SEC-11 | `User.lastLoginAt` is set at each successful sign-in. | Must |
-| SEC-12 | Every response carries a Content-Security-Policy (per-request nonce for scripts, no third-party origins, no framing, no plugins), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a restrictive `Permissions-Policy`, and, in production, `Strict-Transport-Security`. | Must |
-| SEC-13 | Every response from an authenticated page or API route carries `Cache-Control: no-store`. | Must |
-| SEC-14 | In production the session cookie is `Secure`, `HttpOnly` and `SameSite=Lax`. | Must |
-| SEC-15 | In-memory rate limits apply to sign-in callbacks, the import API routes, CSV exports, the keep-alive endpoint and server actions. Multi-instance hosting needs a shared store or Cloud Armor for a hard limit. | Should |
-| SEC-16 | The JSON and multipart API routes that change state (import sheets, preview, commit; keep-alive) refuse cross-origin requests. | Must |
-| SEC-17 | Server logs carry no PHI: errors are logged as context, class and code only (no messages that can echo values); Prisma logs errors only, in minimal format. | Must |
-| SEC-18 | Import drafts (parsed uploads) are deleted right after commit and purged when older than one hour, on every preview and commit. Upload limits are unchanged. | Must |
-| SEC-19 | **Field-level encryption** with AES-256-GCM of `ScheduleEntry.clientInfo`, `Provider.zoomPassword`, `Task.notes` and `ImportDraft.payload`, with a random IV per value, authentication (tampering is detected), and the field name bound to the ciphertext. Call sites read and write plain text through the Prisma client extension. | Must |
-| SEC-20 | The key comes from `PHI_ENCRYPTION_KEY` (base64, 32 bytes); stored values carry a key id so the key can be rotated (`PHI_ENCRYPTION_KEY_ID`, `PHI_ENCRYPTION_PREVIOUS_KEYS`). A production server refuses to start without a valid key. | Must |
-| SEC-21 | `ScheduleEntry.dedupeKey` contains no client text: the client part is an HMAC-SHA256 under a key derived from the encryption key. Re-importing the same sheet still adds nothing (IMP-6). | Must |
-| SEC-22 | `npm run db:encrypt-phi` encrypts existing plaintext (idempotent; skips values already encrypted), re-keys after rotation (`--rekey`), and decrypts for rollback (`--decrypt`). It must be told the database name it is allowed to change (`--database`). | Must |
-| SEC-23 | Billing patient names, MRNs, codes and encounter notes, and Ledger data, are **not** field-encrypted because Billing searches by name and MRN prefix; Cloud SQL encryption at rest covers them. Blind-index search is a possible future option. | Must (documented) |
-| SEC-24 | Encrypted columns cannot be used in query filters (the app refuses such queries). | Must |
-| SEC-25 | A pure, unit-tested detector flags likely PHI in task titles, task notes and recurring-task titles: MRN-like tokens, SSN-like numbers, a date after "DOB", phone numbers, and emails other than the practice's staff emails. False positives are kept low (ordinary dates, ticket numbers and the word "MRN" alone pass). | Must |
-| SEC-26 | When it finds a match the server action returns an error naming the kind of identifier (never the text) asking the user to remove it, unless the user ticks "I confirm this contains no patient information". | Must |
-| SEC-27 | Blocked attempts and confirmed overrides are audit-logged with the kinds found, never the text. | Must |
-| SEC-28 | **Access review (Admin only)** at `/admin/access-review`, linked from the Access page: every user with role, active flag, last sign-in, each module level, task-view grants, flags for admin and "no sign-in in 90 days", and the count of admins. A quarterly review is recommended. | Must |
-| SEC-29 | The audit-log viewer on that page filters by user, action prefix and UTC date range, and is paged (50 per page). | Must |
-| SEC-30 | The users table and the (filtered) audit log export to CSV (formula-safe). Opening the page, the log viewer and each export are themselves audit-logged. | Must |
-| SEC-31 | `docs/hipaa-readiness.md` maps each Security Rule technical safeguard (164.312(a) to (e)) and the relevant administrative items to what the app does, or to "ORGANIZATION TO DO", with the non-code checklist. It states that it is not legal advice and that the app alone does not make the organization compliant. | Must |
+|----|-------------|----------|
+| PAT-1 | A schedule entry can optionally be linked to a patient. The patient record is the existing Billing patient (last name, first name, optional MRN), so Schedule and Billing share one patient list. | Must |
+| PAT-2 | In the schedule grid, the Client cell offers a patient picker (type to search by last or first name or MRN) and a "new patient" action. Choosing a patient sets the linked patient and fills the visible client text as "Last, First". Unlinked rows keep working with free text. | Must |
+| PAT-3 | The Excel import (IMP-6) does not link patients automatically. After an import, rows that look like "Last, First" can be matched to existing patients with a one-click suggestion that the user confirms; nothing is linked without confirmation. | Should |
+| PAT-4 | Merged patients (Billing mergedIntoId) resolve to the surviving record everywhere, including linked schedule entries. | Must |
+| PAT-5 | Patient names and MRNs are not written to logs, URLs, analytics or error reports. | Must |
+| PAT-6 | Patient search and linking require Schedule edit access; viewing a linked patient name requires Schedule view access. MRN is shown only to users who already see MRN in Billing. | Must |
+
+**Consent for AI documentation**
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| CON-1 | A patient has at most one active consent record: patient, date consent was given (YYYY-MM-DD), who confirmed it, optional note (for example "signed intake form"), active flag. History is kept; withdrawing sets it inactive and records who and when. | Must |
+| CON-2 | Users with Schedule edit access can set or withdraw consent from the schedule grid (a badge on linked rows: "Consent on file" or "No consent") and from the patient picker. Setting it asks them to confirm "Patient signed AI documentation consent on [date]". | Must |
+| CON-3 | Setting and withdrawing consent are written to the audit log (who, when, patient, action). The audit text does not include clinical content. | Must |
+| CON-4 | The Desktop API refuses a recording-start check for a patient without active consent. The check is made on the server each time; the Desktop App cannot bypass it by caching. | Must |
+| CON-5 | Withdrawal takes effect immediately for new recordings. It does not delete notes already written. | Must |
+| CON-6 | The consent date cannot be in the future (practice time zone). | Must |
+| CON-7 | The web app does not verify the signed form; the consent wording belongs to the practice's paperwork and is reviewed by its counsel. | Info |
+| CON-8 | A "Recording allowed" start check returns an opaque result (allowed / not allowed and a reason code), not any patient detail beyond what the board already shows. | Must |
+
+**Desktop API**
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| API-1 | The Desktop API lives under `/api/desktop/v1/`, is HTTPS-only in any deployed environment, and is separate from the web UI's server actions. | Must |
+| API-2 | Sign-in: the Desktop App completes Google sign-in with PKCE, sends the Google ID token to the API, and receives a short-lived access token (default 1 hour) and a refresh token that can be revoked. The email must be an active user (AUTH-2). | Must |
+| API-3 | Every endpoint enforces the same module levels as the web UI (AUTH-4, AUTH-5) on the server. A token for a user without Schedule access gets 403. | Must |
+| API-4 | `GET schedule?date=YYYY-MM-DD` returns that day's entries: time or track, appointment type, program (track name), provider, status flags, linked patient (last, first, id) if any, and consent badge. Dates are practice-time-zone `YYYY-MM-DD` strings. | Must |
+| API-5 | `GET providers` returns the provider list the schedule uses. Zoom password and NPI are never returned (SCH-3). | Must |
+| API-6 | `GET patients/{id}/consent`, `PUT patients/{id}/consent` and `DELETE patients/{id}/consent` read, set and withdraw consent (Schedule edit access for writes). | Must |
+| API-7 | `POST recordings/check` with a patient id returns allowed or not allowed (CON-4, CON-8). | Must |
+| API-8 | All Desktop API calls and every consent change are audit-logged (user, action, time). Patient names do not appear in the log text. | Must |
+| API-9 | Users can see and revoke their Desktop App sessions from Settings; the Admin can revoke anyone's. Deactivating a user (AUTH-3) revokes their tokens at once. | Must |
+| API-10 | The Desktop API is read-only for the schedule. Creating or editing schedule entries stays in the web app in this version. | Must |
 
 ## 6. Non-Functional Requirements
 - **Security:** HTTPS in any deployment; server-side authorization on every request; secrets only in environment variables, never in the repo.
-- **Sensitive data:** the schedule contains client information and Zoom passwords; Billing holds patient names, MRNs and diagnosis codes. The app must not be reachable without sign-in, and sensitive fields follow SCH-3. The app implements the technical safeguards in section 5.7; hosting agreements (BAA), Cloud SQL configuration, device and people controls, policies, training, risk assessment and retention remain with the organization (see docs/hipaa-readiness.md). Nothing in the app makes the practice "HIPAA compliant" by itself, and Washington State law and 42 CFR Part 2 may be stricter than HIPAA.
+- **Sensitive data:** the schedule contains client information and Zoom passwords. The app must not be reachable without sign-in, and sensitive fields follow SCH-3. Whether the practice needs formal HIPAA controls (hosting agreements, encryption at rest, retention) is an open question.
 - **Privacy:** only name and email are taken from Google.
 - **Test data:** tests and fixtures use synthetic data only; real workbooks are never committed.
 - **Time zone:** "today" is computed in the practice's time zone (`PRACTICE_TIMEZONE`, default America/Los_Angeles) on the server for every screen, so Today, Past due, recurring tasks and the home counts agree for everybody; a Cloud Run server (UTC) never rolls the date over early.
@@ -378,27 +373,29 @@ These requirements implement technical safeguards. They do not by themselves mak
 - **Usability:** desktop-first, responsive down to phone width.
 
 ## 7. Data Model (high level)
-- User (email, name, role, active, last sign-in at)
+- User (email, name, role, active)
 - ModuleAccess (user, module, level)
 - Employee (name, title, email, phone, active)
-- Provider (name, contact, NPI, zoom link, zoom password (encrypted), hours, notes, optional employee)
+- Provider (name, contact, NPI, zoom link, zoom password, hours, notes, optional employee)
 - TrackDef (name, start, end), EntryType (name)
-- ScheduleEntry (date, section, time label, track, type, client info (encrypted), provider, absent, canceled, completed, missed, dedupe key (date, section, time, provider and a keyed hash of the client text; no client text), import batch)
+- ScheduleEntry (date, section, time label, track, type, client info, optional linked patient, provider, absent, canceled, completed, missed, import batch)
 - Category (name, sort order)
 - Program (name, active)
-- BillingPatient (MRN optional, last name, first name, created by, merged into)
+- BillingPatient (MRN optional, last name, first name, created by, merged into); shared by Billing and Schedule (PAT-1)
+- PatientConsent (patient, consent date, confirmed by, note, active, withdrawn by and at)
+- DesktopSession (user, refresh token hash, device label, created, last used, revoked)
 - Encounter (patient, date, program, ICD-10 codes, charge code, note, GetIX entered/by/at, created/updated/deleted by and at)
-- BillingHistory (entity, entity id, previous version, changed by, when; append-only in the database)
+- BillingHistory (entity, entity id, previous version, changed by, when)
 - LedgerEntry (date, cash in, cash out, transaction by, category, method, comments)
 - LedgerCategory, LedgerMethod, LedgerParty (name, order)
-- Task (title, notes (encrypted), category, assignee, due date, completed, in-today, sort order)
+- Task (title, category, assignee, due date, completed, in-today, sort order)
 - TaskLink (task, url, label, type)
-- AuditLog (actor, action, detail, timestamp; append-only in the database; indexed by time and actor)
+- AuditLog (actor, action, detail, timestamp)
 - ImportLog (file, sheet, user, counts, timestamp)
-- ImportDraft (user, file, sheet, parsed payload (encrypted), created; deleted at commit, purged after one hour)
 
 ## 8. Integrations
-- Google OAuth 2.0 / OpenID Connect for sign-in.
+- Google OAuth 2.0 / OpenID Connect for sign-in (web, and the Desktop App via PKCE).
+- Desktop API for the Mac Desktop App (section 5.7).
 
 ## 9. Assumptions and Constraints
 - Single practice (single tenant).
@@ -416,9 +413,12 @@ Decided:
 - Tasks are assigned to people and can be reassigned; layout follows the Sohail Todo App.
 - Hosting: Google Cloud Run + Cloud SQL (Postgres).
 
+- Schedule entries link to the existing Billing patient record rather than a new table (v19).
+- Consent is a per-patient flag set once, checked on the server; without it the Desktop App offers dictation instead of recording (v19).
+
 Still open:
 1. The reference sheet lists providers who are not among the four employees. v1 treats them as external providers. Confirm.
-2. HIPAA obligations for client information: the app now implements the technical safeguards in section 5.7; the BAA, Cloud SQL and device configuration, policies, training, risk assessment and retention are the organization's to do (docs/hipaa-readiness.md). The app does not claim compliance.
+2. HIPAA obligations for client information (Google's BAA, encryption, retention, access review). Not claimed by v1.
 3. Should Zoom passwords be stored in the app at all?
 4. An import covers one sheet at a time in v1.
 5. How and when to move the remaining Todo App categories (Studio, Integrations, Personal); v5 moved only "B & BC".
@@ -431,3 +431,6 @@ Still open:
 12. Dr Lucy's and Dr Irfan's Google emails (needed to give them a login), and whether they should get Billing access like Dr Khalid.
 13. Should Razak and Muntaha also see each other's Recurring list (v15: they see only their own)?
 14. Sync: should it also run automatically every few minutes once deployed (v17: manual button only)? Should other categories (Studio, Integrations, Personal) sync too?
+15. Patient link: should the Excel import match "Last, First" client text to patients automatically after a review step (PAT-3 is suggestion-only)? Should the Billing patient table be renamed to a shared Patient table?
+16. Consent: exact wording and who may confirm it; whether consent should expire or be re-confirmed yearly.
+17. Desktop API when deployed: allowed networks, token lifetimes, and whether providers may use the app on personal Macs.
