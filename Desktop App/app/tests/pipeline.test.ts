@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { noteFileName, patientFolderName, safePart } from "../src/lib/patientFolder";
 import { noteKindFor, rowAction } from "../src/lib/noteKind";
-import { ungroundedTerms } from "../src/lib/grounding";
+import { ungroundedTerms, wordsToNumber } from "../src/lib/grounding";
 import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
 import { NOT_DISCUSSED, PLANS } from "../src/lib/sectionMap";
 import { docxText, fillTemplate } from "../src/lib/docxFill";
@@ -49,6 +49,12 @@ describe("grounding (NOT-5)", () => {
   it("accepts numbers and names found in the source, including spelled-out numbers", () => {
     expect(ungroundedTerms("She reports sleeping 2 hours a night for 3 weeks. She takes Sertraline.", source)).toEqual([]);
   });
+  it("understands spelled-out numbers beyond ten, such as fifty and one hundred", () => {
+    const src = "I take sertraline fifty milligrams. The doctor would increase it to one hundred milligrams. I am thirty-two. About twenty five pounds.";
+    expect(ungroundedTerms("Sertraline 50 mg, increase to 100 mg. Age 32. Lost 25 pounds.", src)).toEqual([]);
+    expect(ungroundedTerms("Sertraline 150 mg.", src)).toContain("150");
+    expect(wordsToNumber(["two", "hundred", "fifty"])).toBe(250);
+  });
   it("flags a dose or a medication that was never said", () => {
     const bad = ungroundedTerms("She takes sertraline 150 mg and Lithium.", source);
     expect(bad).toContain("150");
@@ -79,6 +85,16 @@ describe("parseSection", () => {
     expect(isNotDiscussed("Patient did not discuss anything unusual.")).toBe(false);
     expect(parseSection("Real content.\n\nNot discussed in this recording.", []).map((p) => p.text)).toEqual(["Real content."]);
     expect(parseSection("Not discussed in recording.", labels)[0].text).toBe(NOT_DISCUSSED);
+  });
+  it("drops heading lines the model adds to label-less sections", () => {
+    expect(parseSection("Depression:\nThe patient reports low mood.\n\nSleep:\nThe patient sleeps five hours.", []).map((p) => p.text)).toEqual([
+      "The patient reports low mood.",
+      "The patient sleeps five hours.",
+    ]);
+  });
+  it("tells the model to record denials and to paraphrase", () => {
+    expect(SYSTEM_RULES).toMatch(/denial or a "none" is a statement/);
+    expect(SYSTEM_RULES).toMatch(/Do not copy the patient's first-person words/);
   });
   it("tells the model to attribute statements to the right speaker", () => {
     expect(SYSTEM_RULES).toMatch(/Attribute each statement/);

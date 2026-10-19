@@ -12,6 +12,8 @@ export const SYSTEM_RULES = [
   "Attribute each statement to the person who said it. The transcript may not label speakers. Questions and proposals usually come from the doctor; reports about the patient's own life come from the patient.",
   "Never say the patient requested, wanted or agreed to something, or that the provider agreed to it, unless the transcript says so. If you cannot tell who said it, write it without attributing, for example \"It was discussed that ...\".",
   "Do not explain causes, and do not add reasons the speaker did not give.",
+  "A denial or a \"none\" is a statement and must be recorded, for example \"The patient denies prior psychiatric hospitalizations.\" Only write the not-discussed sentence when the topic never came up.",
+  "Paraphrase in the third person. Do not copy the patient's first-person words (\"I ...\") into the note.",
   `If something was not stated, write exactly: ${NOT_DISCUSSED}`,
   "Do not give advice, do not add headings, do not use markdown.",
 ].join("\n");
@@ -42,7 +44,7 @@ function sourceBlock(input: DraftInput, spec: SectionSpec): string {
 export function buildPrompt(input: DraftInput, spec: SectionSpec, headingTitle: string): string {
   const format = spec.labels && spec.labels.length
     ? `Write exactly one line per label, in this order, each as "Label: text". Labels:\n${spec.labels.map((l) => `- ${l}`).join("\n")}\nIf a label was not stated, its text must be exactly: ${NOT_DISCUSSED}`
-    : `Write short paragraphs, one per line, separated by blank lines. If nothing relevant was stated, write exactly: ${NOT_DISCUSSED}`;
+    : `Write short paragraphs separated by blank lines, with no headings or labels. If nothing relevant was stated, write exactly: ${NOT_DISCUSSED}`;
   return `${sourceBlock(input, spec)}\n\nSECTION: ${headingTitle}\nTASK: ${spec.instruction ?? ""}\n${format}`;
 }
 
@@ -50,7 +52,9 @@ export function buildPrompt(input: DraftInput, spec: SectionSpec, headingTitle: 
 export function parseSection(output: string, labels: string[]): Para[] {
   const text = output.replace(/\*\*/g, "").replace(/\r/g, "").trim();
   if (!labels.length) {
-    const paras = text.split(/\n\s*\n|\n(?=[-•]\s)/).map((p) => p.replace(/^[-•]\s*/, "").trim()).filter(Boolean);
+    // Headings such as "Depression:" are structure the model added, not content.
+    const noHeadings = text.split("\n").filter((l) => !/^[\w ,&/()-]{1,60}:\s*$/.test(l.trim())).join("\n");
+    const paras = noHeadings.split(/\n\s*\n|\n(?=[-•]\s)/).map((p) => p.replace(/^[-•]\s*/, "").trim()).filter(Boolean);
     // A trailing "not discussed" next to real content is noise; keep it only when it is all there is.
     const real = paras.filter((p) => !isNotDiscussed(p));
     return (real.length ? real : paras.slice(0, 1)).map((p) => ({ text: p }));
