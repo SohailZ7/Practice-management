@@ -5,6 +5,7 @@ import { todayISO } from "@/lib/dates";
 import { toTaskDTO } from "@/lib/taskTypes";
 import { ensureRecurringTasks } from "@/lib/recurring";
 import { canEditBoard, pickEmployee, viewableEmployeeIds } from "@/lib/taskAccess";
+import { lastSyncAt, TODO_SYNC_CATEGORY } from "@/lib/todoSyncService";
 import { TaskBoard } from "@/components/TaskBoard";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,9 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
       });
   const viewingOther = !isAdmin && selected !== null && selected !== me?.id;
   const owner = employees.find((e) => e.id === selected);
+  // The sync button appears for the Admin on their own list.
+  const showSync = isAdmin && selected !== null && selected === me?.id;
+  const lastSync = showSync ? await lastSyncAt() : null;
 
   return (
     <>
@@ -72,6 +76,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
             boardAssigneeId={selected}
             today={todayISO()}
             canReorder={isAdmin}
+            sync={showSync ? { category: TODO_SYNC_CATEGORY, lastSyncedAt: lastSync ? lastSync.toISOString() : null } : undefined}
           />
         </>
       )}

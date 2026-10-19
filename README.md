@@ -1,7 +1,7 @@
 # Practice Management
 
 Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**, **Ledger**.
-Requirements: the latest file in [specs/](specs/) (currently [requirements-v16.md](specs/requirements-v16.md)); older versions are kept.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v17.md](specs/requirements-v17.md)); older versions are kept.
 Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.
@@ -49,6 +49,12 @@ history. Nothing is erased. Use made-up patients locally; see the BAA/hosting no
 Business cash in / cash out, shaped like the practice's ledger spreadsheet: Date, Cash In, Cash Out, Transaction By,
 Category, Method, Comments. Edit in the grid, filter, see totals, view a Summary by category and month, export CSV.
 Categories, methods and names are editable under Ledger → Lists. Only the Admin has Ledger access until granted.
+
+## Syncing B & BC from the Todo App
+On your own task list, **Sync "B & BC" from Todo App** copies that category from the Todo App (one-way: the Todo App is the
+master). Locally it signs in as your `gcloud` account (`gcloud auth login`); on Cloud Run give the service account
+**Cloud Datastore Viewer** on the Todo App's project (`sohail-todo-app`). Settings: `TODO_APP_PROJECT_ID`,
+`TODO_SYNC_CATEGORY`, `TODO_APP_ACCESS_TOKEN` (optional override).
 
 ## Tests and checks
 ```bash

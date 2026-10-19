@@ -123,9 +123,13 @@ model Task {
   links           TaskLink[]
   recurringId     String?
   occurrenceDate  String?
+  // Set when the task is mirrored from another app (the Sohail Todo App): source name and that app's id.
+  externalSource  String?
+  externalId      String?
   recurring       RecurringTask? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
 
   @@unique([recurringId, occurrenceDate])
+  @@unique([externalSource, externalId])
 }
 
 // type: webex | pr | doc | markdown | link

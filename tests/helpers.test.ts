@@ -349,3 +349,82 @@ describe("task visibility", () => {
     expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: null })).toBe(false);
   });
 });
+
+import { decodeFirestoreValue, parseTodoState, planTodoSync, type ExistingTask, type SourceTodo } from "../src/lib/todoSync";
+
+describe("Todo App sync: reading Firestore", () => {
+  it("decodes Firestore REST values to plain JSON", () => {
+    const doc = {
+      mapValue: {
+        fields: {
+          title: { stringValue: "A" },
+          n: { integerValue: "1791216126700" },
+          ok: { booleanValue: true },
+          none: { nullValue: null },
+          list: { arrayValue: { values: [{ stringValue: "x" }] } },
+          empty: { arrayValue: {} },
+        },
+      },
+    };
+    expect(decodeFirestoreValue(doc)).toEqual({ title: "A", n: 1791216126700, ok: true, none: null, list: ["x"], empty: [] });
+  });
+  it("keeps only valid todos and cleans links, and rejects unexpected data", () => {
+    const state = parseTodoState({
+      categories: [{ id: "c", name: "B & BC" }, { nope: 1 }],
+      todos: [
+        { id: "1", title: " Task ", categoryId: "c", completed: false, dueDate: "2026-10-05", inToday: true, links: [{ url: "javascript:alert(1)" }, { url: "example.com/a" }] },
+        { title: "no id" },
+      ],
+    });
+    expect(state.categories).toEqual([{ id: "c", name: "B & BC" }]);
+    expect(state.todos).toHaveLength(1);
+    expect(state.todos[0]).toMatchObject({ title: "Task", dueDate: "2026-10-05", inToday: true, links: ["https://example.com/a"] });
+    expect(() => parseTodoState({ categories: "x" })).toThrow();
+  });
+});
+
+describe("Todo App sync: planning", () => {
+  const src = (id: string, over: Partial<SourceTodo> = {}): SourceTodo => ({
+    id, title: `Todo ${id}`, notes: "", categoryId: "c", dueDate: null, completed: false, completedAt: null, inToday: false, links: [], ...over,
+  });
+  const task = (id: string, over: Partial<ExistingTask> = {}): ExistingTask => ({
+    id, title: `Todo ${id}`, notes: "", dueDate: null, completed: false, completedAt: null, inToday: false, externalId: id, linkUrls: [], ...over,
+  });
+
+  it("creates tasks for new todos", () => {
+    const p = planTodoSync([src("a", { notes: "hi", dueDate: "2026-10-20" })], []);
+    expect(p.create).toHaveLength(1);
+    expect(p.create[0]).toMatchObject({ externalId: "a", values: { title: "Todo a", notes: "hi", dueDate: "2026-10-20" } });
+  });
+  it("is idempotent: syncing unchanged data does nothing", () => {
+    const p = planTodoSync([src("a"), src("b")], [task("a"), task("b")]);
+    expect(p).toMatchObject({ create: [], update: [], remove: [], unchanged: 2 });
+  });
+  it("copies changes from the Todo App: title, notes, due date, Today, links, completion", () => {
+    const p = planTodoSync(
+      [src("a", { title: "New", notes: "n", dueDate: "2026-11-01", inToday: true, completed: true, completedAt: 5, links: ["https://x.test/"] })],
+      [task("a")],
+    );
+    expect(p.update).toHaveLength(1);
+    expect(p.update[0].values).toEqual({ title: "New", notes: "n", dueDate: "2026-11-01", inToday: true, completed: true, completedAt: 5 });
+    expect(p.update[0].links).toEqual(["https://x.test/"]);
+  });
+  it("reopening a todo clears the completion time", () => {
+    const p = planTodoSync([src("a")], [task("a", { completed: true, completedAt: 9 })]);
+    expect(p.update[0].values).toEqual({ completed: false, completedAt: null });
+  });
+  it("adopts a task made before syncing existed, by exact title, instead of duplicating it", () => {
+    const p = planTodoSync([src("a", { title: "September invoice" })], [task("t1", { title: "september invoice", externalId: null })]);
+    expect(p.create).toEqual([]);
+    expect(p.update).toEqual([{ id: "t1", externalId: "a", values: { title: "September invoice" } }]); // takes the Todo App's spelling
+  });
+  it("adopts each existing task at most once when titles repeat", () => {
+    const p = planTodoSync([src("a", { title: "Same" }), src("b", { title: "Same" })], [task("t1", { title: "Same", externalId: null })]);
+    expect(p.update).toHaveLength(1);
+    expect(p.create).toHaveLength(1);
+  });
+  it("removes open tasks whose todo is gone, but keeps finished ones and tasks that were never mirrored", () => {
+    const p = planTodoSync([src("a")], [task("a"), task("gone"), task("done", { completed: true }), task("local", { externalId: null, title: "Mine" })]);
+    expect(p.remove).toEqual(["gone"]);
+  });
+});

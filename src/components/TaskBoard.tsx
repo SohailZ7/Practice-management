@@ -22,6 +22,7 @@ import { dueLabel, formatShort } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { TaskNotesDialog } from "./TaskNotesDialog";
+import { TodoSyncButton } from "./TodoSyncButton";
 import { linkTypeMeta } from "@/lib/links";
 import { applyReorder, splitTasks, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 import {
@@ -48,6 +49,8 @@ type Props = {
   today: string;
   /** Drag and drop is available to the Admin only. */
   canReorder: boolean;
+  /** Show the "Sync from Todo App" button (Admin, on their own list). */
+  sync?: { category: string; lastSyncedAt: string | null };
 };
 
 const PAST = "past-due";
@@ -56,7 +59,7 @@ const BACKLOG = "backlog";
 const DONE = "completed";
 const EXPIRED = "expired";
 
-export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today, canReorder }: Props) {
+export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today, canReorder, sync }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
@@ -165,6 +168,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
             Analytics
           </button>
         </div>
+        {sync && <TodoSyncButton category={sync.category} lastSyncedAt={sync.lastSyncedAt} />}
         {canEdit && (
           <button
             className={`gear-btn ${showCategories ? "on" : ""}`}
