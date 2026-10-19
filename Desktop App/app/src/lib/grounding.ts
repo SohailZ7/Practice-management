@@ -29,7 +29,7 @@ export function wordsToNumber(words: string[]): number | null {
 }
 
 /** Source text with spelled-out numbers also written as digits, so "fifty milligrams" supports "50 mg". */
-function withDigits(source: string): string {
+export function withDigits(source: string): string {
   const tokens = source.split(/(\s+)/);
   let out = "";
   let i = 0;

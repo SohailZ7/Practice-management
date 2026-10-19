@@ -74,6 +74,7 @@ describe.skipIf(models.length === 0)("model comparison", () => {
       const draft = await draftNote({
         kind: c.kind, transcript: c.transcript, mode: "recording", visitDate: "2026-10-19", typeLabel: c.title, providerName: "Dr. Example",
         patientName: "Testcase, Alpha", priorNote: c.priorNote ? { fileName: "prior.docx", text: c.priorNote } : undefined, llm: make(model, 1000 + run),
+        passes: process.env.SPIKE_PASSES === "off" ? { ssrs: false, verify: false } : undefined,
       });
       const saved: Saved = { model, caseId: c.id, run, secs: (Date.now() - t0) / 1000, draft, score: scoreCase(c, draft) };
       writeFileSync(file, JSON.stringify(saved));

@@ -8,6 +8,7 @@ import { noteKindFor, rowAction } from "../src/lib/noteKind";
 import { ungroundedTerms, wordsToNumber } from "../src/lib/grounding";
 import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
 import { NOT_DISCUSSED, PLANS } from "../src/lib/sectionMap";
+import { QUESTION_SYSTEM, VERIFY_SYSTEM } from "../src/lib/passes";
 import { docxText, fillTemplate } from "../src/lib/docxFill";
 import { mockSchedule } from "../src/lib/mockSchedule";
 import type { Llm } from "../src/lib/types";
@@ -126,13 +127,13 @@ const base = (over: Partial<DraftInput> = {}): DraftInput => ({
 });
 
 describe("draftNote", () => {
-  it("never sends the patient's name to the model, and states the safety rules", async () => {
+  it("never sends the patient's name to the model, and every prompt carries safety rules", async () => {
     const prompts: string[] = [];
     await draftNote(base({ llm: async (r) => { prompts.push(r.system + r.prompt); return ""; } }));
     expect(prompts.length).toBeGreaterThan(5);
     for (const p of prompts) {
       expect(p).not.toContain("Testcase");
-      expect(p).toContain(SYSTEM_RULES);
+      expect(p.includes(SYSTEM_RULES) || p.includes(QUESTION_SYSTEM) || p.includes(VERIFY_SYSTEM)).toBe(true);
     }
   });
   it("marks empty model output as not discussed, flags an invented dose, and requires confirmation on risk sections", async () => {

@@ -185,6 +185,9 @@ function Review({ stage, engine, onCancel, onSaved }: {
   const must = draft.sections.filter((s) => s.mustConfirm);
   const canSave = must.every((s) => confirmed.has(s.heading)) && !busy;
 
+  const restore = (heading: string, i: number) =>
+    setDraft((d) => ({ ...d, sections: d.sections.map((s) => s.heading === heading ? { ...s, paragraphs: s.paragraphs.map((p, j) => j === i && p.removed ? { label: p.label, text: p.removed.text, flag: "confirm" as const } : p) } : s) }));
+
   const edit = (heading: string, i: number, text: string) =>
     setDraft((d) => ({ ...d, sections: d.sections.map((s) => s.heading === heading ? { ...s, paragraphs: s.paragraphs.map((p, j) => j === i ? { ...p, text, flag: p.flag === "ungrounded" || p.flag === "not_discussed" ? p.flag : undefined } : p) } : s) }));
 
@@ -215,7 +218,16 @@ function Review({ stage, engine, onCancel, onSaved }: {
             {s.paragraphs.map((p, i) => (
               <div className="para" key={i}>
                 {p.label && <label>{p.label}</label>}
-                <textarea className={p.flag ? "flag" : ""} value={p.text} rows={Math.max(1, Math.ceil(p.text.length / 80))} onChange={(e) => edit(s.heading, i, e.target.value)} readOnly={s.action === "info"} aria-label={p.label ?? s.heading} />
+                <div style={{ flex: 1 }}>
+                <textarea style={{ width: "100%" }} className={p.flag ? "flag" : ""} value={p.text} rows={Math.max(1, Math.ceil(p.text.length / 80))} onChange={(e) => edit(s.heading, i, e.target.value)} readOnly={s.action === "info"} aria-label={p.label ?? s.heading} />
+                {p.removed && (
+                  <div className="small">
+                    Removed ({p.removed.reason}): <em>{p.removed.text}</em>{" "}
+                    <button className="secondary" onClick={() => restore(s.heading, i)}>Restore</button>
+                  </div>
+                )}
+                {p.evidence && !p.removed && <div className="small">Transcript: “{p.evidence}”</div>}
+                </div>
               </div>
             ))}
             {s.mustConfirm && (

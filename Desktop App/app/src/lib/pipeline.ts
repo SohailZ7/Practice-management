@@ -3,6 +3,7 @@
 import type { CaptureMode, DraftNote, DraftSection, Llm, NoteKind, Para } from "./types";
 import { NOT_ASSESSED, NOT_DISCUSSED, PLANS, type SectionSpec } from "./sectionMap";
 import { ungroundedTerms } from "./grounding";
+import { askRiskQuestion, verifyParas } from "./passes";
 
 export const SYSTEM_RULES = [
   "You write one section of a psychiatric clinic note from a visit transcript.",
@@ -31,6 +32,8 @@ export type DraftInput = {
   patientName: string; // "Last, First"; used only for the info section, never sent to the model
   priorNote?: { fileName: string; text: string };
   llm: Llm;
+  /** Safety passes (default on). Turn off only to measure what they add. */
+  passes?: { ssrs?: boolean; verify?: boolean };
   onProgress?: (done: number, total: number, heading: string) => void;
 };
 
@@ -113,8 +116,17 @@ export async function draftNote(input: DraftInput): Promise<DraftNote> {
     }
     input.onProgress?.(done, toFill.length, spec.heading);
     const title = spec.heading.replace(/^\d+\.\s*/, "");
-    const output = await input.llm({ system: SYSTEM_RULES, prompt: buildPrompt(input, spec, title) });
-    const paras = flagParas(parseSection(output, spec.labels ?? []), source);
+    const sourceAll = `${input.transcript}\n${input.priorNote?.text ?? ""}`;
+    let paras: Para[];
+    if (spec.questions && input.passes?.ssrs !== false) {
+      // Suicide risk: one question per line, each answered yes / no / not asked with a quote from the transcript.
+      paras = [];
+      for (const label of spec.labels ?? []) paras.push(await askRiskQuestion(input.llm, input.transcript, label, spec.questions[label]));
+    } else {
+      const output = await input.llm({ system: SYSTEM_RULES, prompt: buildPrompt(input, spec, title) });
+      paras = flagParas(parseSection(output, spec.labels ?? []), source);
+      if (input.passes?.verify !== false) paras = await verifyParas(input.llm, sourceAll, paras, !!spec.aboutPatient);
+    }
     sections.push({ heading: spec.heading, action: "fill", paragraphs: paras.length ? paras : [{ text: NOT_DISCUSSED, flag: "not_discussed" }], mustConfirm: spec.mustConfirm });
     done += 1;
     input.onProgress?.(done, toFill.length, spec.heading);

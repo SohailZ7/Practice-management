@@ -22,7 +22,11 @@ export type Para = {
   label?: string;
   text: string;
   /** Needs the provider's eye: not discussed, not assessed, or contains a value not found in the source. */
-  flag?: "not_discussed" | "not_assessed" | "ungrounded" | "confirm";
+  flag?: "not_discussed" | "not_assessed" | "ungrounded" | "confirm" | "removed";
+  /** The verification pass took this text out (unsupported, or about someone other than the patient). Shown so the provider can restore it. */
+  removed?: { text: string; reason: string };
+  /** The words in the transcript that support this line, when the model quoted them. */
+  evidence?: string;
 };
 
 export type DraftSection = {

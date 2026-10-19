@@ -15,6 +15,10 @@ export type SectionSpec = {
   mustConfirm?: boolean;
   /** Draw on the patient's earlier note as well as this visit. */
   usesPriorNote?: boolean;
+  /** Ask each label as its own question that must be answered YES, NO or NOT_ASKED with a quote (used for suicide risk). */
+  questions?: Record<string, string>;
+  /** Facts in this section must be about the patient. A relative's or another person's facts are removed by the verification pass. */
+  aboutPatient?: boolean;
 };
 
 const H = {
@@ -49,6 +53,15 @@ const ssrs: SectionSpec = {
   mustConfirm: true,
   instruction: "Record only what the patient said about suicidal thoughts, behavior and safety. Do not rate risk.",
   labels: ["Wish to be dead", "Suicidal thoughts", "Method / intent / plan", "Suicidal behavior", "Protective factors", "Safety plan discussed"],
+  aboutPatient: true,
+  questions: {
+    "Wish to be dead": "Did the patient say they wish they were dead, or would not wake up, or that others would be better off without them, or deny this?",
+    "Suicidal thoughts": "Did the patient say they have had thoughts of killing themselves, or deny having such thoughts?",
+    "Method / intent / plan": "Did the patient describe a method, an intent to act, or a plan to kill themselves, or deny having any?",
+    "Suicidal behavior": "Did the patient say whether THEY THEMSELVES have ever attempted suicide or harmed themselves (an attempt, preparing to act, self-harm), or deny it? What a relative or friend did does not count.",
+    "Protective factors": "Did the patient give reasons for living or things that keep them safe (family, children, pets, faith, plans for the future)?",
+    "Safety plan discussed": "Did the doctor review a safety plan, give a crisis line number, or discuss removing means such as a firearm?",
+  },
 };
 const consent: SectionSpec = {
   heading: H.consent,
@@ -70,15 +83,15 @@ export const PLANS: Record<NoteKind, { title: string; sections: SectionSpec[] }>
     sections: [
       { heading: H.info, action: "info" },
       { heading: H.cc, action: "fill", instruction: "The patient's main complaint in the patient's own words where possible.", labels: ["Patient's words"] },
-      { heading: H.hpi, action: "fill", instruction: "History of the current episode.", labels: ["Primary reason for treatment", "Duration of current episode", "Precipitating / contextual factors", "Functional impact", "Narrative / additional details"] },
+      { heading: H.hpi, action: "fill", instruction: "History of the current episode.", aboutPatient: true, labels: ["Primary reason for treatment", "Duration of current episode", "Precipitating / contextual factors", "Functional impact", "Narrative / additional details"] },
       { heading: H.ros, action: "fill", instruction: "One line per symptom area that was discussed (depression, mania, anxiety, panic, psychosis, trauma, OCD, ADHD, other). Skip areas not discussed. State what the patient reported.", labels: [] },
-      { heading: H.pph, action: "fill", instruction: "Past psychiatric history.", labels: ["Diagnoses", "Prior hospitalizations", "Prior suicide attempts / self-harm", "Prior medications and response", "Prior therapy / other treatment", "Current psychiatric providers"] },
+      { heading: H.pph, action: "fill", instruction: "Past psychiatric history.", aboutPatient: true, labels: ["Diagnoses", "Prior hospitalizations", "Prior suicide attempts / self-harm", "Prior medications and response", "Prior therapy / other treatment", "Current psychiatric providers"] },
       ssrs,
-      { heading: H.sub, action: "fill", instruction: "Substance use history as described.", labels: ["Substances and pattern", "Withdrawal / overdose / treatment history"] },
-      { heading: H.med, action: "fill", instruction: "Medical and surgical history as described.", labels: ["Medical history", "Surgical history", "Neurologic history", "Current non-psychiatric medications", "Allergies"] },
+      { heading: H.sub, action: "fill", instruction: "Substance use history as described.", aboutPatient: true, labels: ["Substances and pattern", "Withdrawal / overdose / treatment history"] },
+      { heading: H.med, action: "fill", instruction: "Medical and surgical history as described.", aboutPatient: true, labels: ["Medical history", "Surgical history", "Neurologic history", "Current non-psychiatric medications", "Allergies"] },
       { heading: H.rosMed, action: "keep" },
       { heading: H.fam, action: "fill", instruction: "Family history as described.", labels: ["Family psychiatric history", "Family history of suicide", "Family medical history"] },
-      { heading: H.soc, action: "fill", instruction: "Personal and social history as described.", labels: ["Born / raised", "Education / employment", "Relationship / children / living situation", "Social supports", "Trauma history", "Legal history", "Firearms / lethal means access"] },
+      { heading: H.soc, action: "fill", instruction: "Personal and social history as described.", aboutPatient: true, labels: ["Born / raised", "Education / employment", "Relationship / children / living situation", "Social supports", "Trauma history", "Legal history", "Firearms / lethal means access"] },
       { heading: H.mse, action: "keep" },
       { heading: H.summary, action: "keep" },
       { heading: H.form, action: "keep" },

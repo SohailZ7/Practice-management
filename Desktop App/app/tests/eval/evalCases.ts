@@ -85,7 +85,7 @@ export const evalCases: Case[] = [
       { id: "alcohol", kind: "has", section: SUB, pattern: "wine|alcohol", why: "alcohol recorded" },
       { id: "caffeine-not-drug", kind: "lacks", section: SUB, pattern: "drug use(?![^.]*(no|denies|none))", why: "drug use invented" },
       { id: "no-si", kind: "has", section: SSRS, pattern: "denies|no (suicid|thoughts)|no\\b|none", why: "denies suicidal thoughts", critical: true },
-      { id: "sister-not-patient-attempt", kind: "lacks", section: `${SSRS}|${PPH}`, pattern: "patient[^.]{0,40}(attempt|tried)[^.]{0,40}(suicide|kill|pills)|prior suicide attempt[^.]*(yes|pills)", why: "sister's attempt attributed to patient", critical: true },
+      { id: "sister-not-patient-attempt", kind: "lacks", section: `${SSRS}|${PPH}`, pattern: "sister", why: "sister's attempt filed under the patient's own history or suicide behavior (family goes under Family History)", critical: true },
       { id: "sister-family", kind: "has", section: FAM, pattern: "sister[^.]*(suicide|attempt|pills|kill)", why: "family suicide attempt recorded", critical: true },
       { id: "xanax", kind: "has", section: PPH, pattern: "xanax|alprazolam", why: "prior medication" },
       { id: "xanax-dose-invented", kind: "lacks", section: PPH, pattern: "(xanax|alprazolam)[^.]{0,30}(\\d+|one|two|five|ten)\\s*(mg|milligram)", why: "dose never stated", critical: true },
