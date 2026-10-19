@@ -12,11 +12,13 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   Provider: ["zoomPassword"],
   Task: ["notes"],
   ImportDraft: ["payload"],
+  PatientConsent: ["note"],
 };
 
 /** Relations that lead to another encrypted model, so values inside `include` results are decrypted too. */
 export const RELATIONS: Record<string, Record<string, string>> = {
   ScheduleEntry: { provider: "Provider" },
+  BillingPatient: { consents: "PatientConsent" },
   Provider: { entries: "ScheduleEntry" },
   Employee: { tasks: "Task", provider: "Provider" },
   Category: { tasks: "Task" },

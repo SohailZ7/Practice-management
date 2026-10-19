@@ -9,16 +9,17 @@ datasource db {
 
 // role: ADMIN | PROVIDER | STAFF    theme: system | light | dark
 model User {
-  id        String         @id @default(cuid())
-  email     String         @unique
-  name      String
-  role      String         @default("STAFF")
-  active    Boolean        @default(true)
-  theme     String         @default("system")
-  createdAt DateTime       @default(now())
-  lastLoginAt DateTime?
-  access    ModuleAccess[]
-  taskViewers TaskViewer[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  name            String
+  role            String           @default("STAFF")
+  active          Boolean          @default(true)
+  theme           String           @default("system")
+  createdAt       DateTime         @default(now())
+  lastLoginAt     DateTime?
+  access          ModuleAccess[]
+  taskViewers     TaskViewer[]
+  desktopSessions DesktopSession[]
 }
 
 // module: schedule | tasks | employees   level: none | view | edit
@@ -33,30 +34,30 @@ model ModuleAccess {
 }
 
 model Employee {
-  id     String   @id @default(cuid())
-  name   String
-  title  String   @default("")
-  email  String?  @unique
-  phone  String   @default("")
-  active Boolean  @default(true)
-  tasks  Task[]
-  provider Provider?
+  id        String          @id @default(cuid())
+  name      String
+  title     String          @default("")
+  email     String?         @unique
+  phone     String          @default("")
+  active    Boolean         @default(true)
+  tasks     Task[]
+  provider  Provider?
   recurring RecurringTask[]
   viewedBy  TaskViewer[]
 }
 
 // Providers shown on the schedule. employeeId null = external provider.
 model Provider {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  contact      String   @default("")
-  npi          String   @default("")
-  zoomLink     String   @default("")
-  zoomPassword String   @default("")
-  hours        String   @default("")
-  notes        String   @default("")
-  employeeId   String?  @unique
-  employee     Employee? @relation(fields: [employeeId], references: [id])
+  id           String          @id @default(cuid())
+  name         String          @unique
+  contact      String          @default("")
+  npi          String          @default("")
+  zoomLink     String          @default("")
+  zoomPassword String          @default("")
+  hours        String          @default("")
+  notes        String          @default("")
+  employeeId   String?         @unique
+  employee     Employee?       @relation(fields: [employeeId], references: [id])
   entries      ScheduleEntry[]
 }
 
@@ -75,26 +76,29 @@ model EntryType {
 
 // section: PSYCH_EVAL | TRACK    date: YYYY-MM-DD
 model ScheduleEntry {
-  id           String    @id @default(cuid())
+  id           String          @id @default(cuid())
   date         String
   section      String
-  timeLabel    String    @default("")
-  trackName    String    @default("")
-  typeName     String    @default("")
-  clientInfo   String    @default("")
+  timeLabel    String          @default("")
+  trackName    String          @default("")
+  typeName     String          @default("")
+  clientInfo   String          @default("")
   providerId   String?
-  providerName String    @default("")
-  absent       Boolean   @default(false)
-  canceled     Boolean   @default(false)
-  completed    Boolean   @default(false)
-  missed       Boolean   @default(false)
-  dedupeKey    String    @default("")
+  providerName String          @default("")
+  absent       Boolean         @default(false)
+  canceled     Boolean         @default(false)
+  completed    Boolean         @default(false)
+  missed       Boolean         @default(false)
+  dedupeKey    String          @default("")
   importLogId  String?
-  createdAt    DateTime  @default(now())
-  provider     Provider? @relation(fields: [providerId], references: [id])
+  patientId    String?
+  createdAt    DateTime        @default(now())
+  provider     Provider?       @relation(fields: [providerId], references: [id])
+  patient      BillingPatient? @relation(fields: [patientId], references: [id])
 
   @@index([date])
   @@index([dedupeKey])
+  @@index([patientId])
 }
 
 model Category {
@@ -106,28 +110,28 @@ model Category {
 
 // dueDate: YYYY-MM-DD
 model Task {
-  id              String         @id @default(cuid())
-  title           String
-  notes           String         @default("")
-  categoryId      String?
-  assigneeId      String?
-  dueDate         String?
-  expiresAt       String?
-  completed       Boolean        @default(false)
-  completedAt     DateTime?
-  inToday         Boolean        @default(false)
-  sortOrder       Int            @default(0)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @default(now()) @updatedAt
-  category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  assignee        Employee?      @relation(fields: [assigneeId], references: [id])
-  links           TaskLink[]
-  recurringId     String?
-  occurrenceDate  String?
+  id             String         @id @default(cuid())
+  title          String
+  notes          String         @default("")
+  categoryId     String?
+  assigneeId     String?
+  dueDate        String?
+  expiresAt      String?
+  completed      Boolean        @default(false)
+  completedAt    DateTime?
+  inToday        Boolean        @default(false)
+  sortOrder      Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now()) @updatedAt
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  assignee       Employee?      @relation(fields: [assigneeId], references: [id])
+  links          TaskLink[]
+  recurringId    String?
+  occurrenceDate String?
   // Set when the task is mirrored from another app (the Sohail Todo App): source name and that app's id.
-  externalSource  String?
-  externalId      String?
-  recurring       RecurringTask? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  externalSource String?
+  externalId     String?
+  recurring      RecurringTask? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
 
   @@unique([recurringId, occurrenceDate])
   @@unique([externalSource, externalId])
@@ -179,26 +183,60 @@ model ImportDraft {
 // ---- Billing (modeled on bandbc-billing-app) ----
 
 model Program {
-  id        String      @id @default(cuid())
-  name      String      @unique
-  active    Boolean     @default(true)
-  createdAt DateTime    @default(now())
+  id         String      @id @default(cuid())
+  name       String      @unique
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
   encounters Encounter[]
 }
 
 // MRN is optional; an admin can add it later. mergedIntoId keeps merged records instead of erasing them.
 model BillingPatient {
-  id           String      @id @default(cuid())
-  mrn          String?     @unique
-  lastName     String
-  firstName    String
-  createdById  String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  mergedIntoId String?
-  encounters   Encounter[]
+  id              String           @id @default(cuid())
+  mrn             String?          @unique
+  lastName        String
+  firstName       String
+  createdById     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  mergedIntoId    String?
+  encounters      Encounter[]
+  scheduleEntries ScheduleEntry[]
+  consents        PatientConsent[]
 
   @@index([lastName, firstName])
+}
+
+// Consent for AI-assisted visit documentation (requirements v19, CON-1). History is kept; at most one row per patient
+// is active (enforced in code, inside a transaction). consentDate: YYYY-MM-DD in the practice time zone.
+model PatientConsent {
+  id               String         @id @default(cuid())
+  patientId        String
+  consentDate      String
+  note             String         @default("")
+  active           Boolean        @default(true)
+  confirmedByEmail String
+  createdAt        DateTime       @default(now())
+  withdrawnByEmail String?
+  withdrawnAt      DateTime?
+  patient          BillingPatient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId, active])
+}
+
+// One row per signed-in Mac (requirements v19, API-2, API-9). Only a hash of the refresh token is stored.
+model DesktopSession {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  deviceLabel String    @default("")
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // encounterDate: YYYY-MM-DD. icd10Codes: in order, first = primary.
