@@ -61,6 +61,8 @@ export async function updateUser(form: FormData) {
     flash(BACK, "error", "There must always be at least one active administrator.");
   }
   await db.user.update({ where: { id }, data: { role, active } });
+  // API-9: deactivating a user ends their Desktop App sessions at once.
+  if (!active) await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
   await audit(admin.email, "user.update", `${target!.email}: role=${role} active=${active}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Updated ${target!.email}.`);
@@ -105,4 +107,16 @@ export async function setTaskViewers(form: FormData) {
   await audit(admin.email, "taskviewers.set", `${target!.email}: ${valid.length} employee(s)`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved whose tasks ${target!.email} can view.`);
+}
+
+/** API-9: the Admin can end every Desktop App session of a user. */
+export async function revokeDesktopSessions(form: FormData) {
+  const admin = await requireAdmin();
+  const id = str(form, "id");
+  const target = await db.user.findUnique({ where: { id } });
+  if (!target) flash(BACK, "error", "User not found.");
+  const res = await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+  await audit(admin.email, "desktop.sessions.revoke", `user ${id} sessions=${res.count}`);
+  revalidatePath(BACK);
+  flash(BACK, "notice", `Signed ${target!.email} out of ${res.count} Mac app session(s).`);
 }

@@ -1,7 +1,8 @@
 import { requireUser } from "@/lib/session";
 import { normalizeTheme } from "@/lib/theme";
 import { Banner } from "@/components/Banner";
-import { saveTheme } from "./actions";
+import { db } from "@/lib/db";
+import { revokeMyDesktopSession, saveTheme } from "./actions";
 
 const OPTIONS = [
   { value: "light", label: "Light", hint: "Bright background, white navigation." },
@@ -16,6 +17,7 @@ export default async function SettingsPage({
 }) {
   const user = await requireUser();
   const current = normalizeTheme(user.theme);
+  const macs = await db.desktopSession.findMany({ where: { userId: user.id, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { lastUsedAt: "desc" } });
   return (
     <>
       <h1>Settings</h1>
@@ -38,6 +40,25 @@ export default async function SettingsPage({
           Save
         </button>
       </form>
+      <div className="card" style={{ maxWidth: 560 }}>
+        <h2 style={{ marginTop: 0 }}>Mac Desktop App</h2>
+        {macs.length === 0 ? (
+          <p className="muted small">No Mac is signed in.</p>
+        ) : (
+          macs.map((m) => (
+            <form key={m.id} action={revokeMyDesktopSession} className="row">
+              <input type="hidden" name="id" value={m.id} />
+              <span>
+                {m.deviceLabel || "Mac"} <span className="muted small">· last used {m.lastUsedAt.toISOString().slice(0, 10)}</span>
+              </span>
+              <span className="grow" />
+              <button type="submit" className="secondary">
+                Sign out
+              </button>
+            </form>
+          ))
+        )}
+      </div>
       <div className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>Account</h2>
         <div>{user.name}</div>

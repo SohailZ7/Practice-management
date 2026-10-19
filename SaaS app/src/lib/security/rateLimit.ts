@@ -41,6 +41,8 @@ export type Rule = { name: string; limit: number; windowMs: number; by: "ip" | "
 /** Which rule (if any) applies to a request. */
 export function ruleFor(method: string, pathname: string, isServerAction: boolean): Rule | null {
   if (/^\/api\/auth\/(callback|signin)(\/|$)/.test(pathname)) return { name: "signin", limit: 30, windowMs: 10 * 60_000, by: "ip" };
+  if (/^\/api\/desktop\/v1\/auth\//.test(pathname)) return { name: "desktop-auth", limit: 20, windowMs: 10 * 60_000, by: "ip" };
+  if (/^\/api\/desktop\/v1(\/|$)/.test(pathname)) return { name: "desktop", limit: 240, windowMs: 60_000, by: "ip" };
   if (pathname === "/api/auth/signout" || pathname === "/api/auth/csrf") return { name: "auth", limit: 60, windowMs: 10 * 60_000, by: "ip" };
   if (/^\/api\/schedule\/import(\/|$)/.test(pathname)) return { name: "import", limit: 20, windowMs: 60_000, by: "user" };
   if (pathname === "/ledger/export" || /^\/admin\/access-review\/[a-z-]+\.csv$/.test(pathname)) return { name: "export", limit: 10, windowMs: 60_000, by: "user" };

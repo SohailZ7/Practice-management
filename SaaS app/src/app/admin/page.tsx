@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { audit } from "@/lib/audit";
 import { LEVELS, MODULES, ROLES } from "@/lib/access";
 import { Banner } from "@/components/Banner";
-import { addUser, setAccess, setTaskViewers, updateUser } from "./actions";
+import { addUser, revokeDesktopSessions, setAccess, setTaskViewers, updateUser } from "./actions";
 
 export default async function AdminPage({
   searchParams,
@@ -66,6 +66,12 @@ export default async function AdminPage({
                     </label>
                     <button type="submit" className="secondary">
                       Save
+                    </button>
+                  </form>
+                  <form action={revokeDesktopSessions} className="row">
+                    <input type="hidden" name="id" value={u.id} />
+                    <button type="submit" className="secondary" title="Sign this user out of the Mac Desktop App everywhere">
+                      Sign out Mac app
                     </button>
                   </form>
                 </td>

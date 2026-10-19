@@ -5,8 +5,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
-import { todayISO } from "@/lib/dates";
-import { validateConsent } from "@/lib/consent";
+import { setPatientConsent, withdrawPatientConsent, type ConsentResult } from "@/lib/consentService";
 import { makeDedupeKey } from "@/lib/import/outpatientBoard";
 import { patientSearch } from "@/lib/billing/scope";
 import { validatePatient } from "@/lib/billing/validate";
@@ -80,39 +79,20 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
   return entryDTO(updated);
 }
 
-export type ConsentResult = { ok: true } | { ok: false; errors: Record<string, string> };
+export type { ConsentResult } from "@/lib/consentService";
 
 /** CON-1 to CON-3, CON-6. At most one active consent per patient, enforced inside a transaction. */
 export async function setConsent(patientId: string, input: { consentDate: string; note?: string }): Promise<ConsentResult> {
   const user = await requireAccess("schedule", "edit");
-  const { values, errors, ok } = validateConsent(input, todayISO());
-  if (!ok) return { ok: false, errors };
-  const id = await survivingPatientId(patientId);
-  if (!id) return { ok: false, errors: { patient: "Patient not found." } };
-  const created = await db.$transaction(async (tx) => {
-    const existing = await tx.patientConsent.findFirst({ where: { patientId: id, active: true } });
-    if (existing) return null;
-    return tx.patientConsent.create({
-      data: { patientId: id, consentDate: values.consentDate, note: values.note, confirmedByEmail: user.email },
-    });
-  });
-  if (!created) return { ok: false, errors: { patient: "Consent is already on file for this patient." } };
-  await audit(user.email, "consent.set", `patient ${id} consent ${created.id} date ${values.consentDate}`);
-  revalidatePath("/schedule");
-  return { ok: true };
+  const r = await setPatientConsent(user.email, patientId, input);
+  if (r.ok) revalidatePath("/schedule");
+  return r;
 }
 
 /** CON-5: withdrawal stops new recordings at once and keeps the history. */
 export async function withdrawConsent(patientId: string): Promise<ConsentResult> {
   const user = await requireAccess("schedule", "edit");
-  const id = await survivingPatientId(patientId);
-  if (!id) return { ok: false, errors: { patient: "Patient not found." } };
-  const res = await db.patientConsent.updateMany({
-    where: { patientId: id, active: true },
-    data: { active: false, withdrawnByEmail: user.email, withdrawnAt: new Date() },
-  });
-  if (res.count === 0) return { ok: false, errors: { patient: "No consent is on file for this patient." } };
-  await audit(user.email, "consent.withdraw", `patient ${id}`);
-  revalidatePath("/schedule");
-  return { ok: true };
+  const r = await withdrawPatientConsent(user.email, patientId);
+  if (r.ok) revalidatePath("/schedule");
+  return r;
 }
