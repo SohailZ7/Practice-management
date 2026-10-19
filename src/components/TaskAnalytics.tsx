@@ -1,13 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { NO_CATEGORY, buildAnalytics } from "@/lib/analytics";
+import { NO_CATEGORY, PALETTE, buildAnalytics, type Analytics } from "@/lib/analytics";
 import type { CategoryDTO, TaskDTO } from "@/lib/taskTypes";
 
-const PALETTE = ["#5b8def", "#d97706", "#16a34a", "#dc2626", "#7c3aed", "#0891b2", "#be185d", "#4b5563"];
 const PERIOD_DAYS = 30;
 
-function shortDate(key: string): string {
+export function shortDate(key: string): string {
   return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -16,6 +15,11 @@ export function TaskAnalytics({ tasks, categories }: { tasks: TaskDTO[]; categor
     () => buildAnalytics(tasks, categories.map((c) => c.id), PERIOD_DAYS),
     [tasks, categories],
   );
+  return <CategoryAnalyticsView a={a} categories={categories} periodDays={PERIOD_DAYS} />;
+}
+
+/** Velocity coloured by category: used by one board and by the team view's by-category toggle. */
+export function CategoryAnalyticsView({ a, categories, periodDays }: { a: Analytics; categories: CategoryDTO[]; periodDays: number }) {
   const trackIds = [...categories.map((c) => c.id), NO_CATEGORY];
   const color = (id: string) => PALETTE[trackIds.indexOf(id) % PALETTE.length];
   const nameOf = (id: string) => categories.find((c) => c.id === id)?.name ?? "No category";
@@ -24,7 +28,7 @@ export function TaskAnalytics({ tasks, categories }: { tasks: TaskDTO[]; categor
     return (
       <div className="analytics-panel">
         <p className="muted">
-          No completions in the last {PERIOD_DAYS} days yet. Velocity starts tracking the moment you check something off.
+          No completions in the last {periodDays} days yet. Velocity starts tracking the moment you check something off.
         </p>
       </div>
     );
@@ -38,7 +42,7 @@ export function TaskAnalytics({ tasks, categories }: { tasks: TaskDTO[]; categor
   return (
     <div className="analytics-panel">
       <section className="analytics-section">
-        <h2 className="analytics-heading">Daily velocity — last {PERIOD_DAYS} days</h2>
+        <h2 className="analytics-heading">Daily velocity — last {periodDays} days</h2>
         <p className="analytics-subtext">
           {a.totalCompleted} completed · {a.avgPerDay.toFixed(2)}/day average
         </p>
@@ -96,7 +100,7 @@ export function TaskAnalytics({ tasks, categories }: { tasks: TaskDTO[]; categor
           <thead>
             <tr>
               <th>Category</th>
-              <th>Completed ({PERIOD_DAYS}d)</th>
+              <th>Completed ({periodDays}d)</th>
               <th>Avg / day</th>
             </tr>
           </thead>

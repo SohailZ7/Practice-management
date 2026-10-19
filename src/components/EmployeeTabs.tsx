@@ -27,15 +27,20 @@ export type TabDef = { id: string; label: string; count: number | null; href: st
 // v2: the first tab is now always the signed-in admin's own, so an older saved order is discarded.
 const KEY = "task-tab-order-v2";
 const RECURRING = "recurring";
+const ANALYTICS = "analytics";
 
 /**
- * The Admin's tabs: one per employee, Unassigned, and Recurring. The default order puts the
+ * The Admin's tabs: one per employee, Unassigned, Recurring and the team Analytics. The default order puts the
  * admin's own tab first; drag the grip on a tab to reorder (remembered in this browser).
  */
 export function EmployeeTabs({ tabs, defaultId, draggable = true }: { tabs: TabDef[]; defaultId: string; draggable?: boolean }) {
   const path = usePathname();
   const params = useSearchParams();
-  const selectedId = path.startsWith("/tasks/recurring") ? RECURRING : (params.get("emp") ?? defaultId);
+  const selectedId = path.startsWith("/tasks/recurring")
+    ? RECURRING
+    : path.startsWith("/tasks/analytics")
+      ? ANALYTICS
+      : (params.get("emp") ?? defaultId);
 
   const [ordered, setOrdered] = useState(tabs);
   const sensors = useSensors(

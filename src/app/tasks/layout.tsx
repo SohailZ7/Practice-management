@@ -58,6 +58,7 @@ export default async function TasksLayout({ children }: { children: ReactNode })
     ...people.map((e) => ({ id: e.id, label: e.name, count: open.get(e.id) ?? 0, href: `/tasks?emp=${e.id}` })),
     ...(isAdmin ? [{ id: UNASSIGNED, label: "Unassigned", count: open.get(null) ?? 0, href: `/tasks?emp=${UNASSIGNED}` }] : []),
     { id: "recurring", label: "↻ Recurring", count: null, href: "/tasks/recurring" },
+    { id: "analytics", label: "Analytics", count: null, href: "/tasks/analytics" },
   ];
 
   return (

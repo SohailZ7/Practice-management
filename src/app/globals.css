@@ -294,6 +294,8 @@ tr.xl-draft td { background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
 .analytics-table th, .analytics-table td { white-space: nowrap; }
 .analytics-total-row td { font-weight: 700; border-top: 1px solid var(--line); }
 .analytics-table-scroll { max-height: 280px; overflow-y: auto; }
+.analytics-bad { color: var(--danger); font-weight: 600; }
+a.tab-btn { text-decoration: none; display: inline-block; }
 
 /* ledger */
 table.xl.ledger { min-width: 1000px; }

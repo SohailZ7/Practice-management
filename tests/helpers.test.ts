@@ -90,34 +90,204 @@ describe("theme", () => {
   });
 });
 
-import { buildAnalytics, lastNDays, localDateKey, NO_CATEGORY } from "../src/lib/analytics";
+import {
+  PALETTE,
+  UNASSIGNED_ID,
+  UNASSIGNED_COLOR,
+  buildAnalytics,
+  buildTeamAnalytics,
+  employeeColor,
+  lastNDays,
+  localDateKey,
+  parseWindow,
+  NO_CATEGORY,
+} from "../src/lib/analytics";
+
+const PT = "America/Los_Angeles";
+// Instants are UTC so the tests do not depend on the machine's own time zone.
+const at = (iso: string) => new Date(iso).getTime();
 
 describe("task analytics", () => {
-  const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12).getTime();
-  const NOW = noon(2026, 10, 17);
+  const NOON = at("2026-10-17T19:00:00Z"); // noon PDT on the 17th
+  const done = (iso: string, categoryId: string | null) => ({ completed: true, completedAt: at(iso), categoryId });
 
-  it("builds the last N local days ending today", () => {
-    const days = lastNDays(3, NOW);
-    expect(days).toEqual(["2026-10-15", "2026-10-16", "2026-10-17"]);
-    expect(localDateKey(NOW)).toBe("2026-10-17");
+  it("builds the last N practice-time-zone days ending today (inclusive)", () => {
+    expect(lastNDays(3, NOON, PT)).toEqual(["2026-10-15", "2026-10-16", "2026-10-17"]);
+    expect(localDateKey(NOON, PT)).toBe("2026-10-17");
+    expect(lastNDays(1, NOON, PT)).toEqual(["2026-10-17"]);
+  });
+
+  it("buckets by Pacific day: 11 pm Pacific is still that day even though it is already tomorrow in UTC", () => {
+    expect(localDateKey(at("2026-10-18T06:00:00Z"), PT)).toBe("2026-10-17"); // 11 pm PDT
+    expect(localDateKey(at("2026-10-17T06:59:00Z"), PT)).toBe("2026-10-16"); // 11:59 pm PDT the 16th
+    expect(localDateKey(at("2026-10-17T07:00:00Z"), PT)).toBe("2026-10-17"); // midnight PDT
+    expect(localDateKey(at("2026-01-15T07:59:00Z"), PT)).toBe("2026-01-14"); // winter (PST)
+    // "today" itself rolls over at Pacific midnight
+    expect(lastNDays(2, at("2026-10-18T06:30:00Z"), PT)).toEqual(["2026-10-16", "2026-10-17"]);
   });
 
   it("counts completions per day and category, ignoring open, undated and out-of-window tasks", () => {
     const tasks = [
-      { completed: true, completedAt: noon(2026, 10, 17), categoryId: "a" },
-      { completed: true, completedAt: noon(2026, 10, 17), categoryId: "a" },
-      { completed: true, completedAt: noon(2026, 10, 16), categoryId: null },
+      done("2026-10-17T19:00:00Z", "a"),
+      done("2026-10-18T06:00:00Z", "a"), // 11 pm Pacific on the 17th
+      done("2026-10-16T19:00:00Z", null),
       { completed: true, completedAt: null, categoryId: "a" }, // finished before dates were tracked
       { completed: false, completedAt: null, categoryId: "a" },
-      { completed: true, completedAt: noon(2026, 8, 1), categoryId: "a" }, // outside the window
+      done("2026-08-01T19:00:00Z", "a"), // outside the window
     ];
-    const r = buildAnalytics(tasks, ["a", "b"], 30, NOW);
+    const r = buildAnalytics(tasks, ["a", "b"], 30, NOON, PT);
     expect(r.totalCompleted).toBe(3);
     expect(r.counts["2026-10-17"]["a"]).toBe(2);
     expect(r.counts["2026-10-16"][NO_CATEGORY]).toBe(1);
     expect(r.tracks).toEqual(["a", NO_CATEGORY]); // "b" has no completions
     expect(r.maxDayTotal).toBe(2);
     expect(r.avgPerDay).toBeCloseTo(0.1);
+  });
+});
+
+describe("team analytics", () => {
+  const NOW = at("2026-10-17T19:00:00Z");
+  const people = [
+    { id: "e2", name: "Muntaha", active: true },
+    { id: "e1", name: "Razak", active: true },
+    { id: "e3", name: "Khalid", active: true },
+    { id: "e9", name: "Old Hire", active: false },
+  ];
+  const colorKeys = ["e1", "e2", "e3", "e9"];
+  const c = (assigneeId: string | null, iso: string | null, categoryId: string | null = null) => ({
+    assigneeId,
+    categoryId,
+    completedAt: iso ? at(iso) : null,
+  });
+  const base = { people, colorKeys, completions: [], openRows: [], includeUnassigned: true, periodDays: 7, now: NOW, timeZone: PT };
+
+  it("counts per employee and day, totals and averages", () => {
+    const r = buildTeamAnalytics({
+      ...base,
+      completions: [c("e1", "2026-10-17T19:00:00Z"), c("e1", "2026-10-16T19:00:00Z"), c("e2", "2026-10-16T19:00:00Z"), c(null, "2026-10-15T19:00:00Z")],
+    });
+    expect(r.totalCompleted).toBe(4);
+    expect(r.avgPerDay).toBeCloseTo(4 / 7);
+    expect(r.counts["2026-10-16"]).toEqual({ e1: 1, e2: 1 });
+    expect(r.dayTotals).toEqual([0, 0, 0, 0, 1, 2, 1]);
+    expect(r.maxDayTotal).toBe(2);
+    const razak = r.people.find((p) => p.id === "e1")!;
+    expect(razak.completed).toBe(2);
+    expect(razak.avgPerDay).toBeCloseTo(2 / 7);
+    expect(r.people.find((p) => p.id === UNASSIGNED_ID)!.completed).toBe(1);
+  });
+
+  it("window boundaries are inclusive of today and of the first day, exclusive beyond", () => {
+    const r = buildTeamAnalytics({
+      ...base,
+      completions: [
+        c("e1", "2026-10-18T06:59:00Z"), // 11:59 pm Pacific the 17th = today
+        c("e1", "2026-10-11T07:00:00Z"), // midnight Pacific the 11th = first day of a 7-day window
+        c("e1", "2026-10-11T06:59:00Z"), // 11:59 pm the 10th = outside
+        c("e1", "2026-10-18T07:00:00Z"), // midnight the 18th = tomorrow, outside
+      ],
+    });
+    expect(r.days[0]).toBe("2026-10-11");
+    expect(r.days[6]).toBe("2026-10-17");
+    expect(r.totalCompleted).toBe(2);
+  });
+
+  it("buckets an 11 pm Pacific completion on its Pacific day", () => {
+    const r = buildTeamAnalytics({ ...base, completions: [c("e1", "2026-10-18T06:00:00Z")] });
+    expect(r.counts["2026-10-17"]).toEqual({ e1: 1 });
+  });
+
+  it("excludes undated completions from velocity and reports how many there are", () => {
+    const r = buildTeamAnalytics({ ...base, undated: 2, completions: [c("e1", null), c("e1", "2026-10-17T19:00:00Z")] });
+    expect(r.totalCompleted).toBe(1);
+    expect(r.undated).toBe(3);
+  });
+
+  it("open and past-due counts skip expired tasks; past due needs a due date before today", () => {
+    const r = buildTeamAnalytics({
+      ...base,
+      openRows: [
+        { assigneeId: "e1", dueDate: null, expiresAt: null, count: 2 },
+        { assigneeId: "e1", dueDate: "2026-10-16", expiresAt: null, count: 3 }, // past due
+        { assigneeId: "e1", dueDate: "2026-10-17", expiresAt: null, count: 1 }, // due today: not past due
+        { assigneeId: "e1", dueDate: "2026-10-01", expiresAt: "2026-10-10", count: 4 }, // expired: not counted at all
+        { assigneeId: "e1", dueDate: "2026-10-01", expiresAt: "2026-10-17", count: 1 }, // expires today: still open, past due
+        { assigneeId: null, dueDate: null, expiresAt: null, count: 5 },
+      ],
+    });
+    const razak = r.people.find((p) => p.id === "e1")!;
+    expect(razak.open).toBe(7);
+    expect(razak.pastDue).toBe(4);
+    expect(r.people.find((p) => p.id === UNASSIGNED_ID)!.open).toBe(5);
+    expect(r.totalOpen).toBe(12);
+    expect(r.totalPastDue).toBe(4);
+  });
+
+  it("recurring-generated tasks count like any other (they are ordinary rows)", () => {
+    const r = buildTeamAnalytics({ ...base, completions: [c("e2", "2026-10-17T19:00:00Z")], openRows: [{ assigneeId: "e2", dueDate: "2026-10-16", expiresAt: "2026-10-30", count: 1 }] });
+    const m = r.people.find((p) => p.id === "e2")!;
+    expect([m.completed, m.open, m.pastDue]).toEqual([1, 1, 1]);
+  });
+
+  it("shows active employees with zeros, hides inactive ones unless they completed something in the window", () => {
+    const quiet = buildTeamAnalytics({ ...base });
+    expect(quiet.people.map((p) => p.name)).toEqual(["Khalid", "Muntaha", "Razak"]); // A to Z, no Old Hire, no Unassigned
+    expect(quiet.people.every((p) => p.completed === 0 && p.open === 0 && p.pastDue === 0)).toBe(true);
+    const r = buildTeamAnalytics({ ...base, completions: [c("e9", "2026-10-14T19:00:00Z")] });
+    expect(r.people.map((p) => p.name)).toEqual(["Khalid", "Muntaha", "Old Hire", "Razak"]);
+    expect(r.people.find((p) => p.id === "e9")!.completed).toBe(1);
+    // completed only outside the window: hidden again
+    expect(buildTeamAnalytics({ ...base, completions: [c("e9", "2026-09-01T19:00:00Z")] }).people.some((p) => p.id === "e9")).toBe(false);
+  });
+
+  it("empty state: nothing completed gives zero totals and no NaN", () => {
+    const r = buildTeamAnalytics({ ...base });
+    expect(r.totalCompleted).toBe(0);
+    expect(r.avgPerDay).toBe(0);
+    expect(r.maxDayTotal).toBe(1);
+    expect(r.dayTotals.every((n) => n === 0)).toBe(true);
+  });
+
+  it("Unassigned appears only for the Admin, and only when it has something", () => {
+    const rows = [c(null, "2026-10-17T19:00:00Z")];
+    expect(buildTeamAnalytics({ ...base, completions: rows }).people.some((p) => p.id === UNASSIGNED_ID)).toBe(true);
+    const nonAdmin = buildTeamAnalytics({ ...base, includeUnassigned: false, completions: rows, openRows: [{ assigneeId: null, dueDate: null, expiresAt: null, count: 3 }] });
+    expect(nonAdmin.people.some((p) => p.id === UNASSIGNED_ID)).toBe(false);
+    expect(nonAdmin.totalCompleted).toBe(0);
+    expect(nonAdmin.totalOpen).toBe(0);
+  });
+
+  it("never counts an employee outside the allowed list, even if rows for them slip in", () => {
+    const own = [{ id: "e1", name: "Razak", active: true }];
+    const r = buildTeamAnalytics({
+      ...base,
+      people: own,
+      includeUnassigned: false,
+      completions: [c("e1", "2026-10-17T19:00:00Z"), c("e2", "2026-10-17T19:00:00Z"), c("e2", "2026-10-16T19:00:00Z")],
+      openRows: [{ assigneeId: "e2", dueDate: "2026-10-01", expiresAt: null, count: 9 }],
+    });
+    expect(r.people.map((p) => p.id)).toEqual(["e1"]);
+    expect(r.totalCompleted).toBe(1);
+    expect(r.totalOpen).toBe(0);
+    expect(r.totalPastDue).toBe(0);
+    expect(JSON.stringify(r)).not.toContain("Muntaha");
+  });
+
+  it("colours are stable per employee whatever subset is visible, and wrap past the palette", () => {
+    const all = ["e1", "e2", "e3", "e9"];
+    expect(employeeColor("e2", all)).toBe(PALETTE[1]);
+    expect(employeeColor("e2", [...all].reverse())).toBe(PALETTE[1]); // input order does not matter
+    const subset = buildTeamAnalytics({ ...base, people: [people[0]], includeUnassigned: false });
+    expect(subset.people[0].color).toBe(PALETTE[1]); // Muntaha keeps her colour when she is the only one visible
+    const many = Array.from({ length: PALETTE.length + 2 }, (_, i) => `x${String(i).padStart(2, "0")}`);
+    expect(employeeColor(many[PALETTE.length], many)).toBe(PALETTE[0]);
+    expect(employeeColor(UNASSIGNED_ID, many)).toBe(UNASSIGNED_COLOR);
+  });
+
+  it("parseWindow accepts 7, 30 and 90 and falls back to 30", () => {
+    expect(parseWindow("7")).toBe(7);
+    expect(parseWindow("90")).toBe(90);
+    for (const bad of [undefined, "", "14", "abc", "-7", "30; drop"]) expect(parseWindow(bad)).toBe(30);
   });
 });
 
