@@ -1,3 +1,5 @@
+# Fixed project name: the folder name is not used, so the existing database volume (practice-management_pgdata) keeps working.
+name: practice-management
 services:
   db:
     image: postgres:16
