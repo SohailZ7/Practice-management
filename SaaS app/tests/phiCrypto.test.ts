@@ -113,6 +113,7 @@ describe("applying the cipher to Prisma data", () => {
       Provider: ["zoomPassword"],
       Task: ["notes"],
       ImportDraft: ["payload"],
+      PatientConsent: ["note"],
     });
   });
   it("encrypts only those columns of a create/update payload", () => {
