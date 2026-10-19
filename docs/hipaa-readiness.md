@@ -129,7 +129,7 @@ consumer-health-data laws. Ask counsel which apply and what they require; this d
 5. Deploy the new version.
 6. `npm run db:encrypt-phi -- --database <name> --dry-run`, then without `--dry-run`. Safe to repeat.
 7. Check the app: schedule, providers, a task note, an Excel preview.
-8. Walk through the browser checks in the project handover notes and run `npm run verify:audit`.
+8. Run `npm run verify:audit`, then walk through the manual checks in section 8.
 
 ## 7. Verification commands
 
@@ -137,3 +137,17 @@ consumer-health-data laws. Ask counsel which apply and what they require; this d
 - `npm run verify:audit`: proves `AuditLog` and `BillingHistory` reject UPDATE, DELETE and TRUNCATE (rolls back; leaves nothing behind).
 - `npm run verify:phi -- --database <name>`: end-to-end encryption, import idempotency and backfill checks (writes and removes synthetic "ZZ" rows; **use a scratch database**).
 - `npm run db:harden`, `npm run db:encrypt-phi`: see above.
+
+## 8. Manual checks to do in a browser after deploying
+
+Sign-in needs a real Google account, so these cannot be fully automated. With a signed-in test user:
+
+1. **Sign-in and sign-out:** sign in; the Access review page shows a fresh "Last sign-in" for you; the log shows `signin.ok` and, after signing out, `signout`. Try a Google account that is not on the list: it is refused and `signin.denied` is logged.
+2. **Idle logoff:** leave the page untouched. After about 13 minutes a "Still there?" box counts down; "Stay signed in" keeps you in; doing nothing signs you out at 15 minutes and the sign-in page explains why. Repeat with the box ignored and a second tab. (Set `SESSION_IDLE_MINUTES=3` on a test instance to shorten it.) Confirm the 12-hour limit with `SESSION_MAX_HOURS=1` on a test instance.
+3. **Server enforcement:** copy the session cookie, wait out the idle time, and replay it with `curl`: you must be redirected to sign-in.
+4. **Access:** a user without Billing or Ledger who opens `/billing` or `/ledger/export` is refused and `access.denied` appears in the log.
+5. **Audit coverage:** open a schedule week, the Providers page, a Billing patient, import a test workbook (preview then commit), and export the ledger; each appears in the audit log with ids and counts only and no names.
+6. **Encryption:** add a schedule entry and a task note, then in `psql` check the stored text starts with `phi:v1:` (use a test database); re-import the same sheet and confirm it adds nothing.
+7. **Tasks guard:** type "call re MRN 12345" as a task title: it is refused with a message that does not repeat the number; ticking the confirmation box saves it and the log shows `task.phi_confirmed`.
+8. **Security headers:** `curl -I https://<your domain>/login` shows `Content-Security-Policy`, `Strict-Transport-Security`, `Cache-Control: no-store`, `X-Frame-Options: DENY`. In the browser console there are no CSP violations on Schedule, Tasks, Billing, Ledger, Admin and the import wizard.
+9. **Access review:** `/admin/access-review` shows every user, the admin count and flags; both CSV exports download; the page, the viewer and each export create audit entries. A non-admin is refused.

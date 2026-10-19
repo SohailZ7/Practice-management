@@ -2,6 +2,7 @@
 
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { idleState } from "@/lib/idleClock";
 
 const TOUCH_URL = "/api/session/touch";
@@ -111,7 +112,8 @@ export function IdleLogoff({ idleMs, absoluteDeadline, serverNow }: Props) {
   };
 
   if (!view) return null;
-  return (
+  // A portal, so the overlay covers the whole window whatever the shell's layout does.
+  return createPortal(
     <div className="notes-overlay" role="presentation">
       <div className="notes-dialog idle-dialog" role="alertdialog" aria-modal="true" aria-labelledby="idle-title" aria-describedby="idle-desc">
         <div className="notes-title" id="idle-title">
@@ -147,6 +149,7 @@ export function IdleLogoff({ idleMs, absoluteDeadline, serverNow }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
