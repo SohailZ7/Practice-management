@@ -22,6 +22,8 @@ import { dueLabel, formatShort } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { TaskNotesDialog } from "./TaskNotesDialog";
+import { PhiConfirm } from "./PhiConfirm";
+import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
 import { TodoSyncButton } from "./TodoSyncButton";
 import { linkTypeMeta } from "@/lib/links";
 import { applyReorder, splitTasks, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
@@ -63,6 +65,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
+  const [phiPrompt, setPhiPrompt] = useState<{ message: string; retry: () => void } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set([DONE, EXPIRED]));
   const [tab, setTab] = useState<"todos" | "analytics">("todos");
   const [showCategories, setShowCategories] = useState(false);
@@ -75,19 +78,24 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : "Something went wrong");
 
   /** Optimistic update: apply locally, call the server, roll back on failure. */
-  async function mutate(next: TaskDTO[], call: () => Promise<unknown>) {
+  async function mutate(next: TaskDTO[], call: () => Promise<unknown>, retry?: () => void) {
     const snapshot = tasks;
     setTasks(next);
     setError("");
+    setPhiPrompt(null);
     try {
-      await call();
+      const result = await call();
+      if (isPhiBlock(result) && retry) {
+        setTasks(snapshot);
+        setPhiPrompt({ message: result.message, retry });
+      }
     } catch (e) {
       setTasks(snapshot);
       fail(e);
     }
   }
 
-  const patchTask = (id: string, patch: TaskPatch) => {
+  const patchTask = (id: string, patch: TaskPatch, confirmNoPhi = false): Promise<void> => {
     // Reassigning to someone else moves the task to that person's tab.
     const leaves = patch.assigneeId !== undefined && patch.assigneeId !== boardAssigneeId;
     const next = leaves
@@ -98,15 +106,20 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
           if (patch.completed !== undefined) next.completedAt = patch.completed ? (t.completedAt ?? Date.now()) : null;
           return next;
         });
-    return mutate(next, () => updateTask(id, patch));
+    return mutate(next, () => updateTask(id, patch, confirmNoPhi), () => void patchTask(id, patch, true));
   };
 
   const removeTask = (id: string) => mutate(tasks.filter((t) => t.id !== id), () => deleteTask(id));
 
-  async function add(title: string, categoryId: string | null, inToday: boolean) {
+  async function add(title: string, categoryId: string | null, inToday: boolean, confirmNoPhi = false) {
     setError("");
+    setPhiPrompt(null);
     try {
-      const dto = await createTask({ title, categoryId, assigneeId: boardAssigneeId, inToday });
+      const dto = await createTask({ title, categoryId, assigneeId: boardAssigneeId, inToday, confirmNoPhi });
+      if (isPhiBlock(dto)) {
+        setPhiPrompt({ message: dto.message, retry: () => void add(title, categoryId, inToday, true) });
+        return;
+      }
       setTasks((ts) => [...ts, dto]);
     } catch (e) {
       fail(e);
@@ -191,6 +204,18 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         </div>
       )}
 
+      {phiPrompt && (
+        <PhiConfirm
+          message={phiPrompt.message}
+          onCancel={() => setPhiPrompt(null)}
+          onConfirm={() => {
+            const retry = phiPrompt.retry;
+            setPhiPrompt(null);
+            retry();
+          }}
+        />
+      )}
+
       {canEdit && showCategories && (
         <CategoryManager
           categories={categories}
@@ -255,7 +280,7 @@ type ItemProps = {
   categories: CategoryDTO[];
   employees: Opt[];
   today: string;
-  onPatch: (id: string, patch: TaskPatch) => void;
+  onPatch: (id: string, patch: TaskPatch) => void | Promise<void>;
   onDelete: (id: string) => void;
   onAddLink: (id: string, url: string) => void;
   onRemoveLink: (id: string, linkId: string) => void;
@@ -394,6 +419,7 @@ function InlineAdd({
         placeholder={placeholder}
         aria-label={placeholder}
       />
+      <div className="phi-hint small muted">{PHI_WARNING}</div>
     </form>
   );
 }

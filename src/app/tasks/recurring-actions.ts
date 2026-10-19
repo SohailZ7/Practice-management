@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
+import { phiCheck } from "@/lib/phiCheck";
+import type { PhiBlock } from "@/lib/phiGuard";
 import { ruleError } from "@/lib/recurrence";
 import { ensureRecurringTasks, reconcileRecurring } from "@/lib/recurring";
 import type { RecurringDTO, RecurringInput, RecurringPatch } from "@/lib/taskTypes";
@@ -54,10 +56,12 @@ function normalize(input: { frequency: string; weekday: number | null; dayOfMont
   };
 }
 
-export async function createRecurring(input: RecurringInput): Promise<RecurringDTO> {
+export async function createRecurring(input: RecurringInput, confirmNoPhi = false): Promise<RecurringDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
   const title = (input.title ?? "").trim().slice(0, 300);
   if (!title) throw new Error("Enter a title");
+  const blocked = await phiCheck(user, null, [title], confirmNoPhi === true, "recurring");
+  if (blocked) return blocked;
   if (!isISODate(input.startDate)) throw new Error("Enter a real start date");
   if (input.endDate && !isISODate(input.endDate)) throw new Error("Enter a real end date");
   const assigneeId = isAdmin(user) ? input.assigneeId || null : await myEmployeeId(user);
@@ -85,9 +89,13 @@ export async function createRecurring(input: RecurringInput): Promise<RecurringD
   return toDTO(row);
 }
 
-export async function updateRecurring(id: string, patch: RecurringPatch): Promise<RecurringDTO> {
+export async function updateRecurring(id: string, patch: RecurringPatch, confirmNoPhi = false): Promise<RecurringDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
   const existing = await loadMine(user, id);
+  if (patch.title !== undefined && patch.title.trim() !== existing.title) {
+    const blocked = await phiCheck(user, id, [patch.title.trim().slice(0, 300)], confirmNoPhi === true, "recurring");
+    if (blocked) return blocked;
+  }
   const merged = {
     title: patch.title !== undefined ? patch.title.trim().slice(0, 300) : existing.title,
     frequency: patch.frequency ?? existing.frequency,

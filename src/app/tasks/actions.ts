@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { auditDenied, requireAccess, type CurrentUser } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
+import { type PhiBlock } from "@/lib/phiGuard";
+import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
 import { MAX_NOTES, toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
@@ -38,10 +40,13 @@ export async function createTask(input: {
   categoryId?: string | null;
   assigneeId?: string | null;
   inToday?: boolean;
-}): Promise<TaskDTO> {
+  confirmNoPhi?: boolean;
+}): Promise<TaskDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
   const title = (input.title ?? "").trim().slice(0, 300);
   if (!title) throw new Error("Enter a task title");
+  const blocked = await phiCheck(user, null, [title], input.confirmNoPhi === true);
+  if (blocked) return blocked;
 
   // Non-admins create tasks for themselves; the Admin can create for anyone.
   let assigneeId = input.assigneeId || null;
@@ -68,9 +73,15 @@ export async function createTask(input: {
   return toTaskDTO(task);
 }
 
-export async function updateTask(id: string, patch: TaskPatch): Promise<TaskDTO> {
+export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = false): Promise<TaskDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
   const existing = await loadAccessibleTask(user, id);
+  const changedText = [
+    patch.title !== undefined && patch.title.trim() !== existing.title ? patch.title.trim().slice(0, 300) : "",
+    typeof patch.notes === "string" && patch.notes !== existing.notes ? patch.notes : "",
+  ];
+  const blocked = await phiCheck(user, id, changedText, confirmNoPhi === true);
+  if (blocked) return blocked;
   const data: Record<string, unknown> = {};
 
   if (patch.title !== undefined) {
