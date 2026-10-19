@@ -104,7 +104,7 @@ A Mac desktop app for providers. It shows the day's schedule, records a visit af
 | OPS-2 | The app checks for updates from a location the practice controls and installs them with the user's approval. | Should |
 | OPS-3 | First run walks the user through microphone permission, choosing the notes folder, and downloading the approved models. | Must |
 
-## Web app changes this needs (to be specified in the web app's next requirements version)
+## Web app changes this needs (specified in [`SaaS app/specs/requirements-v19.md`](../../SaaS%20app/specs/requirements-v19.md), section 5.7)
 1. **Authenticated desktop API** (the web app has none today; it only has server actions): sign-in token exchange, schedule for a date, provider list, patient consent get/set. Permissions are the same module levels as the web UI.
 2. **Patient link on schedule entries.** Schedule rows hold free-text `clientInfo`, not a patient. The board needs a real patient record (the existing `BillingPatient` has last name, first name, optional MRN). Open: link schedule entries to `BillingPatient`, or add a new patient table.
 3. **Program on the board.** Use the schedule's track name (for example "Track 1 IOP") as the program unless you say otherwise.
