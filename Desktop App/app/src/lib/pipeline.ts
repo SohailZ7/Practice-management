@@ -19,7 +19,7 @@ export const SYSTEM_RULES = [
 ].join("\n");
 
 /** The model sometimes rewords the not-discussed sentence ("Not discussed in recording."). Treat those the same. */
-export const isNotDiscussed = (text: string) => /^\s*(not|none)\b[^.]{0,40}\b(discussed|stated|mentioned|addressed|reported|provided)\b[^.]{0,40}\.?\s*$/i.test(text) || text.trim() === "";
+export const isNotDiscussed = (text: string) => /^\s*no (mention|discussion|information|record)\b[^.]{0,60}\.?\s*$/i.test(text) || /^\s*(not|none)\b[^.]{0,40}\b(discussed|stated|mentioned|addressed|reported|provided|asked)\b[^.]{0,40}\.?\s*$/i.test(text) || text.trim() === "";
 
 export type DraftInput = {
   kind: NoteKind;

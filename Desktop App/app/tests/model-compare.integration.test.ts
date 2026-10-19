@@ -1,11 +1,21 @@
-// Compares local models on one synthetic transcript with known facts. Skipped unless SPIKE_MODELS is set. Example:
-//   SPIKE_MODELS=qwen2.5:7b-instruct,qwen2.5:14b-instruct SPIKE_TRANSCRIPT=t.txt SPIKE_OUT=report.txt npx vitest run tests/model-compare.integration.test.ts
+// Compares local models on the synthetic test set (tests/eval). Needs Ollama; skipped unless SPIKE_MODELS is set. Example:
+//   SPIKE_MODELS=qwen2.5:7b-instruct,qwen2.5:14b-instruct SPIKE_RUNS=2 SPIKE_DIR=/tmp/eval npx vitest run tests/model-compare.integration.test.ts
+// Each (model, case, run) is saved as JSON in SPIKE_DIR, so an interrupted run resumes and the report can be rebuilt.
 import { describe, it } from "vitest";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { draftNote } from "../src/lib/pipeline";
 import type { DraftNote, Llm } from "../src/lib/types";
+import { evalCases } from "./eval/evalCases";
+import { visitCases } from "./eval/visitCases";
+import { scoreCase, summarize, type CaseScore } from "./eval/score";
+import type { Case } from "./eval/types";
 
 const models = (process.env.SPIKE_MODELS ?? "").split(",").filter(Boolean);
+const runs = Number(process.env.SPIKE_RUNS ?? 1);
+const dir = process.env.SPIKE_DIR ?? "/tmp/spike-eval";
+const only = (process.env.SPIKE_CASES ?? "").split(",").filter(Boolean);
+const cases: Case[] = [...evalCases, ...visitCases].filter((c) => !only.length || only.includes(c.id));
 
 const make = (model: string, seed: number): Llm => async ({ system, prompt }) => {
   const r = await fetch("http://127.0.0.1:11434/api/chat", {
@@ -15,70 +25,60 @@ const make = (model: string, seed: number): Llm => async ({ system, prompt }) =>
   return (await r.json()).message.content as string;
 };
 
-const all = (n: DraftNote) => n.sections.flatMap((s) => s.paragraphs.map((p) => ({ section: s.heading.replace(/^\d+\.\s*/, ""), label: p.label ?? "", text: p.text, flag: p.flag })));
-const find = (n: DraftNote, section: RegExp, label?: string) => all(n).filter((p) => section.test(p.section) && (!label || p.label === label));
-const joined = (n: DraftNote, section: RegExp) => find(n, section).map((p) => `${p.label} ${p.text}`).join(" ");
+type Saved = { model: string; caseId: string; run: number; secs: number; draft: DraftNote; score: CaseScore };
+const fileFor = (model: string, caseId: string, run: number) => path.join(dir, `${model.replace(/[^a-z0-9.]+/gi, "_")}__${caseId}__${run}.json`);
 
-// Known facts in the synthetic transcript. Each check returns true when the note is right.
-const CHECKS: [string, (n: DraftNote) => boolean][] = [
-  ["Duration about three months", (n) => /three months|3 months/i.test(joined(n, /History of Present/))],
-  ["Job loss as precipitant, not invented", (n) => /job/i.test(joined(n, /History of Present/))],
-  ["Passive death wish recorded as the patient's, no plan, no attempts", (n) => /wish/i.test(joined(n, /Suicide/)) && /no plan|denies (having )?(a )?plan|without a plan|no (suicidal )?(intent|plan)/i.test(joined(n, /Suicide/))],
-  ["No past hospitalization", (n) => /no\b.*(hospital)|never.*hospital|not.*hospital/i.test(joined(n, /Past Psychiatric/))],
-  ["Family: mother depression (in Family section)", (n) => /mother/i.test(joined(n, /Family History/)) && /depress/i.test(joined(n, /Family History/))],
-  ["Family history not attributed to the patient's own history", (n) => !/mother/i.test(joined(n, /Past Psychiatric|History of Present/))],
-  ["Alcohol stopped a year ago", (n) => /alcohol|drinking/i.test(joined(n, /Substance/)) && /year/i.test(joined(n, /Substance/))],
-  ["Lisinopril 10 mg under medical meds", (n) => /lisinopril/i.test(joined(n, /Medical/)) && /\b10\b|ten/i.test(joined(n, /Medical/))],
-  ["Allergies: none known (or not discussed), nothing invented", (n) => !/(penicillin|sulfa|latex|peanut)/i.test(joined(n, /Medical/))],
-  ["Sertraline 50 mg is the new medication (not 100, not 150)", (n) => /sertraline/i.test(joined(n, /Medication/)) && /\b50\b|fifty/i.test(joined(n, /Medication/)) && !/\b(100|150|25)\b/.test(joined(n, /Medication/))],
-  ["Medication started by the doctor's plan; patient agrees", (n) => /agree|would like to try|consent/i.test(joined(n, /Medication/))],
-  ["No sleeping pill or benzodiazepine started", (n) => !/(started|prescrib|will start)[^.]*(benzodiazepine|sleeping pill|lorazepam|zolpidem)/i.test(all(n).map((p) => p.text).join(" ")) || /not|no\b/i.test(all(n).map((p) => p.text).join(" "))],
-  ["Side effects discussed (nausea, headache)", (n) => /nausea/i.test(joined(n, /Medication/)) && /headache/i.test(joined(n, /Medication/))],
-  ["Therapy-only alternative discussed", (n) => /therap/i.test(joined(n, /Medication/))],
-  ["Follow-up in two weeks", (n) => /two weeks|2 weeks/i.test(joined(n, /Level of Care|Medication|Treatment Plan/))],
-  ["Doctor (not patient) proposes the medication", (n) => !/patient (requests|requested|wants|would like to (start|increase|take))\b[^.]*sertraline/i.test(all(n).map((p) => p.text).join(" "))],
-  ["Diagnosis not stated as a final fact outside the doctor's words", (n) => !/diagnos(ed|is)[^.]*(bipolar|schizo|anxiety disorder)/i.test(all(n).map((p) => p.text).join(" "))],
-  ["No ungrounded values flagged", (n) => all(n).every((p) => p.flag !== "ungrounded")],
-];
-
-const CHECKS_T1: [string, (n: DraftNote) => boolean][] = [
-  ["Sleep: about three hours a night for about two weeks", (n) => /three hours|3 hours/i.test(all(n).map((p) => p.text).join(" ")) && /two weeks|2 weeks/i.test(joined(n, /History of Present/))],
-  ["Missing work recorded", (n) => /work/i.test(joined(n, /History of Present|Personal/))],
-  ["Patient denies suicidal thoughts", (n) => /deni|no\b.*(suicid|thoughts)/i.test(joined(n, /Suicide/))],
-  ["Current sertraline 50 mg recorded as existing", (n) => /sertraline/i.test(joined(n, /Past Psychiatric|Medical|Medication/)) && /\b50\b|fifty/i.test(joined(n, /Past Psychiatric|Medical|Medication/))],
-  ["Increase to 100 mg recorded", (n) => /\b100\b|hundred/i.test(joined(n, /Medication|Treatment Plan/))],
-  ["The DOCTOR proposed the increase (not the patient requesting it), everywhere", (n) => !/patient[^.]{0,40}(request|ask|want|would like|propos|suggest)[^.]{0,40}(increase|100|hundred)/i.test(all(n).map((p) => p.text).join(" "))],
-  ["Follow-up in two weeks", (n) => /two weeks|2 weeks/i.test(joined(n, /Level of Care|Medication|Treatment Plan/))],
-  ["No diagnosis invented", (n) => !/(major depress|bipolar|insomnia disorder|anxiety disorder|mdd)/i.test(all(n).map((p) => p.text).join(" "))],
-  ["No ungrounded values flagged", (n) => all(n).every((p) => p.flag !== "ungrounded")],
-];
+function report(): string {
+  // Scores are recomputed from the saved drafts with the current checks, so fixing a check never needs a new run.
+  const saved: Saved[] = readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(path.join(dir, f), "utf8")) as Saved)
+    .filter((s) => cases.some((c) => c.id === s.caseId))
+    .map((s) => ({ ...s, score: scoreCase(cases.find((c) => c.id === s.caseId)!, s.draft) }));
+  const pct = ([a, b]: [number, number]) => (b ? `${Math.round((100 * a) / b)}% (${a}/${b})` : "n/a");
+  let out = `# Model comparison\n\nCases: ${cases.length}. Runs per case: ${runs}.\n\n`;
+  out += "| Model | Facts found | No wrong statements | No inventions | Critical checks | Unsupported words | Avg time per note |\n|---|---|---|---|---|---|---|\n";
+  const modelNames = [...new Set(saved.map((s) => s.model))];
+  for (const m of modelNames) {
+    const mine = saved.filter((s) => s.model === m);
+    const sum = summarize(mine.map((s) => s.score));
+    const secs = mine.reduce((a, s) => a + s.secs, 0) / mine.length;
+    out += `| ${m} | ${pct(sum.facts)} | ${pct(sum.errors)} | ${pct(sum.inventions)} | ${pct(sum.critical)} | ${(100 * sum.unsupportedRate).toFixed(1)}% | ${Math.round(secs)} s |\n`;
+  }
+  out += "\n## By note type (critical checks passed)\n\n| Model | Evaluation | Follow-up | Discharge |\n|---|---|---|---|\n";
+  for (const m of modelNames) {
+    const cell = (kind: string) => pct(summarize(saved.filter((s) => s.model === m && cases.find((c) => c.id === s.caseId)?.kind === kind).map((s) => s.score)).critical);
+    out += `| ${m} | ${cell("EVAL")} | ${cell("FOLLOW_UP")} | ${cell("DISCHARGE")} |\n`;
+  }
+  out += "\n## Failed checks (count of runs failed / runs)\n";
+  for (const m of modelNames) {
+    out += `\n### ${m}\n`;
+    const fails = new Map<string, { n: number; total: number; critical: boolean; why: string }>();
+    for (const s of saved.filter((x) => x.model === m)) for (const r of s.score.results) {
+      const key = `${s.caseId}/${r.id}`;
+      const e = fails.get(key) ?? { n: 0, total: 0, critical: r.critical, why: r.why };
+      e.total += 1;
+      if (!r.ok) e.n += 1;
+      fails.set(key, e);
+    }
+    for (const [k, e] of fails) if (e.n) out += `- ${e.critical ? "**CRITICAL** " : ""}${k}: ${e.n}/${e.total}  (${e.why})\n`;
+  }
+  return out;
+}
 
 describe.skipIf(models.length === 0)("model comparison", () => {
-  it("runs each model on the same transcript", async () => {
-    const transcript = readFileSync(process.env.SPIKE_TRANSCRIPT!, "utf8").trim();
-    let report = "";
-    const runs = Number(process.env.SPIKE_RUNS ?? 1);
-    const checks = process.env.SPIKE_CHECKS === "t1" ? CHECKS_T1 : CHECKS;
-    for (const model of models) {
-      const fails = new Map<string, number>();
-      let passed = 0;
-      let secsTotal = 0;
-      let last: DraftNote | null = null;
-      for (let run = 0; run < runs; run++) {
-        const t0 = Date.now();
-        const note = await draftNote({ kind: "EVAL", transcript, mode: "recording", visitDate: "2026-10-19", typeLabel: "Psych Eval", providerName: "Dr. Example", patientName: "Testcase, Alpha", llm: make(model, 1000 + run) });
-        secsTotal += (Date.now() - t0) / 1000;
-        for (const [name, fn] of checks) {
-          if (fn(note)) passed += 1;
-          else fails.set(name, (fails.get(name) ?? 0) + 1);
-        }
-        last = note;
-      }
-      report += `\n==== ${model}  avg ${Math.round(secsTotal / runs)}s  checks passed ${passed}/${checks.length * runs} over ${runs} runs\n`;
-      for (const [name, n] of fails) report += `FAILED ${n}/${runs}  ${name}\n`;
-      report += "\n-- Last draft (filled lines only) --\n";
-      for (const p of all(last!)) if (p.flag !== "not_discussed" && p.flag !== "not_assessed") report += `[${p.section}] ${p.label ? p.label + ": " : ""}${p.text}${p.flag ? "  <" + p.flag + ">" : ""}\n`;
+  it("runs every model on every case", async () => {
+    mkdirSync(dir, { recursive: true });
+    for (const model of models) for (const c of cases) for (let run = 0; run < runs; run++) {
+      const file = fileFor(model, c.id, run);
+      if (existsSync(file)) continue;
+      const t0 = Date.now();
+      const draft = await draftNote({
+        kind: c.kind, transcript: c.transcript, mode: "recording", visitDate: "2026-10-19", typeLabel: c.title, providerName: "Dr. Example",
+        patientName: "Testcase, Alpha", priorNote: c.priorNote ? { fileName: "prior.docx", text: c.priorNote } : undefined, llm: make(model, 1000 + run),
+      });
+      const saved: Saved = { model, caseId: c.id, run, secs: (Date.now() - t0) / 1000, draft, score: scoreCase(c, draft) };
+      writeFileSync(file, JSON.stringify(saved));
+      console.log(`${model} ${c.id} run ${run}: ${Math.round(saved.secs)}s`);
     }
-    writeFileSync(process.env.SPIKE_OUT!, report);
-  }, 3_600_000);
+    writeFileSync(path.join(dir, "report.md"), report());
+  }, 24 * 3_600_000);
 });
