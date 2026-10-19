@@ -357,3 +357,4 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .notes-textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color: var(--accent); }
 .notes-footer { display: flex; justify-content: flex-end; align-items: center; gap: .75rem; }
 .notes-done { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px; padding: .4rem 1.1rem; font-weight: 600; cursor: pointer; }
+.idle-dialog { max-width: 460px; }

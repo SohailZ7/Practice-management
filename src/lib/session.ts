@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "./auth";
 import { db } from "./db";
+import { checkSession, sessionPolicy } from "./sessionExpiry";
 import {
   canAccess,
   canOpenAdmin,
@@ -18,12 +19,24 @@ export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email;
   if (!email) return null;
+  // Second line of defence behind middleware: an idle or too-old session is signed out.
+  const verdict = checkSession({ authAt: session.authAt, lastActive: session.lastActive }, Date.now(), sessionPolicy());
+  if (!verdict.ok) return null;
   const user = await db.user.findUnique({
     where: { email: normalizeEmail(email) },
     include: { access: true },
   });
   if (!user || !user.active) return null;
   return user;
+}
+
+/** Idle/absolute deadlines for the browser's countdown. The server enforces them regardless. */
+export async function getSessionTiming() {
+  const session = await getServerSession(authOptions);
+  const policy = sessionPolicy();
+  const verdict = checkSession({ authAt: session?.authAt, lastActive: session?.lastActive }, Date.now(), policy);
+  if (!verdict.ok) return null;
+  return { idleMs: policy.idleMs, absoluteDeadline: verdict.absoluteDeadline, serverNow: Date.now() };
 }
 
 export async function requireUser(): Promise<CurrentUser> {

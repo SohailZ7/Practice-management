@@ -3,6 +3,11 @@ import GoogleProvider from "next-auth/providers/google";
 import { db } from "./db";
 import { audit } from "./audit";
 import { normalizeEmail } from "./access";
+import { sessionPolicy } from "./sessionExpiry";
+import { sessionCookieName, useSecureCookies } from "./sessionCookie";
+
+const policy = sessionPolicy();
+const secure = useSecureCookies();
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,8 +16,16 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
   ],
-  session: { strategy: "jwt", maxAge: 60 * 60 * 8, updateAge: 60 * 15 },
+  // The cookie lives at most the absolute limit. The idle limit is enforced by middleware and getCurrentUser
+  // from the lastActive stamp, which only real requests refresh (see src/middleware.ts).
+  session: { strategy: "jwt", maxAge: Math.floor(policy.maxMs / 1000), updateAge: Math.floor(policy.maxMs / 1000) },
   pages: { signIn: "/login", error: "/login" },
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName(secure),
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure },
+    },
+  },
   callbacks: {
     // AUTH-2: only active users on the allowlist may sign in.
     async signIn({ user, profile }) {
@@ -29,6 +42,24 @@ export const authOptions: NextAuthOptions = {
       }
       await audit(email, "signin.ok");
       return true;
+    },
+    // Keep the token minimal and stamp it at sign-in. Nothing here refreshes lastActive afterwards.
+    async jwt({ token, user }) {
+      if (user) {
+        const now = Date.now();
+        return { email: normalizeEmail(user.email ?? ""), name: user.name ?? undefined, authAt: now, lastActive: now };
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      session.authAt = token.authAt;
+      session.lastActive = token.lastActive;
+      return session;
+    },
+  },
+  events: {
+    async signOut({ token }) {
+      if (token?.email) await audit(token.email, "signout");
     },
   },
 };
