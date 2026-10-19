@@ -6,7 +6,8 @@ import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { makeDedupeKey } from "@/lib/import/outpatientBoard";
-import { toEntryDTO, type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
+import { entryDTO } from "@/lib/patients";
+import { type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
 
 const MAX_TEXT = 500;
 
@@ -57,7 +58,7 @@ export async function createEntry(input: {
   });
   await audit(user.email, "schedule.add", `entry ${entry.id} ${entry.date} ${section}`);
   revalidatePath("/schedule");
-  return toEntryDTO(entry);
+  return entryDTO(entry);
 }
 
 export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryDTO> {
@@ -82,6 +83,8 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
       trackName: section === "TRACK" ? timeLabel : "",
       typeName: patch.typeName !== undefined ? clean(patch.typeName, 120) : existing.typeName,
       clientInfo,
+      // PAT-2: a hand-edited client name no longer matches the linked patient, so the link is dropped.
+      patientId: clientInfo !== existing.clientInfo ? null : existing.patientId,
       providerId: prov.providerId,
       providerName: prov.providerName,
       absent: patch.absent ?? existing.absent,
@@ -99,7 +102,7 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
   });
   await audit(user.email, "schedule.update", `entry ${id} ${existing.date} fields=${Object.keys(patch).join(",")}`);
   revalidatePath("/schedule");
-  return toEntryDTO(updated);
+  return entryDTO(updated);
 }
 
 export async function removeEntry(id: string): Promise<void> {

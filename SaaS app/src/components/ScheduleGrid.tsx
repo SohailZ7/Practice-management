@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { formatShort } from "@/lib/dates";
 import { totals, type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
 import { createEntry, removeEntry, updateEntry } from "@/app/schedule/actions";
+import { PatientLink } from "@/components/PatientLink";
 
 type Opt = { id: string; name: string };
 type Track = { id: string; name: string; startTime: string; endTime: string };
@@ -18,6 +19,8 @@ type Props = {
   types: Opt[];
   canEdit: boolean;
   defaultProviderId: string;
+  today: string;
+  showMrn: boolean;
 };
 
 const SECTION_RANK: Record<Section, number> = { PSYCH_EVAL: 0, TRACK: 1 };
@@ -38,7 +41,7 @@ function rowClass(r: Row) {
 
 let draftCounter = 0;
 
-export function ScheduleGrid({ entries, days, providers, tracks, types, canEdit, defaultProviderId }: Props) {
+export function ScheduleGrid({ entries, days, providers, tracks, types, canEdit, defaultProviderId, today, showMrn }: Props) {
   const [rows, setRows] = useState<Row[]>(() =>
     entries.map((e) => ({ ...e, key: e.id, draft: false })),
   );
@@ -142,6 +145,8 @@ export function ScheduleGrid({ entries, days, providers, tracks, types, canEdit,
         canceled: false,
         completed: false,
         missed: false,
+        patientId: null,
+        consent: "unlinked",
       },
     ]);
   }
@@ -204,6 +209,10 @@ export function ScheduleGrid({ entries, days, providers, tracks, types, canEdit,
                   totalsText={`${t.scheduled} scheduled · ${t.completed} done · ${t.absent} absent · ${t.canceled} canceled · ${t.missed} missed`}
                   providers={providers}
                   canEdit={canEdit}
+                  today={today}
+                  showMrn={showMrn}
+                  onPatch={patchLocal}
+                  onError={(m) => setStatus({ kind: "error", text: m })}
                   onCommit={commit}
                   onRemove={remove}
                   onAdd={addRow}
@@ -223,6 +232,10 @@ function DayBlock({
   totalsText,
   providers,
   canEdit,
+  today,
+  showMrn,
+  onPatch,
+  onError,
   onCommit,
   onRemove,
   onAdd,
@@ -232,6 +245,10 @@ function DayBlock({
   totalsText: string;
   providers: Opt[];
   canEdit: boolean;
+  today: string;
+  showMrn: boolean;
+  onPatch: (key: string, patch: Partial<Row>) => void;
+  onError: (message: string) => void;
   onCommit: (row: Row, patch: EntryPatch) => void;
   onRemove: (row: Row) => void;
   onAdd: (date: string, section: Section) => void;
@@ -268,6 +285,10 @@ function DayBlock({
           row={r}
           providers={providers}
           canEdit={canEdit}
+          today={today}
+          showMrn={showMrn}
+          onPatch={onPatch}
+          onError={onError}
           onCommit={onCommit}
           onRemove={onRemove}
         />
@@ -280,17 +301,26 @@ function EntryRow({
   row,
   providers,
   canEdit,
+  today,
+  showMrn,
+  onPatch,
+  onError,
   onCommit,
   onRemove,
 }: {
   row: Row;
   providers: Opt[];
   canEdit: boolean;
+  today: string;
+  showMrn: boolean;
+  onPatch: (key: string, patch: Partial<Row>) => void;
+  onError: (message: string) => void;
   onCommit: (row: Row, patch: EntryPatch) => void;
   onRemove: (row: Row) => void;
 }) {
   const text = (field: "timeLabel" | "typeName" | "clientInfo", list?: string, placeholder?: string) => (
     <input
+      key={row[field]}
       defaultValue={row[field]}
       list={list}
       placeholder={placeholder}
@@ -309,7 +339,10 @@ function EntryRow({
         <td>{row.section === "TRACK" ? "Track" : "Psych Eval"}</td>
         <td>{row.timeLabel}</td>
         <td>{row.typeName}</td>
-        <td>{row.clientInfo}</td>
+        <td>
+          {row.clientInfo}
+          {row.patientId && <span className="muted small"> · {row.consent === "on_file" ? "Consent on file" : "No consent"}</span>}
+        </td>
         <td>{row.providerName}</td>
         {FLAGS.map((f) => (
           <td key={f.key} className="c">
@@ -334,7 +367,12 @@ function EntryRow({
       </td>
       <td>{text("timeLabel", row.section === "TRACK" ? "track-options" : undefined, row.section === "TRACK" ? "Track" : "e.g. Psych Eval 9:00")}</td>
       <td>{text("typeName", "type-options", "Type")}</td>
-      <td>{text("clientInfo", undefined, row.draft ? "Client name / info…" : undefined)}</td>
+      <td>
+        {text("clientInfo", undefined, row.draft ? "Client name / info…" : undefined)}
+        {!row.draft && (
+          <PatientLink key={`${row.patientId ?? "none"}-${row.consent}`} row={row} today={today} showMrn={showMrn} onChange={(p) => onPatch(row.key, p)} onError={onError} />
+        )}
+      </td>
       <td>
         <select
           value={row.providerId ?? (legacy ? "__legacy" : "")}

@@ -15,6 +15,10 @@ export type EntryDTO = {
   canceled: boolean;
   completed: boolean;
   missed: boolean;
+  /** Linked patient (requirements v19, PAT-1), already resolved past any merge. */
+  patientId: string | null;
+  /** CON-2 badge: no linked patient, no consent, or consent on file. */
+  consent: "unlinked" | "none" | "on_file";
 };
 
 export type EntryPatch = Partial<
@@ -24,7 +28,7 @@ export type EntryPatch = Partial<
   >
 >;
 
-export function toEntryDTO(e: ScheduleEntry): EntryDTO {
+export function toEntryDTO(e: ScheduleEntry, link: { patientId: string | null; consent: EntryDTO["consent"] } = { patientId: e.patientId, consent: e.patientId ? "none" : "unlinked" }): EntryDTO {
   return {
     id: e.id,
     date: e.date,
@@ -38,6 +42,8 @@ export function toEntryDTO(e: ScheduleEntry): EntryDTO {
     canceled: e.canceled,
     completed: e.completed,
     missed: e.missed,
+    patientId: link.patientId,
+    consent: link.consent,
   };
 }
 

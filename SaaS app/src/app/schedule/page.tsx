@@ -15,7 +15,7 @@ import {
   startOfWeek,
   todayISO,
 } from "@/lib/dates";
-import { toEntryDTO } from "@/lib/scheduleTypes";
+import { entryDTOs } from "@/lib/patients";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { MonthGrid } from "@/components/MonthGrid";
 import type { Prisma } from "@prisma/client";
@@ -52,7 +52,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
     db.entryType.findMany({ orderBy: { name: "asc" } }),
     db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
   ]);
-  const entries = rows.map(toEntryDTO);
+  const entries = await entryDTOs(rows);
   // One entry per page load: view, date range, provider filter id and a count. Never client names.
   const providerId = !providerFilter ? "all" : providers.some((p) => p.id === providerFilter) ? providerFilter : "unknown";
   await audit(user.email, "schedule.view", `${view} ${from}..${to} provider=${providerId} entries=${entries.length}`);
@@ -137,6 +137,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
           types={types}
           canEdit={canEdit}
           defaultProviderId={providerFilter}
+          today={today}
+          showMrn={canAccess(user, "billing", "view")}
         />
       )}
     </>
