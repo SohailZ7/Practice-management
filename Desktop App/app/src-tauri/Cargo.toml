@@ -1,0 +1,19 @@
+[package]
+name = "practice-notes"
+version = "0.0.1"
+description = "Practice desktop app (spike)"
+edition = "2021"
+
+[lib]
+name = "practice_notes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# No TLS on purpose: the app only ever talks to Ollama on 127.0.0.1.
+ureq = { version = "2", default-features = false, features = ["json"] }

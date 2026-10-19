@@ -6,7 +6,7 @@ import path from "node:path";
 import { noteFileName, patientFolderName, safePart } from "../src/lib/patientFolder";
 import { noteKindFor, rowAction } from "../src/lib/noteKind";
 import { ungroundedTerms } from "../src/lib/grounding";
-import { buildPrompt, draftNote, flagParas, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
+import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
 import { NOT_DISCUSSED, PLANS } from "../src/lib/sectionMap";
 import { docxText, fillTemplate } from "../src/lib/docxFill";
 import { mockSchedule } from "../src/lib/mockSchedule";
@@ -71,6 +71,18 @@ describe("parseSection", () => {
   });
   it("splits label-less output into paragraphs", () => {
     expect(parseSection("One.\n\nTwo.", []).map((p) => p.text)).toEqual(["One.", "Two."]);
+  });
+  it("treats reworded not-discussed lines the same, and drops a stray one next to real content", () => {
+    expect(isNotDiscussed("Not discussed in recording.")).toBe(true);
+    expect(isNotDiscussed("Not stated.")).toBe(true);
+    expect(isNotDiscussed("Not discussed in this recording.")).toBe(true);
+    expect(isNotDiscussed("Patient did not discuss anything unusual.")).toBe(false);
+    expect(parseSection("Real content.\n\nNot discussed in this recording.", []).map((p) => p.text)).toEqual(["Real content."]);
+    expect(parseSection("Not discussed in recording.", labels)[0].text).toBe(NOT_DISCUSSED);
+  });
+  it("tells the model to attribute statements to the right speaker", () => {
+    expect(SYSTEM_RULES).toMatch(/Attribute each statement/);
+    expect(SYSTEM_RULES).toMatch(/Never say the patient requested/);
   });
   it("flags not-discussed and ungrounded lines", () => {
     const flagged = flagParas([{ label: "a", text: NOT_DISCUSSED }, { label: "b", text: "Takes 300 mg" }, { label: "c", text: "Slept poorly" }], "slept poorly");

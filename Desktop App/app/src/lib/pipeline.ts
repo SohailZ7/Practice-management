@@ -9,9 +9,15 @@ export const SYSTEM_RULES = [
   "Write in the third person, for example \"The patient reports ...\". Never write \"I\".",
   "Use ONLY facts stated in the TRANSCRIPT or the PRIOR NOTE. Never guess, infer, or add medical knowledge.",
   "Never state a medication, dose, diagnosis, date, number or risk level unless it appears in the sources.",
+  "Attribute each statement to the person who said it. The transcript may not label speakers. Questions and proposals usually come from the doctor; reports about the patient's own life come from the patient.",
+  "Never say the patient requested, wanted or agreed to something, or that the provider agreed to it, unless the transcript says so. If you cannot tell who said it, write it without attributing, for example \"It was discussed that ...\".",
+  "Do not explain causes, and do not add reasons the speaker did not give.",
   `If something was not stated, write exactly: ${NOT_DISCUSSED}`,
   "Do not give advice, do not add headings, do not use markdown.",
 ].join("\n");
+
+/** The model sometimes rewords the not-discussed sentence ("Not discussed in recording."). Treat those the same. */
+export const isNotDiscussed = (text: string) => /^\s*(not|none)\b[^.]{0,40}\b(discussed|stated|mentioned|addressed|reported|provided)\b[^.]{0,40}\.?\s*$/i.test(text) || text.trim() === "";
 
 export type DraftInput = {
   kind: NoteKind;
@@ -44,7 +50,10 @@ export function buildPrompt(input: DraftInput, spec: SectionSpec, headingTitle: 
 export function parseSection(output: string, labels: string[]): Para[] {
   const text = output.replace(/\*\*/g, "").replace(/\r/g, "").trim();
   if (!labels.length) {
-    return text.split(/\n\s*\n|\n(?=[-•]\s)/).map((p) => p.replace(/^[-•]\s*/, "").trim()).filter(Boolean).map((p) => ({ text: p }));
+    const paras = text.split(/\n\s*\n|\n(?=[-•]\s)/).map((p) => p.replace(/^[-•]\s*/, "").trim()).filter(Boolean);
+    // A trailing "not discussed" next to real content is noise; keep it only when it is all there is.
+    const real = paras.filter((p) => !isNotDiscussed(p));
+    return (real.length ? real : paras.slice(0, 1)).map((p) => ({ text: p }));
   }
   const lines = text.split("\n");
   const byLabel = new Map<string, string>();
@@ -59,13 +68,16 @@ export function parseSection(output: string, labels: string[]): Para[] {
       byLabel.set(current, `${byLabel.get(current) ?? ""} ${line}`.trim());
     }
   }
-  return labels.map((label) => ({ label, text: byLabel.get(label) || NOT_DISCUSSED }));
+  return labels.map((label) => {
+    const t = byLabel.get(label) ?? "";
+    return { label, text: isNotDiscussed(t) ? NOT_DISCUSSED : t };
+  });
 }
 
 /** Marks not-discussed lines and values that cannot be traced to the sources (NOT-5, NOT-9). */
 export function flagParas(paras: Para[], source: string): Para[] {
   return paras.map((p) => {
-    if (p.text.trim() === NOT_DISCUSSED || p.text.trim() === "") return { ...p, text: NOT_DISCUSSED, flag: "not_discussed" as const };
+    if (isNotDiscussed(p.text)) return { ...p, text: NOT_DISCUSSED, flag: "not_discussed" as const };
     const bad = ungroundedTerms(p.text, source);
     return bad.length ? { ...p, flag: "ungrounded" as const, text: p.text } : p;
   });
