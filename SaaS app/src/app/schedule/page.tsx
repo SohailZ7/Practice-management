@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
+import { audit } from "@/lib/audit";
 import { canAccess } from "@/lib/access";
 import {
   addDays,
@@ -52,6 +53,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
     db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
   ]);
   const entries = rows.map(toEntryDTO);
+  // One entry per page load: view, date range, provider filter id and a count. Never client names.
+  const providerId = !providerFilter ? "all" : providers.some((p) => p.id === providerFilter) ? providerFilter : "unknown";
+  await audit(user.email, "schedule.view", `${view} ${from}..${to} provider=${providerId} entries=${entries.length}`);
 
   const href = (d: string, v: View = view) => {
     const q = new URLSearchParams({ date: d, view: v });

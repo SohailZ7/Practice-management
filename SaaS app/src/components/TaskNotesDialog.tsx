@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MAX_NOTES } from "@/lib/taskTypes";
+import { PHI_WARNING } from "@/lib/phiGuard";
 
 /**
  * A popup for a task's notes (ported from the Todo App). Closing it, by Done, the ×, Esc or a click
@@ -47,6 +48,7 @@ export function TaskNotesDialog({
             ×
           </button>
         </div>
+        {!readOnly && <div className="phi-hint small muted">{PHI_WARNING}</div>}
         <textarea
           className="notes-textarea"
           autoFocus

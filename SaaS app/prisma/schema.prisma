@@ -16,6 +16,7 @@ model User {
   active    Boolean        @default(true)
   theme     String         @default("system")
   createdAt DateTime       @default(now())
+  lastLoginAt DateTime?
   access    ModuleAccess[]
   taskViewers TaskViewer[]
 }
@@ -148,6 +149,9 @@ model AuditLog {
   action     String
   detail     String   @default("")
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorEmail])
 }
 
 model ImportLog {

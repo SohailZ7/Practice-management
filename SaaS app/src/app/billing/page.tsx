@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
+import { audit } from "@/lib/audit";
 import { canAccess } from "@/lib/access";
 import { defaultEncounterFilters, queryEncounters } from "@/lib/billing/queries";
 import { isAdmin } from "@/lib/billing/rules";
@@ -15,6 +16,7 @@ export default async function BillingHome() {
       ? db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })
       : Promise.resolve([]),
   ]);
+  await audit(user.email, "billing.encounters.list", `${rows.length} row(s) (page load)`);
   return (
     <EncounterList
       initialRows={rows}

@@ -4,7 +4,7 @@
 //
 // Tasks already present (same title, category and assignee) are skipped, so it is safe to re-run.
 import { readFileSync } from "node:fs";
-import { PrismaClient } from "@prisma/client";
+import { createDb } from "../src/lib/db";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "../src/lib/links";
 
 type TodoState = {
@@ -36,7 +36,7 @@ async function main() {
     process.exit(1);
   }
 
-  const db = new PrismaClient();
+  const db = createDb();
   try {
     const state = JSON.parse(readFileSync(file, "utf8")) as TodoState;
     const source = state.categories.find((c) => c.name === categoryName);

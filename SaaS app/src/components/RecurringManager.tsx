@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { createRecurring, deleteRecurring, updateRecurring } from "@/app/tasks/recurring-actions";
+import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
+import { PhiConfirm } from "./PhiConfirm";
 import { describeRule, nextOccurrenceAfter, WEEKDAYS } from "@/lib/recurrence";
 import { formatShort } from "@/lib/dates";
 import type { RecurringDTO, RecurringPatch } from "@/lib/taskTypes";
@@ -40,24 +42,33 @@ export function RecurringManager({
   const [ends, setEnds] = useState(false);
   const [endDate, setEnd] = useState("");
   const [busy, setBusy] = useState(false);
+  const [phiPrompt, setPhiPrompt] = useState<{ message: string; retry: () => void } | null>(null);
 
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : "Something went wrong");
   const nameOf = (id: string | null) => employees.find((e) => e.id === id)?.name ?? "Unassigned";
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
+  async function add(e: React.FormEvent | null, confirmNoPhi = false) {
+    e?.preventDefault();
     setError("");
+    setPhiPrompt(null);
     setBusy(true);
     try {
-      const dto = await createRecurring({
-        title,
-        assigneeId: assigneeId || null,
-        frequency,
-        weekday: frequency === "WEEKLY" ? weekday : null,
-        dayOfMonth: frequency === "MONTHLY" ? dayOfMonth : null,
-        startDate,
-        endDate: ends ? endDate || null : null,
-      });
+      const dto = await createRecurring(
+        {
+          title,
+          assigneeId: assigneeId || null,
+          frequency,
+          weekday: frequency === "WEEKLY" ? weekday : null,
+          dayOfMonth: frequency === "MONTHLY" ? dayOfMonth : null,
+          startDate,
+          endDate: ends ? endDate || null : null,
+        },
+        confirmNoPhi,
+      );
+      if (isPhiBlock(dto)) {
+        setPhiPrompt({ message: dto.message, retry: () => void add(null, true) });
+        return;
+      }
       setRows((rs) => [...rs, dto]);
       setTitle("");
     } catch (err) {
@@ -67,12 +78,18 @@ export function RecurringManager({
     }
   }
 
-  async function patch(row: RecurringDTO, p: RecurringPatch) {
+  async function patch(row: RecurringDTO, p: RecurringPatch, confirmNoPhi = false) {
     const snapshot = rows;
     setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, ...p } : r)));
     setError("");
+    setPhiPrompt(null);
     try {
-      const dto = await updateRecurring(row.id, p);
+      const dto = await updateRecurring(row.id, p, confirmNoPhi);
+      if (isPhiBlock(dto)) {
+        setRows(snapshot);
+        setPhiPrompt({ message: dto.message, retry: () => void patch(row, p, true) });
+        return;
+      }
       setRows((rs) => rs.map((r) => (r.id === row.id ? dto : r)));
     } catch (err) {
       setRows(snapshot);
@@ -95,9 +112,21 @@ export function RecurringManager({
   return (
     <div>
       {error && <div className="error">{error}</div>}
+      {phiPrompt && (
+        <PhiConfirm
+          message={phiPrompt.message}
+          onCancel={() => setPhiPrompt(null)}
+          onConfirm={() => {
+            const retry = phiPrompt.retry;
+            setPhiPrompt(null);
+            retry();
+          }}
+        />
+      )}
 
-      <form className="card recurring-form" onSubmit={add}>
+      <form className="card recurring-form" onSubmit={(e) => void add(e)}>
         <strong>New recurring task</strong>
+        <div className="phi-hint small muted">{PHI_WARNING}</div>
         <div className="row" style={{ marginTop: ".5rem" }}>
           <input className="grow" placeholder="What repeats? e.g. Submit weekly billing" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
           {isAdmin && (

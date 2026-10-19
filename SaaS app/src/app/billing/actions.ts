@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireAccess, requireAdmin } from "@/lib/session";
+import { auditDenied, requireAccess, requireAdmin } from "@/lib/session";
 import { recordHistory } from "@/lib/billing/history";
 import { canChangeEncounter, getixBlocker } from "@/lib/billing/rules";
 import { patientScope, patientSearch } from "@/lib/billing/scope";
@@ -43,6 +43,7 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
     const existing = await db.encounter.findUnique({ where: { id: input.encounterId } });
     if (!existing) return fail({ form: "Encounter not found." });
     if (!canChangeEncounter(user, existing)) {
+      await auditDenied(user.email, `edit encounter ${existing.id}`);
       return fail({ form: "This encounter can't be changed (not yours, locked in GetIX, or deleted)." });
     }
     const { values, errors } = validateEncounter(input, await allowedPrograms(existing.programId));
@@ -149,7 +150,10 @@ export async function deleteEncounter(id: string): Promise<{ error?: string }> {
   const user = await requireAccess("billing", "edit");
   const existing = await db.encounter.findUnique({ where: { id } });
   if (!existing) return { error: "Encounter not found." };
-  if (!canChangeEncounter(user, existing)) return { error: "This encounter can't be deleted (not yours, locked in GetIX, or already deleted)." };
+  if (!canChangeEncounter(user, existing)) {
+    await auditDenied(user.email, `delete encounter ${id}`);
+    return { error: "This encounter can't be deleted (not yours, locked in GetIX, or already deleted)." };
+  }
   await db.$transaction(async (tx) => {
     await recordHistory(tx, "encounter", id, "delete", existing, user.id);
     await tx.encounter.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
@@ -209,6 +213,7 @@ export async function searchPatients(q: string): Promise<PatientHit[]> {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     take: 15,
   });
+  await audit(user.email, "billing.patients.search", `${rows.length} result(s)`);
   return rows.map((p) => ({ id: p.id, mrn: p.mrn, name: `${p.lastName}, ${p.firstName}` }));
 }
 
@@ -331,14 +336,24 @@ export async function setProgramActive(id: string, active: boolean): Promise<{ e
 }
 
 
+/** Counts and which filters were used, never the search text (it can be a patient name). */
+function listDetail(count: number, filters: object): string {
+  const used = Object.entries(filters).filter(([, v]) => v !== "" && v !== "all" && v !== "any").map(([k]) => k);
+  return `${count} row(s)${used.length ? ` filters=${used.join(",")}` : ""}`;
+}
+
 // ---------------- Lists (filters never go in the URL, so patient names stay out of it) ----------------
 
 export async function listEncounters(filters: EncounterFilters): Promise<EncounterRow[]> {
   const user = await requireAccess("billing", "view");
-  return queryEncounters(user, filters);
+  const rows = await queryEncounters(user, filters);
+  await audit(user.email, "billing.encounters.list", listDetail(rows.length, filters));
+  return rows;
 }
 
 export async function listPatients(filters: PatientFilters): Promise<PatientRow[]> {
   const user = await requireAccess("billing", "view");
-  return queryPatients(user, filters);
+  const rows = await queryPatients(user, filters);
+  await audit(user.email, "billing.patients.list", listDetail(rows.length, filters));
+  return rows;
 }

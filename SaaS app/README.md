@@ -1,7 +1,7 @@
 # Practice Management
 
 Web app for the practice: **Access** (Google sign-in + per-module permissions), **Schedule**, **Tasks**, **Employees**, **Billing**, **Ledger**.
-Requirements: the latest file in [specs/](specs/) (currently [requirements-v18.md](specs/requirements-v18.md)); older versions are kept.
+Requirements: the latest file in [specs/](specs/) (currently [requirements-v19.md](specs/requirements-v19.md)); older versions are kept.
 Each user can choose Light, Dark or System under **Settings**.
 
 Stack: Next.js 14 (App Router, TypeScript), Prisma + PostgreSQL, Auth.js (NextAuth v4) with Google, exceljs for imports.
@@ -17,6 +17,7 @@ All commands below run inside this folder (`SaaS app/`).
    ```bash
    cp .env.example .env
    openssl rand -base64 32   # paste as NEXTAUTH_SECRET
+   npm run phi:generate-key  # paste as PHI_ENCRYPTION_KEY (field-level encryption; required in production)
    ```
 3. Install, create tables, seed, run:
    ```bash
@@ -25,7 +26,8 @@ All commands below run inside this folder (`SaaS app/`).
    npm run dev
    ```
    Open http://localhost:3000. `npm run setup` seeds Sohail (Admin), Dr Khalid, Razak Ahmed and Muntaha,
-   the default tracks/entry types, and a "B & BC" task category.
+   the default tracks/entry types, and a "B & BC" task category. It also installs the append-only audit-log
+   triggers (`npm run db:harden`).
 
 ### Google OAuth client
 Google Cloud Console → APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.
@@ -89,3 +91,17 @@ Uploads are limited to 30 MB by the app (Cloud Run's request limit is 32 MB).
 - Client names and Zoom passwords are sensitive. The app requires sign-in everywhere and only shows NPI/Zoom
   details to people with edit access to Schedule. HIPAA obligations are an open question in the spec.
 - Task changes by other people show on page refresh (no live sync).
+
+## Security and HIPAA
+
+The app holds patient information, so it implements technical safeguards: automatic logoff (15 min idle, 12 h
+maximum), an audit log of every PHI access that is append-only in the database, security headers and a strict
+Content-Security-Policy, rate limits, field-level AES-256-GCM encryption of the most sensitive free-text fields, a guard
+against patient details in Tasks, and an Admin access review (**Access, then Access review**).
+
+Software cannot make an organization HIPAA compliant. What the app does, and everything that is still the
+organization's job (Google Cloud BAA, Cloud SQL setup, two-step verification, policies, training, risk assessment,
+retention), is in [docs/hipaa-readiness.md](docs/hipaa-readiness.md). It is not legal advice.
+
+Useful commands: `npm run db:harden` (audit-log triggers, repeatable), `npm run db:encrypt-phi -- --database <name>`
+(encrypt existing rows), `npm run verify:audit`, `npm run verify:phi -- --database <scratch db>`.

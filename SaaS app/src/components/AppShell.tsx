@@ -17,12 +17,14 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 import { Icon, Logo, type IconName } from "./Icons";
+import { IdleLogoff } from "./IdleLogoff";
 
 type Props = {
   name: string;
   email: string;
   levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string };
   isAdmin: boolean;
+  timing: { idleMs: number; absoluteDeadline: number; serverNow: number } | null;
   children: ReactNode;
 };
 
@@ -36,7 +38,7 @@ const MIN_WIDTH = 200;
 const maxWidth = () => Math.max(MIN_WIDTH, Math.floor(window.innerWidth / 3));
 const clamp = (w: number) => Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(w)));
 
-export function AppShell({ name, email, levels, isAdmin, children }: Props) {
+export function AppShell({ name, email, levels, isAdmin, timing, children }: Props) {
   const path = usePathname();
   const [pinned, setPinned] = useState(true);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -142,6 +144,7 @@ export function AppShell({ name, email, levels, isAdmin, children }: Props) {
       className={`shell ${pinned ? "pinned" : "rail"} ${resizing ? "resizing" : ""}`}
       style={{ "--side-w": `${width}px` } as CSSProperties}
     >
+      {timing && <IdleLogoff {...timing} />}
       <div className="side-slot" />
       <aside className="side" aria-label="Main navigation">
         <div className="brand-row">

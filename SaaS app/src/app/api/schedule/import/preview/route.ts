@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
+import { logError } from "@/lib/safeLog";
+import { rejectCrossOrigin } from "@/lib/security/origin";
 import { db } from "@/lib/db";
 import { readGrid } from "@/lib/import/workbook";
 import { parseOutpatientBoard } from "@/lib/import/outpatientBoard";
-import { buildPreview } from "@/lib/import/service";
+import { buildPreview, purgeStaleDrafts } from "@/lib/import/service";
+import { audit, clip } from "@/lib/audit";
 import { readUpload, requireImportUser } from "@/lib/import/api";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const cross = rejectCrossOrigin(req);
+  if (cross) return cross;
   const auth = await requireImportUser();
   if ("error" in auth) return auth.error;
   const upload = await readUpload(req);
@@ -28,10 +33,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Drop old drafts so uploaded client data is not kept around.
-    await db.importDraft.deleteMany({
-      where: { createdAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
-    });
+    await purgeStaleDrafts();
     const draft = await db.importDraft.create({
       data: {
         userEmail: auth.user.email,
@@ -41,9 +43,14 @@ export async function POST(req: Request) {
       },
     });
     const preview = await buildPreview(parsed);
+    await audit(
+      auth.user.email,
+      "import.preview",
+      `${clip(upload.file.name)} / ${clip(sheet, 60)}: ${preview.counts.new} new, ${preview.counts.duplicates} duplicates, ${preview.counts.skipped} skipped, draft ${draft.id}`,
+    );
     return NextResponse.json({ draftId: draft.id, ...preview });
   } catch (err) {
-    console.error("import preview failed", err);
+    logError("import preview failed", err);
     return NextResponse.json({ error: "Could not read that sheet" }, { status: 400 });
   }
 }
