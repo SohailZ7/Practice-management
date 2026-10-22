@@ -315,6 +315,10 @@ describe("splitTasks (Past due / Today / Backlog / Completed)", () => {
     expect(r.today).toEqual([]);
     expect(r.backlog).toEqual([]);
   });
+  it("keeps Past due in the dragged order, falling back to most overdue first (TSK-18)", () => {
+    const r = splitTasks([t("old", { dueDate: "2026-10-01", sortOrder: 5 }), t("recent", { dueDate: "2026-10-16", sortOrder: 2 })], today);
+    expect(ids(r.pastDue)).toEqual(["recent", "old"]);
+  });
   it("shows tasks due today, or flagged for Today, in Today", () => {
     const r = splitTasks([t("due", { dueDate: today }), t("flag", { inToday: true }), t("later", { dueDate: "2026-10-30" })], today);
     expect(ids(r.today)).toEqual(["due", "flag"]);

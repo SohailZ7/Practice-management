@@ -66,7 +66,7 @@ export const isExpired = (t: { completed: boolean; expiresAt: string | null }, t
 /**
  * Splits tasks into the board's sections.
  * - Expired: open, expiration date before today (out of the queue, kept visible and restorable).
- * - Past due: open, due date before today (most overdue first).
+ * - Past due: open, due date before today, in the manual (drag) order, then most overdue first.
  * - Today: open, due today or flagged for Today.
  * - Backlog: every other open task.
  * - Completed: done tasks.
@@ -79,7 +79,7 @@ export function splitTasks<
   const open = tasks.filter((t) => !t.completed && !expiredIds.has(t.id));
   const pastDue = open
     .filter((t) => t.dueDate !== null && t.dueDate < today)
-    .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : a.sortOrder - b.sortOrder));
+    .sort((a, b) => a.sortOrder - b.sortOrder || (a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : 0));
   const past = new Set(pastDue.map((t) => t.id));
   const rest = open.filter((t) => !past.has(t.id));
   const todayList = rest.filter((t) => t.inToday || t.dueDate === today);

@@ -254,7 +254,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         <TaskAnalytics tasks={tasks} categories={categories} />
       ) : (
         <>
-          <Section id={PAST} name="Past due" urgent sortable={false} tasks={pastDue} emptyText="Nothing past due." {...sectionProps} />
+          <Section id={PAST} name="Past due" urgent tasks={pastDue} emptyText="Nothing past due." {...sectionProps} />
           <Section
             id={TODAY}
             name="Today"
@@ -316,7 +316,7 @@ function Section({
   emptyText?: string;
   /** Expired styling: dimmed, out of the queue. */
   muted?: boolean;
-  /** False when the order is fixed (Past due is sorted by due date). */
+  /** False when the order is fixed (Expired). */
   sortable?: boolean;
   sensors: ReturnType<typeof useSensors>;
   canEdit: boolean;
