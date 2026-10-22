@@ -60,7 +60,9 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
             </div>
           )}
           <TaskBoard
-            key={selected ?? UNASSIGNED}
+            // A sync changes tasks on the server; remounting on its timestamp makes the board pick them up (it only reads
+            // its props on mount, so a plain refresh left stale tasks on screen).
+            key={`${selected ?? UNASSIGNED}-${lastSync?.getTime() ?? 0}`}
             initialTasks={tasks.map(toTaskDTO)}
             categories={categories.map((c) => ({ id: c.id, name: c.name }))}
             employees={employees.map((e) => ({ id: e.id, name: e.name }))}
