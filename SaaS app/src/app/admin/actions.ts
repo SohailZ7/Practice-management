@@ -72,7 +72,7 @@ export async function setAccess(form: FormData) {
   const admin = await requireAdmin();
   const id = str(form, "id");
   const target = await db.user.findUnique({ where: { id } });
-  if (!target) flash(BACK, "error", "User not found.");
+  if (!target) flash("/admin/access", "error", "User not found.");
 
   const changes: string[] = [];
   for (const module of MODULES) {
@@ -86,8 +86,8 @@ export async function setAccess(form: FormData) {
     changes.push(`${module}=${level}`);
   }
   await audit(admin.email, "access.set", `${target!.email}: ${changes.join(", ")}`);
-  revalidatePath(BACK);
-  flash(BACK, "notice", `Saved access for ${target!.email}.`);
+  revalidatePath("/admin/access");
+  flash("/admin/access", "notice", `Saved access for ${target!.email}.`);
 }
 
 /** TSK-59: for each employee tab, sets what this user can do there: none, view (read-only) or edit. */
@@ -95,7 +95,7 @@ export async function setTaskViewers(form: FormData) {
   const admin = await requireAdmin();
   const userId = str(form, "id");
   const target = await db.user.findUnique({ where: { id: userId } });
-  if (!target) flash(BACK, "error", "User not found.");
+  if (!target) flash("/admin/task-access", "error", "User not found.");
   const own = await db.employee.findUnique({ where: { email: target!.email }, select: { id: true } });
   const tabs = await db.employee.findMany({ where: { active: true, taskTab: true }, select: { id: true } });
 
@@ -108,8 +108,8 @@ export async function setTaskViewers(form: FormData) {
   await db.$transaction([db.taskViewer.deleteMany({ where: { userId } }), db.taskViewer.createMany({ data: rows })]);
   const edits = rows.filter((r) => r.level === "edit").length;
   await audit(admin.email, "taskviewers.set", `${target!.email}: ${rows.length - edits} view, ${edits} edit`);
-  revalidatePath(BACK);
-  flash(BACK, "notice", `Saved which task tabs ${target!.email} can view and edit.`);
+  revalidatePath("/admin/task-access");
+  flash("/admin/task-access", "notice", `Saved which task tabs ${target!.email} can view and edit.`);
 }
 
 /** TSK-58: shows an employee as a tab under Tasks, creating the employee first when a new name is given. */
@@ -119,20 +119,20 @@ export async function addTaskTab(form: FormData) {
   const name = str(form, "name");
   if (existingId) {
     const e = await db.employee.findUnique({ where: { id: existingId } });
-    if (!e) flash(BACK, "error", "Employee not found.");
+    if (!e) flash("/admin/task-tabs", "error", "Employee not found.");
     await db.employee.update({ where: { id: existingId }, data: { taskTab: true, active: true } });
     await audit(admin.email, "tasktab.add", `employee ${existingId}`);
-    revalidatePath(BACK);
-    flash(BACK, "notice", `${e!.name} now has a task tab.`);
+    revalidatePath("/admin/task-tabs");
+    flash("/admin/task-tabs", "notice", `${e!.name} now has a task tab.`);
   }
-  if (!name) flash(BACK, "error", "Choose an employee or enter a name for the new tab.");
+  if (!name) flash("/admin/task-tabs", "error", "Choose an employee or enter a name for the new tab.");
   const email = normalizeEmail(str(form, "email"));
-  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) flash(BACK, "error", "Enter a valid email address or leave it blank.");
-  if (email && (await db.employee.findUnique({ where: { email } }))) flash(BACK, "error", "An employee with that email already exists: pick them from the list.");
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) flash("/admin/task-tabs", "error", "Enter a valid email address or leave it blank.");
+  if (email && (await db.employee.findUnique({ where: { email } }))) flash("/admin/task-tabs", "error", "An employee with that email already exists: pick them from the list.");
   const created = await db.employee.create({ data: { name, email: email || null, taskTab: true } });
   await audit(admin.email, "tasktab.add", `new employee ${created.id}`);
-  revalidatePath(BACK);
-  flash(BACK, "notice", `Added a task tab for ${name}.`);
+  revalidatePath("/admin/task-tabs");
+  flash("/admin/task-tabs", "notice", `Added a task tab for ${name}.`);
 }
 
 /**
@@ -143,7 +143,7 @@ export async function removeTaskTab(form: FormData) {
   const admin = await requireAdmin();
   const id = str(form, "employeeId");
   const e = await db.employee.findUnique({ where: { id } });
-  if (!e) flash(BACK, "error", "Employee not found.");
+  if (!e) flash("/admin/task-tabs", "error", "Employee not found.");
   const open = await db.task.findMany({ where: { assigneeId: id, completed: false }, select: { id: true } });
   await db.$transaction([
     db.task.updateMany({ where: { id: { in: open.map((t) => t.id) } }, data: { assigneeId: null } }),
@@ -153,8 +153,28 @@ export async function removeTaskTab(form: FormData) {
     db.employee.update({ where: { id }, data: { taskTab: false } }),
   ]);
   await audit(admin.email, "tasktab.remove", `employee ${id}: ${open.length} open task(s) moved to Unassigned`);
+  revalidatePath("/admin/task-tabs");
+  flash("/admin/task-tabs", "notice", `Removed ${e!.name}'s tab. ${open.length} open task(s) moved to Unassigned.`);
+}
+
+/**
+ * Deletes a login. Their module access, task-tab grants and Mac app sessions go with it; their employee record
+ * and tasks stay, and past audit entries keep the email. You can't delete yourself or the last administrator.
+ * Deactivating (updateUser) is the reversible alternative.
+ */
+export async function deleteUser(form: FormData) {
+  const admin = await requireAdmin();
+  const id = str(form, "id");
+  const target = await db.user.findUnique({ where: { id } });
+  if (!target) flash(BACK, "error", "User not found.");
+  if (target!.id === admin.id) flash(BACK, "error", "You can't delete your own login.");
+  if (wouldRemoveLastAdmin(await activeAdminIds(), id, { role: "STAFF", active: false })) {
+    flash(BACK, "error", "There must always be at least one active administrator.");
+  }
+  await db.user.delete({ where: { id } });
+  await audit(admin.email, "user.delete", `${target!.email} (${target!.role})`);
   revalidatePath(BACK);
-  flash(BACK, "notice", `Removed ${e!.name}'s tab. ${open.length} open task(s) moved to Unassigned.`);
+  flash(BACK, "notice", `Deleted the login for ${target!.email}. Their employee record and tasks were kept.`);
 }
 
 /** API-9: the Admin can end every Desktop App session of a user. */

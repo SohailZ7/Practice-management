@@ -54,7 +54,7 @@ export default async function AccessReviewPage({ searchParams }: { searchParams:
       <p>
         <Link href="/admin">← Access</Link>
       </p>
-      <h1>Access review</h1>
+      <h2>Access review</h2>
       <p className="muted">
         Review who can sign in and what they can open. A <strong>quarterly review</strong> is recommended: confirm every
         person is still on the team, remove access that is no longer needed, and check the admin count. Record the date you
