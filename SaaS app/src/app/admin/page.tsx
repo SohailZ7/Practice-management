@@ -15,27 +15,33 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
   return (
     <>
       <Banner error={searchParams.error} notice={searchParams.notice} />
-      <p className="muted">Only people listed here can sign in (with their Google account). Add a login, change a role, deactivate (reversible) or delete it.</p>
+      <p className="muted">Only people listed here can sign in (with their Google account). Add a login, edit a name, email or role, deactivate (reversible) or delete it.</p>
       <h2>Users</h2>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Active</th>
+              <th>User</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.name}</td>
-                <td>{u.email}</td>
-                <td colSpan={3}>
+                <td colSpan={2}>
                   <form action={updateUser} className="row">
                     <input type="hidden" name="id" value={u.id} />
+                    <input name="name" defaultValue={u.name} required aria-label={`Name of ${u.email}`} className="grow" />
+                    <input
+                      name="email"
+                      type="email"
+                      defaultValue={u.email}
+                      required
+                      readOnly={u.id === me.id}
+                      title={u.id === me.id ? "You can't change the email of your own login" : "The Google account they sign in with"}
+                      aria-label={`Email of ${u.name}`}
+                      className="grow"
+                    />
                     <select name="role" defaultValue={u.role}>
                       {ROLES.map((r) => (
                         <option key={r} value={r}>

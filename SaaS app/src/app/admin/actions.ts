@@ -57,15 +57,36 @@ export async function updateUser(form: FormData) {
   if (!target) flash(BACK, "error", "User not found.");
   if (!isRole(role)) flash(BACK, "error", "Unknown role.");
 
+  // Name and email are editable too. The email is what they sign in with (Google), so it can't be changed on your
+  // own login (you would lock yourself out), and it must stay unique among users and employees.
+  const name = str(form, "name") || target!.name;
+  const email = normalizeEmail(str(form, "email") || target!.email);
+  const emailChanged = email !== target!.email;
+  if (emailChanged) {
+    if (id === admin.id) flash(BACK, "error", "You can't change the email of your own login.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) flash(BACK, "error", "Enter a valid email address.");
+    if (await db.user.findUnique({ where: { email } })) flash(BACK, "error", "That email is already a user.");
+  }
+  const employee = await db.employee.findUnique({ where: { email: target!.email } });
+  if (emailChanged && employee && (await db.employee.findUnique({ where: { email } }))) {
+    flash(BACK, "error", "An employee record already uses that email.");
+  }
+
   if (wouldRemoveLastAdmin(await activeAdminIds(), id, { role, active })) {
     flash(BACK, "error", "There must always be at least one active administrator.");
   }
-  await db.user.update({ where: { id }, data: { role, active } });
-  // API-9: deactivating a user ends their Desktop App sessions at once.
-  if (!active) await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
-  await audit(admin.email, "user.update", `${target!.email}: role=${role} active=${active}`);
+  await db.user.update({ where: { id }, data: { role, active, name, email } });
+  // Keep the linked employee record (their task list) in step with the login.
+  if (employee) await db.employee.update({ where: { id: employee.id }, data: { name, email } });
+  // API-9: deactivating a user, or changing their email, ends their Desktop App sessions at once.
+  if (!active || emailChanged) await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+  await audit(
+    admin.email,
+    "user.update",
+    `${target!.email}: role=${role} active=${active}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
+  );
   revalidatePath(BACK);
-  flash(BACK, "notice", `Updated ${target!.email}.`);
+  flash(BACK, "notice", `Updated ${email}.`);
 }
 
 export async function setAccess(form: FormData) {
