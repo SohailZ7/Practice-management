@@ -111,7 +111,8 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
   if (levels.employees !== "none") items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users" });
   if (levels.billing !== "none") items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing" });
   if (levels.ledger !== "none") items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger" });
-  if (isAdmin) items.push({ id: "/admin", href: "/admin", label: "Access", icon: "shield" });
+  // Visible to everyone; anyone but the Admin who opens it sees the "no access" page (AUTH-13).
+  items.push({ id: "/admin", href: "/admin", label: "Admin", icon: "shield" });
 
   const [order, setOrder] = useState<string[]>([]);
   useEffect(() => setOrder(readOrder(ORDER_KEY)), []);

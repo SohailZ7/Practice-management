@@ -40,6 +40,8 @@ model Employee {
   email     String?         @unique
   phone     String          @default("")
   active    Boolean         @default(true)
+  // Shown as a tab under Tasks. The Admin adds and removes tabs; removing keeps the employee and their history.
+  taskTab   Boolean         @default(true)
   tasks     Task[]
   provider  Provider?
   recurring RecurringTask[]
@@ -342,12 +344,31 @@ model RecurringTask {
 }
 
 // Lets a user see (read-only) the tasks of another employee, in addition to their own.
+// level: view (read-only) | edit
 model TaskViewer {
   id         String   @id @default(cuid())
   userId     String
   employeeId String
+  level      String   @default("view")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, employeeId])
+}
+
+// Every change of a task's assignee. Ids and names only, never task text. Append-only in the database
+// (prisma/sql/audit-append-only.sql). kind: assigned | created-for | tab-removed
+model TaskMove {
+  id         String   @id @default(cuid())
+  taskId     String
+  fromId     String?
+  fromName   String
+  toId       String?
+  toName     String
+  kind       String
+  movedBy    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([taskId])
 }

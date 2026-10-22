@@ -6,7 +6,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { parseSqlStatements } from "../src/lib/sqlStatements";
 
-const TRIGGERS = ["AuditLog_append_only", "AuditLog_no_truncate", "BillingHistory_append_only", "BillingHistory_no_truncate"];
+const TRIGGERS = ["AuditLog_append_only", "AuditLog_no_truncate", "BillingHistory_append_only", "BillingHistory_no_truncate", "TaskMove_append_only", "TaskMove_no_truncate"];
 
 async function main() {
   const db = new PrismaClient();

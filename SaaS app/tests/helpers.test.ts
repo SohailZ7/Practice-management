@@ -470,7 +470,7 @@ describe("planReconcile (editing a recurring task keeps the queue in line)", () 
   });
 });
 
-import { canEditBoard, pickEmployee, viewableEmployeeIds } from "../src/lib/taskAccess";
+import { canAssignTo, canEditBoard, editableGrantIds, pickEmployee, viewableEmployeeIds } from "../src/lib/taskAccess";
 import { todayISO } from "../src/lib/dates";
 
 describe("practice time zone for today", () => {
@@ -596,5 +596,27 @@ describe("Todo App sync: planning", () => {
   it("removes open tasks whose todo is gone, but keeps finished ones and tasks that were never mirrored", () => {
     const p = planTodoSync([src("a")], [task("a"), task("gone"), task("done", { completed: true }), task("local", { externalId: null, title: "Mine" })]);
     expect(p.remove).toEqual(["gone"]);
+  });
+});
+
+describe("per-tab edit grants and assignment (TSK-59, TSK-60)", () => {
+  const tabIds = ["sohail", "razak", "muntaha", "khalid"];
+  it("a grant of level edit makes another person's tab editable; view stays read-only", () => {
+    const editIds = editableGrantIds([{ employeeId: "muntaha", level: "edit" }, { employeeId: "khalid", level: "view" }], tabIds, "razak");
+    expect(editIds).toEqual(["muntaha"]);
+    expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: "muntaha", editableIds: editIds })).toBe(true);
+    expect(canEditBoard({ isAdmin: false, moduleEdit: true, meId: "razak", selected: "khalid", editableIds: editIds })).toBe(false);
+  });
+  it("an edit grant never beats a missing Tasks edit permission", () => {
+    expect(canEditBoard({ isAdmin: false, moduleEdit: false, meId: "razak", selected: "muntaha", editableIds: ["muntaha"] })).toBe(false);
+  });
+  it("ignores edit grants on removed tabs and on the person's own tab", () => {
+    expect(editableGrantIds([{ employeeId: "ghost", level: "edit" }, { employeeId: "razak", level: "edit" }], tabIds, "razak")).toEqual([]);
+  });
+  it("tasks can go to any employee with a tab; only the Admin can unassign", () => {
+    expect(canAssignTo({ isAdmin: false, targetId: "muntaha", tabIds })).toBe(true);
+    expect(canAssignTo({ isAdmin: false, targetId: "ghost", tabIds })).toBe(false);
+    expect(canAssignTo({ isAdmin: false, targetId: null, tabIds })).toBe(false);
+    expect(canAssignTo({ isAdmin: true, targetId: null, tabIds })).toBe(true);
   });
 });

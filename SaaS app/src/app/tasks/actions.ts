@@ -8,27 +8,43 @@ import { isISODate } from "@/lib/dates";
 import { type PhiBlock } from "@/lib/phiGuard";
 import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
+import { canAssignTo, type MoveKind } from "@/lib/taskAccess";
+import { loadTaskScope } from "@/lib/taskScope";
 import { MAX_NOTES, toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
-// Visibility rule (TSK-6): a non-admin may only see and change tasks assigned to them.
-// Every action below checks it on the server.
+// Visibility rule (TSK-6, TSK-59): a non-admin may only change tasks assigned to them or to an employee whose tab
+// the Admin granted them edit access to. Every action below checks it on the server.
 
 const isAdmin = (user: CurrentUser) => user.role === "ADMIN";
-
-async function myEmployeeId(user: CurrentUser): Promise<string | null> {
-  const e = await db.employee.findUnique({ where: { email: user.email }, select: { id: true } });
-  return e?.id ?? null;
-}
 
 async function loadAccessibleTask(user: CurrentUser, id: string) {
   const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
   if (!task) throw new Error("Task not found");
   if (!isAdmin(user) && task.assignee?.email !== user.email) {
-    await auditDenied(user.email, `task ${id}`);
-    throw new Error("That task is not assigned to you");
+    const scope = await loadTaskScope(user);
+    if (!task.assigneeId || !scope.editIds.includes(task.assigneeId)) {
+      await auditDenied(user.email, `task ${id}`);
+      throw new Error("You can't change that task");
+    }
   }
   return task;
 }
+
+/** TSK-61: one row per change of assignee. Ids and names only, never task text. */
+async function logMove(
+  user: CurrentUser,
+  taskId: string,
+  from: { id: string | null; name: string },
+  to: { id: string | null; name: string },
+  kind: MoveKind,
+) {
+  await db.taskMove.create({
+    data: { taskId, fromId: from.id, fromName: from.name, toId: to.id, toName: to.name, kind, movedBy: user.email },
+  });
+  await audit(user.email, "task.reassign", `task ${taskId}: ${from.name} -> ${to.name}`);
+}
+
+const UNASSIGNED_NAME = "Unassigned";
 
 async function nextOrder(): Promise<number> {
   const top = await db.task.aggregate({ _max: { sortOrder: true } });
@@ -48,12 +64,16 @@ export async function createTask(input: {
   const blocked = await phiCheck(user, null, [title], input.confirmNoPhi === true);
   if (blocked) return blocked;
 
-  // Non-admins create tasks for themselves; the Admin can create for anyone.
-  let assigneeId = input.assigneeId || null;
-  if (!isAdmin(user)) assigneeId = await myEmployeeId(user);
-  if (assigneeId && !(await db.employee.findUnique({ where: { id: assigneeId } }))) {
-    throw new Error("Employee not found");
+  // TSK-60: anyone with edit access can create a task for any employee who has a tab; with no choice a
+  // non-admin's task is their own. Unassigned is the Admin's.
+  const scope = await loadTaskScope(user);
+  const mine = scope.meId;
+  let assigneeId: string | null = input.assigneeId || null;
+  if (!isAdmin(user) && !assigneeId) assigneeId = mine;
+  if (!canAssignTo({ isAdmin: isAdmin(user), targetId: assigneeId, tabIds: scope.tabIds })) {
+    throw new Error(assigneeId ? "That employee has no task tab" : "Choose who the task is for");
   }
+  const forEmployee = assigneeId ? scope.tabs.find((e) => e.id === assigneeId) : null;
   if (input.categoryId && !(await db.category.findUnique({ where: { id: input.categoryId } }))) {
     throw new Error("Category not found");
   }
@@ -69,6 +89,9 @@ export async function createTask(input: {
     include: { links: true },
   });
   await audit(user.email, "task.add", `task ${task.id}`);
+  if (assigneeId !== mine) {
+    await logMove(user, task.id, { id: null, name: "New task" }, { id: assigneeId, name: forEmployee?.name ?? UNASSIGNED_NAME }, "created-for");
+  }
   revalidatePath("/tasks");
   return toTaskDTO(task);
 }
@@ -115,14 +138,16 @@ export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = fa
   }
   if (patch.inToday !== undefined) data.inToday = patch.inToday === true;
 
-  let reassign = "";
+  let move: { to: { id: string | null; name: string } } | null = null;
   if (patch.assigneeId !== undefined) {
-    const to = patch.assigneeId ? await db.employee.findUnique({ where: { id: patch.assigneeId } }) : null;
-    if (patch.assigneeId && !to) throw new Error("Employee not found");
-    data.assigneeId = to?.id ?? null;
-    if ((to?.id ?? null) !== existing.assigneeId) {
-      reassign = `task ${id}: ${existing.assignee?.name ?? "unassigned"} -> ${to?.name ?? "unassigned"}`;
+    const scope = await loadTaskScope(user);
+    const target = patch.assigneeId || null;
+    const to = target ? scope.tabs.find((e) => e.id === target) : null;
+    if (!canAssignTo({ isAdmin: isAdmin(user), targetId: target, tabIds: scope.tabIds })) {
+      throw new Error(target ? "That employee has no task tab" : "Only the administrator can unassign a task");
     }
+    data.assigneeId = to?.id ?? null;
+    if ((to?.id ?? null) !== existing.assigneeId) move = { to: { id: to?.id ?? null, name: to?.name ?? UNASSIGNED_NAME } };
   }
 
   const finalDue = (data.dueDate !== undefined ? data.dueDate : existing.dueDate) as string | null;
@@ -132,7 +157,7 @@ export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = fa
   }
 
   const updated = await db.task.update({ where: { id }, data, include: { links: true } });
-  if (reassign) await audit(user.email, "task.reassign", reassign);
+  if (move) await logMove(user, id, { id: existing.assigneeId, name: existing.assignee?.name ?? UNASSIGNED_NAME }, move.to, "assigned");
   revalidatePath("/tasks");
   return toTaskDTO(updated);
 }

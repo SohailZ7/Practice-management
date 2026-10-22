@@ -20,13 +20,13 @@ describe("parseSqlStatements", () => {
   it("keeps a function body with semicolons in one statement", () => {
     const sql = readFileSync("prisma/sql/audit-append-only.sql", "utf8");
     const parts = parseSqlStatements(sql);
-    expect(parts).toHaveLength(9);
+    expect(parts).toHaveLength(13);
     expect(parts[0]).toContain("RAISE EXCEPTION");
     expect(parts[0]).toContain("END;");
   });
-  it("covers update, delete and truncate on both audit tables", () => {
+  it("covers update, delete and truncate on every audit table", () => {
     const all = parseSqlStatements(readFileSync("prisma/sql/audit-append-only.sql", "utf8")).join("\n");
-    for (const table of ["AuditLog", "BillingHistory"]) {
+    for (const table of ["AuditLog", "BillingHistory", "TaskMove"]) {
       expect(all).toMatch(new RegExp(`BEFORE UPDATE OR DELETE ON "${table}"`));
       expect(all).toMatch(new RegExp(`BEFORE TRUNCATE ON "${table}"`));
     }

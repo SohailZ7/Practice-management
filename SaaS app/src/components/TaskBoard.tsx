@@ -46,6 +46,8 @@ type Props = {
   categories: CategoryDTO[];
   employees: Opt[];
   canEdit: boolean;
+  /** Only the Admin may leave a task unassigned (TSK-60). */
+  canUnassign?: boolean;
   /** The employee whose tab this is (null = Unassigned). */
   boardAssigneeId: string | null;
   today: string;
@@ -61,7 +63,7 @@ const BACKLOG = "backlog";
 const DONE = "completed";
 const EXPIRED = "expired";
 
-export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, boardAssigneeId, today, canReorder, sync }: Props) {
+export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, canUnassign = true, boardAssigneeId, today, canReorder, sync }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
@@ -162,6 +164,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const itemProps = {
     categories,
     employees,
+    canUnassign,
     today,
     onPatch: patchTask,
     onDelete: removeTask,
@@ -279,6 +282,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
 type ItemProps = {
   categories: CategoryDTO[];
   employees: Opt[];
+  canUnassign: boolean;
   today: string;
   onPatch: (id: string, patch: TaskPatch) => void | Promise<void>;
   onDelete: (id: string) => void;
@@ -429,6 +433,7 @@ function TaskItem({
   canEdit,
   categories,
   employees,
+  canUnassign,
   today,
   onPatch,
   onDelete,
@@ -565,7 +570,7 @@ function TaskItem({
           aria-label="Assigned to"
           onChange={(e) => onPatch(task.id, { assigneeId: e.target.value || null })}
         >
-          <option value="">Unassigned</option>
+          {(canUnassign || !task.assigneeId) && <option value="">Unassigned</option>}
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}

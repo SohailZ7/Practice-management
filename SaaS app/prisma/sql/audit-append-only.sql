@@ -37,3 +37,15 @@ DROP TRIGGER IF EXISTS "BillingHistory_no_truncate" ON "BillingHistory";
 CREATE TRIGGER "BillingHistory_no_truncate"
   BEFORE TRUNCATE ON "BillingHistory"
   FOR EACH STATEMENT EXECUTE FUNCTION phi_reject_modification();
+-- @@
+DROP TRIGGER IF EXISTS "TaskMove_append_only" ON "TaskMove";
+-- @@
+CREATE TRIGGER "TaskMove_append_only"
+  BEFORE UPDATE OR DELETE ON "TaskMove"
+  FOR EACH ROW EXECUTE FUNCTION phi_reject_modification();
+-- @@
+DROP TRIGGER IF EXISTS "TaskMove_no_truncate" ON "TaskMove";
+-- @@
+CREATE TRIGGER "TaskMove_no_truncate"
+  BEFORE TRUNCATE ON "TaskMove"
+  FOR EACH STATEMENT EXECUTE FUNCTION phi_reject_modification();

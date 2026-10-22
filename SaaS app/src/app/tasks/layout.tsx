@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { ensureRecurringTasks } from "@/lib/recurring";
 import { todayISO } from "@/lib/dates";
-import { viewableEmployeeIds } from "@/lib/taskAccess";
+import { loadTaskScope } from "@/lib/taskScope";
 import { EmployeeTabs, type TabDef } from "@/components/EmployeeTabs";
 import { TaskSwitch } from "@/components/TaskSwitch";
 
@@ -16,17 +16,7 @@ export default async function TasksLayout({ children }: { children: ReactNode })
   const isAdmin = user.role === "ADMIN";
   await ensureRecurringTasks();
 
-  const [employees, me, grants] = await Promise.all([
-    db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    db.employee.findUnique({ where: { email: user.email } }),
-    isAdmin ? Promise.resolve([]) : db.taskViewer.findMany({ where: { userId: user.id }, select: { employeeId: true } }),
-  ]);
-  const allowed = viewableEmployeeIds({
-    isAdmin,
-    meId: me?.id ?? null,
-    grantedIds: grants.map((g) => g.employeeId),
-    allIds: employees.map((e) => e.id),
-  });
+  const { tabs: employees, me, viewIds: allowed } = await loadTaskScope(user);
 
   // Someone who can only see their own list gets a simple My tasks | Recurring switch.
   if (!isAdmin && allowed.length <= 1) {

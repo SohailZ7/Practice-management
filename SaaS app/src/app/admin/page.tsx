@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { audit } from "@/lib/audit";
 import { LEVELS, MODULES, ROLES } from "@/lib/access";
 import { Banner } from "@/components/Banner";
-import { addUser, revokeDesktopSessions, setAccess, setTaskViewers, updateUser } from "./actions";
+import { addTaskTab, addUser, removeTaskTab, revokeDesktopSessions, setAccess, setTaskViewers, updateUser } from "./actions";
 
 export default async function AdminPage({
   searchParams,
@@ -14,15 +14,15 @@ export default async function AdminPage({
   const admin = await requireAdmin();
   const [users, employees, viewers, log] = await Promise.all([
     db.user.findMany({ orderBy: { createdAt: "asc" }, include: { access: true } }),
-    db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
-    db.taskViewer.findMany({ select: { userId: true, employeeId: true } }),
+    db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true, taskTab: true } }),
+    db.taskViewer.findMany({ select: { userId: true, employeeId: true, level: true } }),
     db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
   ]);
 
   await audit(admin.email, "audit.view", "recent activity on the Access page (50 rows)");
   return (
     <>
-      <h1>Access</h1>
+      <h1>Admin console</h1>
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted">
         Only people listed here can sign in (with their Google account). Choose what each person can
@@ -129,24 +129,72 @@ export default async function AdminPage({
         </table>
       </div>
 
-      <h2>Whose tasks each person can view</h2>
+      <h2>Task tabs</h2>
       <p className="muted small">
-        Everyone sees and edits their own tasks. Tick the people whose task lists someone may also look at (read-only).
-        Admins see everyone&apos;s.
+        The employee tabs shown under Tasks. Removing a tab moves that person&apos;s open tasks to Unassigned (logged) and
+        keeps their completed tasks; add the tab again to restore it.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <tbody>
+            {employees
+              .filter((e) => e.taskTab)
+              .map((e) => (
+                <tr key={e.id}>
+                  <td>{e.name}</td>
+                  <td className="small muted">{e.email ?? "no login email"}</td>
+                  <td>
+                    <form action={removeTaskTab}>
+                      <input type="hidden" name="employeeId" value={e.id} />
+                      <button type="submit" className="secondary">
+                        Remove tab
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      <form action={addTaskTab} className="card row">
+        <select name="employeeId" defaultValue="" aria-label="Existing employee">
+          <option value="">New person…</option>
+          {employees
+            .filter((e) => !e.taskTab)
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+        </select>
+        <input name="name" placeholder="Name (new person)" className="grow" />
+        <input name="email" type="email" placeholder="Email (optional)" className="grow" />
+        <button type="submit">Add tab</button>
+      </form>
+
+      <h2>Task tab access</h2>
+      <p className="muted small">
+        Everyone edits their own tab. For every other tab choose what each person can do: no access, view (read-only) or
+        edit. Admins see and edit everything.
       </p>
       {users
         .filter((u) => u.role !== "ADMIN")
         .map((u) => {
-          const granted = new Set(viewers.filter((v) => v.userId === u.id).map((v) => v.employeeId));
+          const granted = new Map(viewers.filter((v) => v.userId === u.id).map((v) => [v.employeeId, v.level]));
           return (
             <form key={u.id} action={setTaskViewers} className="card row">
               <input type="hidden" name="id" value={u.id} />
               <strong style={{ minWidth: 130 }}>{u.name}</strong>
               {employees
-                .filter((e) => e.email !== u.email)
+                .filter((e) => e.taskTab && e.email !== u.email)
                 .map((e) => (
                   <label key={e.id} className="check">
-                    <input type="checkbox" name="employeeId" value={e.id} defaultChecked={granted.has(e.id)} /> {e.name}
+                    {e.name}{" "}
+                    <select name={`tab_${e.id}`} defaultValue={granted.get(e.id) ?? "none"} aria-label={`${u.name} on ${e.name}'s tab`}>
+                      <option value="none">no access</option>
+                      <option value="view">view</option>
+                      <option value="edit">edit</option>
+                    </select>
                   </label>
                 ))}
               <span className="grow" />
