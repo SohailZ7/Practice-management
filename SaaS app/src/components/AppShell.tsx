@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -15,7 +15,6 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ADMIN_PAGES, adminPageActive } from "@/lib/adminNav";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 import { Icon, Logo, type IconName } from "./Icons";
 import { IdleLogoff } from "./IdleLogoff";
@@ -134,17 +133,6 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
     writeOrder(ORDER_KEY, next);
   };
 
-  // Sub-links under Admin in the navigation (the Admin only; everyone else just sees the no-access page).
-  const adminSub = isAdmin ? (
-    <div className="subnav" key="admin-sub">
-      {ADMIN_PAGES.map((p) => (
-        <Link key={p.href} href={p.href} className={adminPageActive(path, p.href) ? "active" : ""}>
-          {p.label}
-        </Link>
-      ))}
-    </div>
-  ) : null;
-
   const link = (href: string, label: string, icon: IconName) => (
     <Link key={href} href={href} title={label} className={path.startsWith(href) ? "active" : ""}>
       <Icon name={icon} />
@@ -185,12 +173,9 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
             <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
               <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 {orderedItems.map((i) => (
-                  <Fragment key={i.id}>
-                    <SortableNavItem id={i.id} label={i.label}>
-                      {link(i.href, i.label, i.icon)}
-                    </SortableNavItem>
-                    {i.id === "/admin" && adminSub}
-                  </Fragment>
+                  <SortableNavItem key={i.id} id={i.id} label={i.label}>
+                    {link(i.href, i.label, i.icon)}
+                  </SortableNavItem>
                 ))}
               </SortableContext>
             </DndContext>
