@@ -6,9 +6,8 @@
 // Nothing is ticked that the model did not choose, because on these forms a blank box means "not assessed".
 
 import JSZip from "jszip";
-import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
+import { appendAttention, children, insertBanner, parseDoc, serializeDoc, setText, textOf, W, type El } from "./docxCore";
 
-const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const EMPTY = "[ ]";
 const TICKED = "[X]";
 
@@ -30,9 +29,6 @@ export type FormFillResult = {
   filledFields: string[];
 };
 
-type El = Element;
-const children = (el: El): El[] => Array.from(el.childNodes).filter((n): n is El => n.nodeType === 1);
-const textOf = (el: El) => Array.from(el.getElementsByTagNameNS(W, "t")).map((t) => t.textContent ?? "").join("");
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -44,14 +40,6 @@ function insideTableCell(el: El): boolean {
   return false;
 }
 
-/** Rewrites every w:t of an element so the element's whole text becomes `next`, keeping the first run's formatting. */
-function setText(el: El, next: string) {
-  const ts = Array.from(el.getElementsByTagNameNS(W, "t"));
-  if (!ts.length) return;
-  ts[0].setAttribute("xml:space", "preserve");
-  ts[0].textContent = next;
-  for (const t of ts.slice(1)) t.textContent = "";
-}
 
 /**
  * Ticks the chosen options inside one line of form text and fills its blank.
@@ -92,11 +80,11 @@ export function labelOf(line: string): string {
   return (colon >= 0 ? upto.slice(0, colon) : upto).trim();
 }
 
-export async function fillForm(templateBytes: Uint8Array | ArrayBuffer, values: FormValues): Promise<FormFillResult> {
+export async function fillForm(templateBytes: Uint8Array | ArrayBuffer, values: FormValues, opts: { banner?: boolean; attention?: string[] } = {}): Promise<FormFillResult> {
   const zip = await JSZip.loadAsync(templateBytes);
   const file = zip.file("word/document.xml");
   if (!file) throw new Error("Not a Word document: word/document.xml is missing");
-  const doc = new DOMParser().parseFromString(await file.async("string"), "text/xml") as unknown as Document;
+  const doc = parseDoc(await file.async("string"));
 
   const wanted = new Map(Object.entries(values).map(([k, v]) => [norm(k), { key: k, value: v }]));
   const unknownOptions: FormFillResult["unknownOptions"] = [];
@@ -132,7 +120,9 @@ export async function fillForm(templateBytes: Uint8Array | ArrayBuffer, values: 
   }
 
   const unknownFields = Object.keys(values).filter((k) => !filled.has(k));
-  zip.file("word/document.xml", new XMLSerializer().serializeToString(doc as unknown as Node));
+  if (opts.attention) appendAttention(doc, opts.attention);
+  if (opts.banner !== false) insertBanner(doc);
+  zip.file("word/document.xml", serializeDoc(doc));
   return {
     bytes: await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }),
     unknownOptions,

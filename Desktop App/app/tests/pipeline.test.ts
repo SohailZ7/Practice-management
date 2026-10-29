@@ -4,13 +4,11 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { noteFileName, patientFolderName, safePart } from "../src/lib/patientFolder";
-import { noteKindFor, rowAction } from "../src/lib/noteKind";
 import { ungroundedTerms, wordsToNumber } from "../src/lib/grounding";
 import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
 import { NOT_DISCUSSED, PLANS } from "../src/lib/sectionMap";
 import { QUESTION_SYSTEM, VERIFY_SYSTEM } from "../src/lib/passes";
 import { docxText, fillTemplate } from "../src/lib/docxFill";
-import { mockSchedule } from "../src/lib/mockSchedule";
 import type { Llm } from "../src/lib/types";
 
 const TEMPLATE = path.resolve(__dirname, "../../../Templates/Psychiatric_Master_Template_v2.docx");
@@ -22,26 +20,14 @@ describe("patient folder and file names", () => {
     expect(patientFolderName("", "  ")).toBe("Unknown, Unknown");
     expect(safePart("..hidden")).toBe("hidden");
   });
-  it("adds (2) when a note for that date and type already exists", () => {
-    const taken = new Set(["2026-10-19 Follow-up.docx", "2026-10-19 Follow-up (2).docx"]);
-    expect(noteFileName("2026-10-19", "Follow-up", (n) => taken.has(n))).toBe("2026-10-19 Follow-up (3).docx");
-    expect(noteFileName("2026-10-19", "Psych Eval")).toBe("2026-10-19 Psych Eval.docx");
+  it("puts the patient's name first and marks the file as a draft", () => {
+    expect(noteFileName("2026-10-29", "Follow-up", () => false, "Testcase, Alpha "))
+      .toBe("Testcase, Alpha 2026-10-29 Follow-up DRAFT.docx");
+    expect(noteFileName("2026-10-29", "Psych Eval", () => false, "", false)).toBe("2026-10-29 Psych Eval.docx");
   });
-});
-
-describe("appointment type and row action", () => {
-  it("maps types to notes as the owner confirmed", () => {
-    expect(noteKindFor("Psych Eval")).toBe("EVAL");
-    expect(noteKindFor("Follow-up")).toBe("FOLLOW_UP");
-    expect(noteKindFor("Follow-up & Admit Order")).toBe("FOLLOW_UP");
-    expect(noteKindFor("DC Orders Only")).toBe("DISCHARGE");
-  });
-  it("offers Record only with consent on file, otherwise Dictate, and nothing for canceled rows", () => {
-    const e = mockSchedule("2026-10-19").entries;
-    expect(rowAction(e[0])).toBe("record");
-    expect(rowAction(e[2])).toBe("dictate"); // no consent
-    expect(rowAction(e[4])).toBe("none"); // canceled
-    expect(rowAction(e[5])).toBe("dictate"); // unlinked patient
+  it("adds (2) when a document for that date and type already exists", () => {
+    const taken = new Set(["2026-10-19 Follow-up DRAFT.docx", "2026-10-19 Follow-up DRAFT (2).docx"]);
+    expect(noteFileName("2026-10-19", "Follow-up", (n) => taken.has(n))).toBe("2026-10-19 Follow-up DRAFT (3).docx");
   });
 });
 

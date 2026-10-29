@@ -13,8 +13,15 @@ export function patientFolderName(lastName: string, firstName: string): string {
   return `${safePart(lastName)}, ${safePart(firstName)}`;
 }
 
-export function noteFileName(date: string, typeLabel: string, taken: (name: string) => boolean = () => false): string {
-  const base = `${date} ${safePart(typeLabel)}`;
+/** `prefix` puts the patient's name in front, as the owner asked: "Last, First 2026-10-29 Follow-up DRAFT.docx". */
+export function noteFileName(
+  date: string,
+  typeLabel: string,
+  taken: (name: string) => boolean = () => false,
+  prefix = "",
+  draft = true,
+): string {
+  const base = `${prefix}${date} ${safePart(typeLabel)}${draft ? " DRAFT" : ""}`;
   let name = `${base}.docx`;
   for (let n = 2; taken(name); n++) name = `${base} (${n}).docx`;
   return name;

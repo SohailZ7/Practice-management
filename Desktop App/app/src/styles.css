@@ -40,3 +40,31 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .transcript { white-space: pre-wrap; max-height: 70vh; overflow: auto; }
 .err { color: var(--bad); }
 .row { display: flex; gap: 10px; align-items: center; }
+
+/* --- tabs, date bar, setup, files and the preview modal --- */
+header.top nav.tabs { display: flex; gap: 6px; margin-left: 18px; }
+nav.tabs button { background: rgba(255,255,255,.12); color: #fff; padding: 5px 12px; }
+nav.tabs button.on { background: #fff; color: var(--navy); }
+.datebar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.datebar strong { min-width: 290px; }
+.datebar input[type="date"] { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); }
+textarea { width: 100%; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical; }
+.field { display: block; margin-bottom: 12px; }
+.field > span:first-child { display: block; font-weight: 600; margin-bottom: 3px; }
+.field input, .field select { width: 100%; font: inherit; padding: 6px 9px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--card); color: var(--text); }
+.field .small { display: block; margin-top: 3px; }
+button.link { background: none; border: 0; color: var(--navy-2); text-decoration: underline; padding: 0; cursor: pointer; font: inherit; }
+@media (prefers-color-scheme: dark) { button.link { color: #9fb4ff; } }
+.files { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+button.file { background: var(--card); color: var(--text); border: 1px solid var(--line); padding: 3px 9px; font-size: 11px; }
+button.file.draft { border-color: var(--warn); }
+button.file .tag { margin-left: 6px; color: var(--warn); font-size: 10px; text-transform: uppercase; }
+.rec { margin-right: 8px; font-variant-numeric: tabular-nums; }
+.file-input { margin-left: 6px; cursor: pointer; text-decoration: underline; }
+.file-input input { display: none; }
+.modal-back { position: fixed; inset: 0; background: rgba(10,12,30,.55); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal { background: var(--card); border-radius: 12px; padding: 16px; width: min(900px, 100%); max-height: 86vh; display: flex; flex-direction: column; gap: 10px; }
+pre.doc { flex: 1; overflow: auto; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0; }
