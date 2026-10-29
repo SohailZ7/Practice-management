@@ -4,6 +4,7 @@
 import { describe, it } from "vitest";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { request } from "node:http";
 import { draftNote } from "../src/lib/pipeline";
 import type { DraftNote, Llm } from "../src/lib/types";
 import { evalCases } from "./eval/evalCases";
@@ -17,13 +18,44 @@ const dir = process.env.SPIKE_DIR ?? "/tmp/spike-eval";
 const only = (process.env.SPIKE_CASES ?? "").split(",").filter(Boolean);
 const cases: Case[] = [...evalCases, ...visitCases].filter((c) => !only.length || only.includes(c.id));
 
-const make = (model: string, seed: number): Llm => async ({ system, prompt }) => {
-  const r = await fetch("http://127.0.0.1:11434/api/chat", {
-    method: "POST",
-    body: JSON.stringify({ model, stream: false, options: { temperature: 0.1, num_ctx: 16384, seed }, messages: [{ role: "system", content: system }, { role: "user", content: prompt }] }),
+// node:http rather than fetch: a slow model exceeds fetch's 5-minute header timeout, which is what failed the
+// gpt-oss run with UND_ERR_HEADERS_TIMEOUT after three cases.
+// think: false turns off the reasoning mode of models that have one (Qwen3, gpt-oss). This task is extraction, not
+// reasoning, and thinking would multiply the time for all ~36 calls per note. Models without it ignore the flag.
+const make = (model: string, seed: number): Llm => ({ system, prompt }) =>
+  new Promise<string>((resolve, reject) => {
+    const body = JSON.stringify({
+      model, stream: false, think: false,
+      // Keep the model resident between calls: an unload and reload mid-run is one likely cause of the
+      // 20-to-30-minute stalls seen in the first comparison, which made the average times meaningless.
+      keep_alive: "30m",
+      options: { temperature: 0.1, num_ctx: 16384, seed },
+      messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
+    });
+    const req = request(
+      {
+        host: "127.0.0.1", port: 11434, path: "/api/chat", method: "POST",
+        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) },
+      },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => (text += c));
+        res.on("end", () => {
+          try {
+            const j = JSON.parse(text);
+            if (j.error) return reject(new Error(String(j.error)));
+            resolve(String(j.message?.content ?? ""));
+          } catch {
+            reject(new Error(`unreadable reply: ${text.slice(0, 200)}`));
+          }
+        });
+      },
+    );
+    req.setTimeout(60 * 60_000, () => req.destroy(new Error("the model did not reply within an hour")));
+    req.on("error", reject);
+    req.end(body);
   });
-  return (await r.json()).message.content as string;
-};
 
 type Saved = { model: string; caseId: string; run: number; secs: number; draft: DraftNote; score: CaseScore };
 const fileFor = (model: string, caseId: string, run: number) => path.join(dir, `${model.replace(/[^a-z0-9.]+/gi, "_")}__${caseId}__${run}.json`);

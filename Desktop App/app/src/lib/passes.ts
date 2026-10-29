@@ -6,6 +6,7 @@
 import type { Llm, Para } from "./types";
 import { NOT_DISCUSSED } from "./sectionMap";
 import { withDigits } from "./grounding";
+import { stripThinking } from "./text";
 
 const words = (text: string) => text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
 
@@ -34,7 +35,7 @@ export function quoteInSource(quote: string, source: string): boolean {
 export type Answer = { answer: "YES" | "NO" | "NOT_ASKED" | "UNPARSED"; statement: string; quote: string };
 
 export function parseAnswer(raw: string): Answer {
-  const text = raw.replace(/\*\*/g, "");
+  const text = stripThinking(raw).replace(/\*\*/g, "");
   const a = /ANSWER[ \t]*:[ \t]*(NOT[_ ]ASKED|YES|NO)\b/i.exec(text)?.[1]?.toUpperCase().replace(" ", "_");
   const statement = /STATEMENT[ \t]*:[ \t]*(.*)/i.exec(text)?.[1]?.trim() ?? "";
   const quote = /QUOTE[ \t]*:[ \t]*(.*)/i.exec(text)?.[1]?.trim().replace(/^["“']|["”']$/g, "") ?? "";
@@ -83,7 +84,7 @@ export const VERIFY_SYSTEM = [
 
 export function parseVerdicts(raw: string): Verdict[] {
   const out: Verdict[] = [];
-  for (const line of raw.replace(/\*\*/g, "").split("\n")) {
+  for (const line of stripThinking(raw).replace(/\*\*/g, "").split("\n")) {
     const m = /^\s*(\d+)\s*[|.:)\-]\s*(SUPPORTED|UNSUPPORTED)\b(.*)$/i.exec(line);
     if (!m) continue;
     const rest = m[3];

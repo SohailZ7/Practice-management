@@ -3,6 +3,7 @@
 import type { CaptureMode, DraftNote, DraftSection, Llm, NoteKind, Para } from "./types";
 import { NOT_ASSESSED, NOT_DISCUSSED, PLANS, type SectionSpec } from "./sectionMap";
 import { ungroundedTerms } from "./grounding";
+import { stripThinking } from "./text";
 import { askRiskQuestion, verifyParas } from "./passes";
 
 export const SYSTEM_RULES = [
@@ -53,7 +54,7 @@ export function buildPrompt(input: DraftInput, spec: SectionSpec, headingTitle: 
 
 /** Splits model output into labeled lines, tolerating bullets, bold marks and wrapped lines. */
 export function parseSection(output: string, labels: string[]): Para[] {
-  const text = output.replace(/\*\*/g, "").replace(/\r/g, "").trim();
+  const text = stripThinking(output).replace(/\*\*/g, "").replace(/\r/g, "").trim();
   if (!labels.length) {
     // Headings such as "Depression:" are structure the model added, not content.
     const noHeadings = text.split("\n").filter((l) => !/^[\w ,&/()-]{1,60}:\s*$/.test(l.trim())).join("\n");

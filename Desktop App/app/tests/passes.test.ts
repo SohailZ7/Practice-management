@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyVerdicts, askRiskQuestion, parseAnswer, parseVerdicts, quoteInSource, verifyParas } from "../src/lib/passes";
-import { draftNote } from "../src/lib/pipeline";
+import { draftNote, parseSection } from "../src/lib/pipeline";
+import { stripThinking } from "../src/lib/text";
 import { NOT_DISCUSSED } from "../src/lib/sectionMap";
 import type { Llm, Para } from "../src/lib/types";
 
@@ -141,5 +142,28 @@ describe("draftNote with the passes", () => {
     const systems: string[] = [];
     await draftNote({ ...base, passes: { ssrs: false, verify: false }, llm: async (r) => { systems.push(r.system); return ""; } });
     expect(systems.every((s) => s.includes("You write one section"))).toBe(true);
+  });
+});
+
+describe("stripThinking", () => {
+  it("removes reasoning tags that models such as Qwen3 and gpt-oss emit", () => {
+    expect(stripThinking("<think>let me consider</think>Patient's words: I feel low.")).toBe("Patient's words: I feel low.");
+    expect(stripThinking("<reasoning>\nblah\n</reasoning>\nANSWER: NO")).toBe("ANSWER: NO");
+    expect(stripThinking("<analysis>x</analysis>A<thinking>y</thinking>B")).toBe("AB");
+  });
+  it("drops an unclosed reasoning block, so a cut-off reply never reaches the note", () => {
+    expect(stripThinking("Real text.\n<think>I was still thinking when the reply ended")).toBe("Real text.");
+  });
+  it("takes the text after a final-answer marker", () => {
+    expect(stripThinking("Step one, then step two.\nFinal answer:\nPatient's words: I feel low.")).toBe("Patient's words: I feel low.");
+  });
+  it("leaves ordinary output untouched, including a label that ends in 'answer'", () => {
+    expect(stripThinking("Patient's words: I feel low.")).toBe("Patient's words: I feel low.");
+    expect(stripThinking("Sleep: poor\nAppetite: fair")).toBe("Sleep: poor\nAppetite: fair");
+  });
+  it("is applied by the section and answer parsers", () => {
+    expect(parseSection("<think>hmm</think>Sleep: poor", ["Sleep"])[0].text).toBe("poor");
+    expect(parseAnswer("<think>hmm</think>ANSWER: NO\nSTATEMENT: The patient denies.\nQUOTE: no").answer).toBe("NO");
+    expect(parseVerdicts("<think>hmm</think>\n1 | SUPPORTED | ABOUT: PATIENT | SAID_BY: PATIENT | QUOTE: x")).toHaveLength(1);
   });
 });
