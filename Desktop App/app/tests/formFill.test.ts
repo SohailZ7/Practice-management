@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { applyToLine, fillForm, labelOf } from "../src/lib/formFill";
 import { docxText } from "../src/lib/docxFill";
-import { draftForm, FORM_SYSTEM, parseFormAnswer, PROGRESS_NOTE_FIELDS } from "../src/lib/formSpec";
+import { ADMIT_ORDER_FIELDS, DISCHARGE_ORDER_FIELDS, draftForm, FORM_SYSTEM, parseFormAnswer, PROGRESS_NOTE_FIELDS, type FieldSpec } from "../src/lib/formSpec";
+import { fieldsFor } from "../src/lib/visit";
 
 const FORMS = path.resolve(__dirname, "../../../Templates/forms");
 const progress = () => readFileSync(path.join(FORMS, "Psychiatrist_Progress_Note_v1.docx"));
@@ -160,5 +161,35 @@ describe("draftForm", () => {
     const text = await docxText(r.bytes);
     expect(text).toContain("[X] Poor");
     expect(text).toMatch(/Suicidal ideation[\s\S]{0,40}\[X\] None/);
+  });
+});
+
+// This is the check that would have caught the orders being wired to the progress note's questions: every question
+// must name a field that exists on its own form, and every option must exist on that field's line.
+describe("each form's questions match that form", () => {
+  const forms: [string, string, FieldSpec[]][] = [
+    ["progress note", "Psychiatrist_Progress_Note_v1.docx", PROGRESS_NOTE_FIELDS],
+    ["discharge order", "Physician_Discharge_Order_v1.docx", DISCHARGE_ORDER_FIELDS],
+    ["admit order", "Admit_Outpatient_Program_Order_v1.docx", ADMIT_ORDER_FIELDS],
+  ];
+
+  it.each(forms)("%s: every field and option exists on the form", async (_name, file, fields) => {
+    const bytes = readFileSync(path.join(FORMS, file));
+    const values = Object.fromEntries(fields.map((f) => [f.field, { ticked: f.options ?? [], text: f.text ? "x" : undefined }]));
+    const r = await fillForm(bytes, values);
+    expect(r.unknownFields).toEqual([]);
+    expect(r.unknownOptions).toEqual([]);
+  });
+
+  it.each(forms)("%s: each question set is distinct and non-empty", (_name, _file, fields) => {
+    expect(fields.length).toBeGreaterThan(5);
+    expect(new Set(fields.map((f) => f.field)).size).toBe(fields.length);
+    expect(fields.some((f) => f.critical)).toBe(true);
+  });
+
+  it("routes each form to its own question set", () => {
+    expect(fieldsFor("progress")).toBe(PROGRESS_NOTE_FIELDS);
+    expect(fieldsFor("discharge")).toBe(DISCHARGE_ORDER_FIELDS);
+    expect(fieldsFor("admit")).toBe(ADMIT_ORDER_FIELDS);
   });
 });

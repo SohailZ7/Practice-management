@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseClient, parseSchedule } from "../src/lib/scheduleParse";
 import { canRecord, documentsFor } from "../src/lib/documents";
+import { patientFolderName, patientInitials } from "../src/lib/patientFolder";
 
 // Every name below is invented. The sheet's real structure is reproduced; its patients are not.
 const PROVIDER = "Dr. Example Provider";
@@ -112,5 +113,23 @@ describe("canRecord", () => {
   });
   it("refuses a row whose type produces no documents", () => {
     expect(canRecord(item(""))).toBe(false);
+  });
+});
+
+describe("patientInitials", () => {
+  it("gives first and last initials, for the on-screen board", () => {
+    expect(patientInitials("Testcase", "Alpha")).toBe("A.T.");
+    expect(patientInitials("Mockup", "Delta")).toBe("D.M.");
+  });
+  it("copes with one name, a middle name and an empty name", () => {
+    expect(patientInitials("Madonna", "")).toBe("M.");
+    expect(patientInitials("Testcase", "Alpha Beta")).toBe("A.T.");
+    expect(patientInitials("", "")).toBe("?");
+  });
+  it("skips punctuation and quotes", () => {
+    expect(patientInitials("O'Neil", "\u201cEko\u201d")).toBe("E.O.");
+  });
+  it("does not change the folder name, which keeps the full name", () => {
+    expect(patientFolderName("Testcase", "Alpha")).toBe("Testcase, Alpha");
   });
 });

@@ -8,6 +8,9 @@
 import JSZip from "jszip";
 import { appendAttention, children, insertBanner, parseDoc, serializeDoc, setText, textOf, W, type El } from "./docxCore";
 
+/** A line that can hold an answer: it has checkboxes or a blank to write on. */
+const isFillable = (line: string) => /\[|_{4,}/.test(line);
+
 const EMPTY = "[ ]";
 const TICKED = "[X]";
 
@@ -107,16 +110,56 @@ export async function fillForm(templateBytes: Uint8Array | ArrayBuffer, values: 
     use(textOf(cells[0]), cells[1], textOf(cells[1]));
   }
 
-  // Paragraphs: "Label:  [ ] a   [ ] b   ____"
-  for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
-    const el = p as unknown as El;
-    // A table cell's paragraphs are part of a row that was already handled; the label cell would otherwise be read
-    // as a field line of its own and every option would look missing.
-    if (insideTableCell(el)) continue;
-    const line = textOf(el);
-    if (!line.trim()) continue;
+  // Paragraphs. A field is named either on the same line as its answer ("Diet:  [ ] Regular") or by a heading with the
+  // answer on the lines below it ("Chief Complaint" then a blank line). Its options may also wrap onto further lines.
+  // A label only claims a field if there is somewhere to write: that is what stops a heading or the document title
+  // from swallowing the real field of the same name further down.
+  const paragraphs = Array.from(doc.getElementsByTagNameNS(W, "p"))
+    .map((p) => p as unknown as El)
+    .filter((el) => !insideTableCell(el));
+  const isContinuation = (line: string) => isFillable(line) && !labelOf(line);
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const line = textOf(paragraphs[i]);
     const label = labelOf(line);
-    if (label) use(label, el, line);
+    if (!label.trim()) continue;
+    const hit = wanted.get(norm(label));
+    if (!hit) continue;
+
+    const group: El[] = isFillable(line) ? [paragraphs[i]] : [];
+    let last = i;
+    for (let j = i + 1; j < paragraphs.length; j++) {
+      const next = textOf(paragraphs[j]);
+      if (!next.trim()) break;
+      const nextLabel = labelOf(next).trim();
+      if (isFillable(next)) {
+        // A new labelled field line belongs to that field, not this one.
+        if (nextLabel && norm(nextLabel) !== norm(label)) break;
+        group.push(paragraphs[j]);
+        last = j;
+        continue;
+      }
+      // Before the first fillable line a heading may be followed by a note explaining the field
+      // ("(Patient's own words ...)"). Skip that prose, but stop at the next field or at any further heading.
+      if (group.length || wanted.has(norm(nextLabel)) || j - i > 2) break;
+    }
+    if (!group.length) continue; // a heading or title of the same name, with nothing to fill
+
+    let remaining = hit.value.ticked ?? [];
+    let textLeft = hit.value.text;
+    for (const part of group) {
+      const before = textOf(part);
+      const { text, unknown } = applyToLine(before, { ticked: remaining, ...(textLeft ? { text: textLeft } : {}) });
+      if (text !== before) {
+        setText(part, text);
+        if (textLeft && text.includes(textLeft)) textLeft = undefined;
+      }
+      remaining = unknown;
+      if (!remaining.length && !textLeft) break;
+    }
+    for (const o of remaining) unknownOptions.push({ field: hit.key, option: o });
+    filled.add(hit.key);
+    i = Math.max(i, last);
   }
 
   const unknownFields = Object.keys(values).filter((k) => !filled.has(k));

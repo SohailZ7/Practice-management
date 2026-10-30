@@ -58,6 +58,51 @@ export const PROGRESS_NOTE_FIELDS: FieldSpec[] = [
   { field: "Therapy", options: ["Psych education", "Medication education", "Supportive", "Family intervention", "Insight intervention", "Insight oriented", "CBT", "Interpersonal", "Coping skills", "CD counseling", "other:"], ask: "What kind of therapy or counselling was provided or discussed in this visit?" },
 ];
 
+/**
+ * Fields of the Physician Discharge Order (Fairfax form 4012).
+ * Most of this form is the doctor's decisions rather than the patient's report, so expect much of it to stay blank.
+ */
+export const DISCHARGE_ORDER_FIELDS: FieldSpec[] = [
+  { field: "Discharge Psychiatric Diagnoses", ask: "What psychiatric diagnosis did the doctor state at discharge? Use the doctor's words, and an ICD-10 code only if one was said.", text: true, critical: true },
+  { field: "Substance Use diagnosis", ask: "Did the doctor state a substance use diagnosis?", text: true },
+  { field: "Medical diagnosis", ask: "Did the doctor state a medical (non-psychiatric) diagnosis?", text: true },
+  { field: "Discharge medications", options: ["Medication print out list attached", "None", "E-RX", "Paper RX", "Phoned to:"], ask: "What was said about how the discharge medications are being provided? List the medications and doses as the text.", text: true, critical: true },
+  { field: "Psychiatric Condition", options: ["Stable"], ask: "How did the doctor describe the patient's psychiatric condition at discharge?", text: true, critical: true },
+  { field: "Speech", options: ["Normal"], ask: "Was anything said about the patient's speech?", text: true },
+  { field: "Thought contents", options: ["Denied SI, HI, AH, VH"], ask: "Did the patient deny suicidal thoughts, homicidal thoughts, and hallucinations? Only choose the option if they denied all of them.", text: true, critical: true },
+  { field: "Insight / Judgement", ask: "Was anything said about the patient's insight or judgement?", text: true },
+  { field: "Risk Assessment", options: ["No imminent risk to self or others"], ask: "Did the doctor state that the patient is at no imminent risk to themselves or others?", text: true, critical: true },
+  { field: "Cognition", options: ["Alert and Oriented x3"], ask: "Was anything said about the patient's alertness or orientation?", text: true },
+  { field: "Mood / affect", ask: "How did the doctor or patient describe the patient's mood at discharge?", text: true },
+  { field: "Discharge type", options: ["MD Discharge", "Unplanned; patient request", "Unplanned; other LOC"], ask: "What kind of discharge is this: planned by the doctor, at the patient's request, or unplanned for another reason?", critical: true },
+  { field: "Tobacco Cessation Counseling provided", options: ["Yes", "No"], ask: "Was smoking cessation counselling given during the visit?" },
+  { field: "Tobacco cessation", options: ["Patient declined smoking cessation medications at the time of discharge", "OTC or Rx medications for tobacco cessation are recommended and are listed on discharge medications", "Patient not a smoker"], ask: "What was said about the patient and smoking?" },
+  { field: "Discharge instructions given", options: ["Take all medications as instructed and stay compliant with your treatment", "Discuss any side effects with your outpatient providers immediately, or visit the nearest ER if they are severe", "Call 911 immediately or report to the nearest ER if you are experiencing any suicidal or homicidal thoughts", "Not advised to operate machinery until speaking with outpatient provider / PCP", "Do not use alcohol, marijuana or illicit drugs"], ask: "Which discharge instructions did the doctor actually give the patient?", critical: true },
+  { field: "Treatment recommendations", options: ["Outpatient Psychiatric follow up", "Medical follow up with PCP", "Substance use treatment", "Labs"], ask: "What follow-up or further treatment did the doctor recommend?" },
+  { field: "Prognosis", options: ["Fair", "Guarded", "Poor", "Dependent upon compliance with recommended treatment"], ask: "Did the doctor state a prognosis? Only answer if the doctor said one." },
+  { field: "Patient was discharged to", options: ["Home", "Hospital", "Residential", "Adult family home", "Shelter", "Other:"], ask: "Where is the patient going after discharge?", text: true, critical: true },
+  { field: "Follow-up appointment", ask: "What follow-up appointment was arranged: with whom, and when?", text: true, critical: true },
+];
+
+/**
+ * Fields of the Admit to Outpatient Program order. Labs, diet and consults are orders the doctor decides, so these
+ * are usually blank unless the doctor said them aloud during the visit.
+ */
+export const ADMIT_ORDER_FIELDS: FieldSpec[] = [
+  { field: "Admit to Outpatient Program", options: ["Adult", "Adolescent"], ask: "Is this an adult or an adolescent patient? Answer only if the transcript makes it clear." },
+  { field: "Admitting diagnosis", ask: "What diagnosis did the doctor give as the reason for admission? Use the doctor's words, and an ICD-10 code only if one was said.", text: true, critical: true },
+  { field: "Allergies", options: ["NKDA", "Other:"], ask: "What did the patient say about drug allergies? NKDA means they denied having any.", text: true, critical: true },
+  { field: "Other medical issues", options: ["Pregnant", "Lactating", "Other:"], ask: "Was pregnancy, breastfeeding, or another medical issue mentioned?", text: true },
+  { field: "Diet", options: ["Regular", "Special:"], ask: "Was a diet ordered or discussed?", text: true },
+  { field: "Vital Signs", options: ["On Admission & Routine", "Telehealth Visit: Please refer to PCP"], ask: "Was anything said about taking vital signs, or about this being a telehealth visit?" },
+  { field: "Consults", options: ["Physical Exam to be done by primary care team", "CD Evaluation", "Dietary Consult", "Other Consult", "EKG"], ask: "Did the doctor order any consult or examination?", text: true },
+  { field: "Point of care tests", options: ["Urine HCG Test", "COVID test", "Breathalyzer", "Urine Drug Test", "UA"], ask: "Did the doctor order any point-of-care test?" },
+  { field: "Lab tests", options: ["CMP", "TSH", "Fasting Lipid Profile", "UA", "CBC w/Diff", "HBA1C", "Urine Drug Screen", "Serum HCG"], ask: "Which laboratory tests did the doctor order?", critical: true },
+  { field: "Additional tests", ask: "Did the doctor order any other test not on the standard list?", text: true },
+  { field: "Groups", options: ["Attend all as scheduled unless otherwise indicated", "Other:"], ask: "What was said about which groups the patient should attend?", text: true },
+  { field: "Medications to be prescribed", ask: "Which medications, with doses, did the doctor say would be prescribed in the program?", text: true, critical: true },
+];
+
 const NONE = /^\s*none\s*\.?\s*$/i;
 
 /**

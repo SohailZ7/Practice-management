@@ -5,7 +5,7 @@
 
 import { documentsFor, type DocSpec } from "./documents";
 import { draftNote } from "./pipeline";
-import { draftForm, PROGRESS_NOTE_FIELDS, type FieldSpec } from "./formSpec";
+import { ADMIT_ORDER_FIELDS, DISCHARGE_ORDER_FIELDS, draftForm, PROGRESS_NOTE_FIELDS, type FieldSpec } from "./formSpec";
 import { fillTemplate, docxText } from "./docxFill";
 import { fillForm } from "./formFill";
 import { noteFileName, patientFolderName } from "./patientFolder";
@@ -30,8 +30,10 @@ export type VisitInput = {
 
 export type GeneratedDoc = { label: string; file: string; path: string; attention: number };
 
-/** The fields to ask for each form. Only the progress note is specified so far; the orders reuse it for now. */
-function fieldsFor(spec: DocSpec): FieldSpec[] {
+/** The question set belonging to each form. Asking a form the wrong set leaves every box blank. */
+export function fieldsFor(template: DocSpec["template"]): FieldSpec[] {
+  if (template === "discharge") return DISCHARGE_ORDER_FIELDS;
+  if (template === "admit") return ADMIT_ORDER_FIELDS;
   return PROGRESS_NOTE_FIELDS;
 }
 
@@ -86,7 +88,7 @@ async function generateOne(input: VisitInput, spec: DocSpec, index: number, tota
     bytes = (await fillTemplate(await input.template(spec.template), note, { attention })).bytes;
   } else {
     say("filling the form");
-    const fields = fieldsFor(spec);
+    const fields = fieldsFor(spec.template);
     const draft = await draftForm(input.llm, fields, transcript, (done, all, field) => say(`field ${done} of ${all}: ${field}`));
     attention = [
       ...draft.needsAttention.map((f) => `${f}: confirm this before signing.`),

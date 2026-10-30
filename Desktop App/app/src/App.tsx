@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { documentsFor, canRecord } from "./lib/documents";
 import { parseSchedule, type ParseResult } from "./lib/scheduleParse";
-import { patientFolderName } from "./lib/patientFolder";
+import { patientFolderName, patientInitials } from "./lib/patientFolder";
 import { generateVisit } from "./lib/visit";
 import { docxText } from "./lib/docxFill";
 import { getEngine, type Engine, type EngineStatus, type Settings, type VisitFile } from "./lib/engine";
@@ -49,7 +49,13 @@ export function App() {
       setEngine(e);
       const s = await e.status().catch(() => null);
       setStatus(s);
-      setSettings(s?.settings ?? (await e.getSettings()));
+      let current = s?.settings ?? (await e.getSettings());
+      // First run: pick the model that scored best on the practice's test visits, if it is installed.
+      if (!current.model && s?.models.length) {
+        const preferred = ["qwen2.5:14b-instruct", "qwen3:14b", "phi4", "gemma3:12b"].find((m) => s.models.includes(m));
+        current = await e.setSettings({ ...current, model: preferred ?? s.models[0] });
+      }
+      setSettings(current);
     });
   }, []);
 
@@ -149,8 +155,15 @@ export function App() {
     );
   }
 
-  const ready =
-    !!engine && (engine.kind === "fake" || (!!status?.whisper_cli && !!status?.whisper_model && !!status?.ffmpeg && !!settings?.model));
+  // What is still missing, so the banner can say it rather than Record just being dead.
+  const missing: string[] = [];
+  if (engine && engine.kind === "native") {
+    if (!status?.ffmpeg) missing.push("ffmpeg (brew install ffmpeg)");
+    if (!status?.whisper_cli) missing.push("whisper.cpp (brew install whisper-cpp)");
+    if (!status?.whisper_model) missing.push("the transcription model file");
+    if (!settings?.model) missing.push("a note-writing model");
+  }
+  const ready = !!engine && missing.length === 0;
 
   return (
     <>
@@ -175,7 +188,7 @@ export function App() {
             <DateBar date={date} onChange={setDate} />
             {!ready && (
               <div className="banner">
-                Recording is off until the engines and a model are set. Open{" "}
+                Recording is off because {missing.join(", ")} {missing.length === 1 ? "is" : "are"} missing. Fix it in{" "}
                 <button className="link" onClick={() => setTab("setup")}>Setup</button>.
               </div>
             )}
@@ -357,7 +370,13 @@ function Row({ item, state, files, ready, onRecorded, onState, onError, onOpen }
     <tr className={allowed ? "" : "dim"}>
       <td>{item.time}</td>
       <td>
-        {item.patient ? `${item.patient.lastName}, ${item.patient.firstName}` : item.clientInfo}
+        {item.patient ? (
+          <span title="Shown as initials; the full name is used for the folder and file names.">
+            {patientInitials(item.patient.lastName, item.patient.firstName)}
+          </span>
+        ) : (
+          item.clientInfo
+        )}
         {item.clientInfo && item.patient && <div className="small">{item.clientInfo}</div>}
       </td>
       <td>{item.program}</td>

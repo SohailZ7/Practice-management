@@ -58,11 +58,31 @@ impl Default for Settings {
             master_folder: home().join("Documents/Patient Notes").to_string_lossy().into(),
             provider_name: String::new(),
             model: String::new(),
-            whisper_model: support_dir().join("models/ggml-small.en.bin").to_string_lossy().into(),
+            whisper_model: find_whisper_model(),
             templates_dir: default_templates_dir().to_string_lossy().into(),
             ollama_url: "http://127.0.0.1:11434".into(),
         }
     }
+}
+
+/// Looks for an already-downloaded Whisper model, so a fresh install usually needs no setup for transcription.
+/// The first existing file wins; otherwise the default location is offered for the user to download into.
+fn find_whisper_model() -> String {
+    let app = support_dir().join("models");
+    let lib = home().join("Library/Application Support");
+    let candidates = [
+        app.join("ggml-small.en.bin"),
+        lib.join("PracticeNotesSpike/models/ggml-small.en.bin"),
+        lib.join("PracticeNotes/models/ggml-small.en.bin"),
+        home().join("models/ggml-small.en.bin"),
+        PathBuf::from("/opt/homebrew/share/whisper.cpp/models/ggml-small.en.bin"),
+    ];
+    candidates
+        .iter()
+        .find(|p| p.exists())
+        .unwrap_or(&candidates[0])
+        .to_string_lossy()
+        .into()
 }
 
 fn default_templates_dir() -> PathBuf {

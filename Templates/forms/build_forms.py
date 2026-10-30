@@ -275,7 +275,7 @@ def discharge_order(path):
     field(doc, "Medical diagnosis:", "_" * 74)
 
     heading(doc, "Discharge Medications")
-    options(doc, "", ["Medication print out list attached", "None", "E-RX", "Paper RX", "Phoned to:"], "_" * 22)
+    options(doc, "Discharge medications:", ["Medication print out list attached", "None", "E-RX", "Paper RX", "Phoned to:"], "_" * 22)
     t = doc.add_table(rows=1, cols=4)
     t.style = "Table Grid"
     for c, text in zip(t.rows[0].cells, ["Medication", "Dose, instruction, quantity, refill", "Medication", "Dose, instruction, quantity, refill"]):
@@ -303,28 +303,28 @@ def discharge_order(path):
     ], widths=(1.9, 5.6))
 
     heading(doc, "Discharge Type")
-    options(doc, "", ["MD Discharge", "Unplanned; patient request", "Unplanned; other LOC"])
+    options(doc, "Discharge type:", ["MD Discharge", "Unplanned; patient request", "Unplanned; other LOC"])
 
     heading(doc, "Tobacco Cessation Medication at Discharge")
     options(doc, "Tobacco Cessation Counseling provided:", ["Yes", "No"])
-    options(doc, "", ["Patient declined smoking cessation medications at the time of discharge"])
-    options(doc, "", ["OTC or Rx medications for tobacco cessation are recommended and are listed on discharge medications"])
-    options(doc, "", ["Patient not a smoker"])
+    options(doc, "Tobacco cessation:", ["Patient declined smoking cessation medications at the time of discharge",
+                                        "OTC or Rx medications for tobacco cessation are recommended and are listed on discharge medications",
+                                        "Patient not a smoker"])
 
     heading(doc, "Discharge Instructions")
-    for text in [
-        "Take all medications as instructed and stay compliant with your treatment.",
-        "Discuss any side effects with your outpatient providers immediately, or visit the nearest ER if they are severe.",
-        "Call 911 immediately or report to the nearest ER if you are experiencing any suicidal or homicidal thoughts.",
-        "Not advised to operate machinery until speaking with outpatient provider / PCP.",
-        "Do not use alcohol, marijuana or illicit drugs.",
-    ]:
-        options(doc, "", [text])
+    options(doc, "Discharge instructions given:", [
+        "Take all medications as instructed and stay compliant with your treatment",
+        "Discuss any side effects with your outpatient providers immediately, or visit the nearest ER if they are severe",
+        "Call 911 immediately or report to the nearest ER if you are experiencing any suicidal or homicidal thoughts",
+        "Not advised to operate machinery until speaking with outpatient provider / PCP",
+        "Do not use alcohol, marijuana or illicit drugs",
+    ])
 
     heading(doc, "Treatment Recommendations")
-    options(doc, "", ["Outpatient Psychiatric follow up", "Medical follow up with PCP", "Substance use treatment", "Labs"])
+    options(doc, "Treatment recommendations:", ["Outpatient Psychiatric follow up", "Medical follow up with PCP", "Substance use treatment", "Labs"])
     options(doc, "Prognosis:", ["Fair", "Guarded", "Poor", "Dependent upon compliance with recommended treatment"])
     options(doc, "Patient was discharged to:", ["Home", "Hospital", "Residential", "Adult family home", "Shelter", "Other:"], "_" * 16)
+    field(doc, "Follow-up appointment:", "_" * 70)
 
     heading(doc, "Signature")
     field(doc, "TORB:", "_" * 26 + " Telephone order given by medical provider    " + "_" * 26 + " Nurse (name and signature)")
@@ -347,35 +347,33 @@ def admit_order(path):
     field(doc, "Transcribed By (nurse, date, time):", "_" * 50)
 
     heading(doc, "Admitting Diagnosis")
-    field(doc, "", "_" * 110, bold_label=False)
+    field(doc, "Admitting diagnosis:", "_" * 90)
 
     heading(doc, "Medical Issues")
-    options(doc, "", ["NKDA", "Allergies:"], "_" * 40)
-    options(doc, "", ["Pregnant", "Lactating", "Other:"], "_" * 36)
+    options(doc, "Allergies:", ["NKDA", "Other:"], "_" * 44)
+    options(doc, "Other medical issues:", ["Pregnant", "Lactating", "Other:"], "_" * 34)
     options(doc, "Diet:", ["Regular", "Special:"], "_" * 36)
     options(doc, "Vital Signs:", ["On Admission & Routine", "Telehealth Visit: Please refer to PCP"])
 
     heading(doc, "In House Consults and Tests")
-    options(doc, "", ["Physical Exam to be done by primary care team"])
-    options(doc, "", ["CD Evaluation (reason):"], "_" * 40)
-    options(doc, "", ["Dietary Consult"], "(automatically pushed to the following business day, except Thursday and Friday, which complete the following Monday)")
-    options(doc, "", ["Other Consult (reason):"], "_" * 40)
-    options(doc, "", ["EKG (reason):"], "_" * 46)
-    options(doc, "", ["Urine HCG Test", "COVID test", "Breathalyzer", "Urine Drug Test", "UA"])
+    options(doc, "Consults:", ["Physical Exam to be done by primary care team", "CD Evaluation", "Dietary Consult", "Other Consult", "EKG"], "_" * 24)
+    para(doc, "A dietary consult is pushed to the following business day, except Thursday and Friday, which complete the following Monday.", size=8, italic=True)
+    options(doc, "Point of care tests:", ["Urine HCG Test", "COVID test", "Breathalyzer", "Urine Drug Test", "UA"])
 
     heading(doc, "Lab Test(s)")
-    options(doc, "", ["CMP", "TSH", "Fasting Lipid Profile", "UA", "CBC w/Diff", "HBA1C"])
-    options(doc, "", ["Urine Drug Screen", "Serum HCG", "Additional Tests:"], "_" * 34)
+    options(doc, "Lab tests:", ["CMP", "TSH", "Fasting Lipid Profile", "UA", "CBC w/Diff", "HBA1C", "Urine Drug Screen", "Serum HCG"])
+    field(doc, "Additional tests:", "_" * 70)
 
     heading(doc, "Group(s)")
-    options(doc, "", ["Attend all as scheduled unless otherwise indicated", "Other:"], "_" * 30)
+    options(doc, "Groups:", ["Attend all as scheduled unless otherwise indicated", "Other:"], "_" * 30)
 
     heading(doc, "Medication(s)")
     para(doc, "Medications reviewed with patient; the following medications will be prescribed by the PHP/IOP provider. "
               "If a medication is not listed, the patient should refer to their established provider or the outpatient "
               "medication management supervisor.", size=8.5, italic=True)
-    for _ in range(10):
-        options(doc, "", [""], "_" * 90)
+    field(doc, "Medications to be prescribed:", "_" * 80)
+    for _ in range(8):
+        field(doc, "", "_" * 100, bold_label=False)
 
     heading(doc, "Signature")
     field(doc, "TORB:", "_" * 26 + " Given by medical provider (name)    " + "_" * 26 + " Nurse (signature)")

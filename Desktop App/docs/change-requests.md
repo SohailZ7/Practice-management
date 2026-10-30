@@ -132,3 +132,27 @@ Status values: `noted` (not built), `building`, `built`.
 - The queue survives changing the day and, ideally, restarting the app.
 - Documents are generated one at a time, since two models at once would not fit in memory.
 - Open: should the queue keep running when the app window is closed, and should it notify when a visit's documents are ready?
+
+## 14. Order forms wired to their own questions
+- Date asked: 2026-10-30
+- Status: **built**
+- Before: every form was asked the progress note's 24 questions. None of them named a field on the admit or discharge order, so those forms came out entirely blank after a minute of model time.
+- Now: `DISCHARGE_ORDER_FIELDS` (19 questions) and `ADMIT_ORDER_FIELDS` (12) in `src/lib/formSpec.ts`, routed by `fieldsFor()` in `src/lib/visit.ts`.
+- The forms themselves were regenerated so every fillable group carries an inline label; several had none and could not be addressed at all.
+- Two filling bugs this surfaced and fixed: a heading with the same words as a field ("Discharge Medications") swallowed the real field below it, and options that wrap onto a second line could not be ticked.
+- Guard added: a test asserts every question in a set names a real field on its own form, and every option exists on that field's line. That is the check that would have caught the original gap.
+- As expected, an order form stays largely blank: on a synthetic discharge, 11 of 19 fields had nothing in the recording to fill them, and the "Needs your attention" list names them.
+
+## 15. Record enabled out of the box
+- Date asked: 2026-10-30
+- Status: **built**
+- The Record button was dead because the default transcription-model path did not match where the file actually was, and no note-writing model was chosen.
+- Now: the app searches the known locations for a Whisper model on first run, and preselects the best installed note-writing model (Qwen2.5 14B first, as it scored best on the practice's test visits).
+- The banner now names what is missing ("ffmpeg is missing", "a note-writing model is missing") instead of Record silently being disabled.
+
+## 16. Patient names shown as initials on the schedule
+- Date asked: 2026-10-30
+- Status: **built**
+- The board shows "A.T." rather than the full name, since it is often visible to other people in a clinic room.
+- **Folder and file names keep the full name** ("Testcase, Alpha"), because the provider has to find the documents afterwards and initials would collide between patients.
+- Open for the owner: the row still shows the age, sex and insurance line from the sheet ("40F / Insurer / KIOP PM 1"). Should that be hidden too?
