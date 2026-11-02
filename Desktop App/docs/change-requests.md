@@ -167,3 +167,12 @@ Status values: `noted` (not built), `building`, `built`.
 - The desktop app is kept as a separate thing, not deleted.
 - **Correction on the BAA:** it is not blocked on a domain. Google Cloud's BAA is accepted per project, free, in four clicks; only the Workspace BAA is tied to a domain. So there is no need to build "BAA-ready but uncovered": accept it, and keep using invented patients until it is done either way.
 - Open: whether the checkbox forms stay Markdown (which will not look like Fairfax form 4071 when printed), keep a Word rendering, or are rendered back into the Word form on download.
+
+## 18. Final shape: web app plus a small self-contained native recorder
+- Date asked: 2026-11-01
+- Status: settled, written up in `Desktop App/docs/final-architecture.md`
+- The native app becomes a thin recorder: it pulls the schedule from the cloud, records, transcribes, and pushes the transcript back. No documents, templates, editing or model.
+- **Self-contained. Nothing is installed alongside it**: no Homebrew, no Ollama, no ffmpeg, no BlackHole. The transcription model is downloaded by the app itself on first run.
+- If a local note-writing model is ever wanted, it is compiled in (`llama-cpp-2`) with the weights downloaded on first run, never a separate install.
+- **BlackHole is no longer needed**, because a native app captures system audio directly. That removes the fragile audio routing.
+- The recorder keeps the microphone and the system audio on separate channels, which gives true speaker attribution on telehealth visits and would retire the worst failure mode in the note writing.
