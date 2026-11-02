@@ -3,6 +3,7 @@ import { SignJWT, exportJWK, generateKeyPair, createLocalJWKSet } from "jose";
 import { verifyGoogleIdToken } from "../src/lib/desktop/googleId";
 import { canRecord, programOf } from "../src/lib/desktop/policy";
 import { ruleFor } from "../src/lib/security/rateLimit";
+import { hashRefreshToken, newRefreshToken, sessionExpiry, verifyAccessToken } from "../src/lib/desktop/tokens";
 
 const AUD = "desktop-client.apps.example";
 
@@ -78,5 +79,27 @@ describe("rate limits for the Desktop API (API-1)", () => {
     expect(ruleFor("POST", "/api/desktop/v1/auth/token", false)?.name).toBe("desktop-auth");
     expect(ruleFor("POST", "/api/desktop/v1/auth/refresh", false)?.limit).toBe(20);
     expect(ruleFor("GET", "/api/desktop/v1/schedule", false)?.name).toBe("desktop");
+  });
+});
+
+describe("pairing tokens (connecting a recorder)", () => {
+  it("a pairing token is a long random string, stored only as a hash", () => {
+    const a = newRefreshToken();
+    const b = newRefreshToken();
+    expect(a.token.length).toBeGreaterThan(30);
+    expect(a.token).not.toBe(b.token);
+    expect(a.hash).toBe(hashRefreshToken(a.token));
+    // The stored hash must not reveal the token.
+    expect(a.hash).not.toContain(a.token.slice(0, 12));
+  });
+  it("a pairing token is not a signed access token, so it is looked up rather than verified", () => {
+    const { token } = newRefreshToken();
+    expect(verifyAccessToken(token, "secret")).toBeNull();
+  });
+  it("lasts long enough to be useful but still expires", () => {
+    const now = Date.now();
+    const days = (sessionExpiry(now).getTime() - now) / 86_400_000;
+    expect(days).toBeGreaterThan(7);
+    expect(days).toBeLessThan(400);
   });
 });

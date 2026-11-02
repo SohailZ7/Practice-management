@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/session";
 import { normalizeTheme } from "@/lib/theme";
 import { Banner } from "@/components/Banner";
 import { db } from "@/lib/db";
-import { revokeMyDesktopSession, saveTheme } from "./actions";
+import { connectRecorder, revokeMyDesktopSession, saveTheme } from "./actions";
 
 const OPTIONS = [
   { value: "light", label: "Light", hint: "Bright background, white navigation." },
@@ -42,8 +42,16 @@ export default async function SettingsPage({
       </form>
       <div className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>Mac Desktop App</h2>
+        <p className="muted small">
+          The recorder is a small Mac app that records a visit and sends back the text. Connect one here, then paste
+          the token into the recorder&apos;s Setup screen along with this app&apos;s address.
+        </p>
+        <form action={connectRecorder} className="row" style={{ marginBottom: ".6rem" }}>
+          <input name="label" placeholder="Which Mac? e.g. Consulting room" aria-label="Recorder name" />
+          <button type="submit">Connect a recorder</button>
+        </form>
         {macs.length === 0 ? (
-          <p className="muted small">No Mac is signed in.</p>
+          <p className="muted small">No recorder is connected.</p>
         ) : (
           macs.map((m) => (
             <form key={m.id} action={revokeMyDesktopSession} className="row">

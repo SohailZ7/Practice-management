@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod capture;
+pub mod google;
+
 use serde::{Deserialize, Serialize};
 
 // ----------------------------------------------------------------------------- paths and settings
@@ -42,6 +45,8 @@ pub struct Settings {
     pub practice_url: String,
     /// Token issued by the practice app. Treated like a password: never logged.
     pub access_token: String,
+    /// Renews the access token when it expires. Also never logged.
+    pub refresh_token: String,
     /// Whisper model file used for transcription.
     pub whisper_model: String,
 }
@@ -51,6 +56,7 @@ impl Default for Settings {
         Self {
             practice_url: String::new(),
             access_token: String::new(),
+            refresh_token: String::new(),
             whisper_model: find_whisper_model(),
         }
     }
@@ -219,6 +225,79 @@ async fn set_settings(settings: Settings) -> Result<Settings, String> {
     Ok(settings)
 }
 
+/// The recording in progress, if there is one. Only one visit is recorded at a time.
+static RECORDER: std::sync::Mutex<Option<capture::Session>> = std::sync::Mutex::new(None);
+
+#[derive(Serialize)]
+pub struct StartResult {
+    /// Set when system audio could not be captured, so the UI can say the patient may not be recorded.
+    warning: Option<String>,
+}
+
+/// Begins recording the microphone and, for a telehealth visit, the system audio.
+/// Signs in with Google and stores the tokens the practice app issues.
+#[tauri::command]
+async fn sign_in_with_google(practice_url: String) -> Result<Settings, String> {
+    let tokens = google::sign_in(&practice_url)?;
+    let mut s = load_settings();
+    s.practice_url = practice_url;
+    s.access_token = tokens.access_token;
+    s.refresh_token = tokens.refresh_token;
+    store_settings(&s)?;
+    Ok(s)
+}
+
+#[tauri::command]
+async fn start_recording(with_system_audio: bool) -> Result<StartResult, String> {
+    let mut slot = RECORDER.lock().map_err(|_| "the recorder is busy".to_string())?;
+    if slot.is_some() {
+        return Err("a recording is already running".into());
+    }
+    let (recorder, warning) = capture::Session::start(with_system_audio)?;
+    *slot = Some(recorder);
+    Ok(StartResult { warning })
+}
+
+#[derive(Serialize)]
+pub struct StopResult {
+    /// Seconds of audio captured, for the UI only.
+    seconds: f32,
+    system_audio: bool,
+    /// Only one side of a telehealth call was heard: a note written from this would be missing the other voice.
+    one_sided: bool,
+}
+
+/// Ends the recording, transcribes it here, and returns the text. The audio never leaves this Mac.
+#[tauri::command]
+async fn stop_recording() -> Result<(String, StopResult), String> {
+    let recorder = RECORDER
+        .lock()
+        .map_err(|_| "the recorder is busy".to_string())?
+        .take()
+        .ok_or("no recording is running")?;
+    let channels = recorder.stop()?;
+    if !channels.has_sound() {
+        return Err("the recording is silent; check the microphone and try again".into());
+    }
+    let summary = StopResult {
+        seconds: channels.mic.len().max(channels.system.len()) as f32 / capture::SAMPLE_RATE as f32,
+        system_audio: !channels.system.is_empty(),
+        one_sided: channels.one_sided(),
+    };
+    let wav = channels.to_stereo_wav()?;
+    let text = transcribe_bytes(&wav, "wav")?;
+    Ok((text, summary))
+}
+
+/// Throws away a recording without transcribing it.
+#[tauri::command]
+async fn cancel_recording() -> Result<(), String> {
+    if let Ok(mut slot) = RECORDER.lock() {
+        slot.take();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn transcribe(request: tauri::ipc::Request<'_>) -> Result<String, String> {
     transcribe_bytes(&raw(&request)?, &header(&request, "x-ext"))
@@ -232,7 +311,8 @@ async fn transcribe(request: tauri::ipc::Request<'_>) -> Result<String, String> 
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, get_settings, set_settings, transcribe
+            engine_status_cmd, get_settings, set_settings, transcribe,
+            start_recording, stop_recording, cancel_recording, sign_in_with_google
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { newRefreshToken, sessionExpiry } from "@/lib/desktop/tokens";
 import { requireUser } from "@/lib/session";
 import { THEMES, normalizeTheme } from "@/lib/theme";
 import { audit } from "@/lib/audit";
@@ -24,4 +25,21 @@ export async function revokeMyDesktopSession(form: FormData) {
   if (res.count) await audit(user.email, "desktop.session.revoke", `session ${id}`);
   revalidatePath("/settings");
   flash("/settings", "notice", res.count ? "Signed out of that Mac." : "That session was already ended.");
+}
+
+/**
+ * Connects a Mac recorder: creates a session and returns its token **once**. Only the token's hash is stored, so it
+ * cannot be shown again; if it is lost, connect the recorder again and revoke the old one.
+ */
+export async function connectRecorder(form: FormData) {
+  const user = await requireUser();
+  const label = str(form, "label").slice(0, 60) || "Mac";
+  const token = newRefreshToken();
+  const session = await db.desktopSession.create({
+    data: { userId: user.id, tokenHash: token.hash, deviceLabel: label, expiresAt: sessionExpiry() },
+  });
+  await audit(user.email, "desktop.recorder.connect", `session ${session.id}`);
+  revalidatePath("/settings");
+  // The token travels back through the flash message, which is the one place it is ever shown.
+  flash("/settings", "notice", `Recorder token for ${label} (copy it now, it is not shown again): ${token.token}`);
 }

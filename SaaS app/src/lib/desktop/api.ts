@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "../db";
 import { audit } from "../audit";
 import { canAccess, normalizeEmail, type Level, type ModuleName } from "../access";
-import { bearerToken, desktopSecret, verifyAccessToken } from "./tokens";
+import { bearerToken, desktopSecret, hashRefreshToken, verifyAccessToken } from "./tokens";
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string) {
@@ -39,18 +39,34 @@ export async function readJson(req: Request): Promise<Record<string, unknown>> {
   throw new ApiError(400, "bad_request");
 }
 
-/** API-2, API-3, API-9: a valid access token, an active session, an active user, and the module level needed. */
+/**
+ * API-2, API-3, API-9: a valid token, an active session, an active user, and the module level needed.
+ *
+ * Two kinds of token are accepted. A signed, short-lived access token comes from the Google sign-in exchange. A
+ * pairing token is the long opaque string the practice app shows once when a recorder is connected; the recorder
+ * stores it and sends it directly, which saves building a sign-in flow into a device that only records.
+ */
 export async function authenticate(req: Request, need?: { module: ModuleName; level: Level }) {
   const token = bearerToken(req.headers.get("authorization"));
-  const claims = token ? verifyAccessToken(token, desktopSecret()) : null;
-  if (!claims) throw new ApiError(401, "unauthorized");
-  const session = await db.desktopSession.findUnique({ where: { id: claims.sid } });
-  if (!session || session.userId !== claims.uid || session.revokedAt || session.expiresAt.getTime() <= Date.now()) throw new ApiError(401, "unauthorized");
-  const user = await db.user.findUnique({ where: { id: claims.uid }, include: { access: true } });
+  if (!token) throw new ApiError(401, "unauthorized");
+
+  const claims = verifyAccessToken(token, desktopSecret());
+  const session = claims
+    ? await db.desktopSession.findUnique({ where: { id: claims.sid } })
+    : await db.desktopSession.findUnique({ where: { tokenHash: hashRefreshToken(token) } });
+
+  if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) throw new ApiError(401, "unauthorized");
+  if (claims && session.userId !== claims.uid) throw new ApiError(401, "unauthorized");
+
+  const user = await db.user.findUnique({ where: { id: session.userId }, include: { access: true } });
   if (!user || !user.active) throw new ApiError(401, "unauthorized");
   if (need && !canAccess(user, need.module, need.level)) {
     await audit(user.email, "desktop.denied", `needed ${need.module}:${need.level}`);
     throw new ApiError(403, "forbidden");
+  }
+  // A pairing token in daily use should not quietly expire mid-clinic.
+  if (!claims) {
+    await db.desktopSession.update({ where: { id: session.id }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
   }
   return { user, session };
 }

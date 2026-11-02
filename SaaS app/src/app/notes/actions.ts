@@ -5,53 +5,24 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
-import { parseSchedule } from "@/lib/notes/scheduleParse";
+import { loadScheduleForDate } from "@/lib/notes/loadSchedule";
 import { generateDocuments } from "@/lib/notes/generate";
 import { makeLlm, warmModel } from "@/lib/notes/model";
 import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
-import { validatePatient } from "@/lib/billing/validate";
 
 // Audit entries hold ids and counts only, never patient names or note text.
 
 const MAX_TRANSCRIPT = 200_000;
 
-/** Loads a day from a pasted board, creating a visit per row and a patient where one is not already on file. */
+/** Loads a day from a pasted board. The parsing and the rules live in loadScheduleForDate, shared with the recorder. */
 export async function loadPastedSchedule(date: string, pasted: string, provider: string) {
   const user = await requireAccess("notes", "edit");
   if (!isISODate(date)) throw new Error("Invalid date");
-  const { entries, summary, otherProviders } = parseSchedule(pasted.slice(0, 500_000), provider);
-
-  let created = 0;
-  for (const e of entries) {
-    if (!e.patient) continue;
-    const { values, errors } = validatePatient({ lastName: e.patient.lastName, firstName: e.patient.firstName });
-    if (Object.keys(errors).length) continue;
-    const patient =
-      (await db.billingPatient.findFirst({
-        where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null },
-      })) ??
-      (await db.billingPatient.create({
-        data: { lastName: values.lastName, firstName: values.firstName, createdById: user.id },
-      }));
-
-    const already = await db.visit.findFirst({ where: { patientId: patient.id, visitDate: date } });
-    if (already) continue;
-    await db.visit.create({
-      data: {
-        patientId: patient.id,
-        visitDate: date,
-        appointmentType: e.type,
-        program: e.program,
-        providerName: e.provider?.name ?? "",
-        createdByEmail: user.email,
-      },
-    });
-    created += 1;
-  }
-  await audit(user.email, "notes.schedule.paste", `${date} rows=${summary.kept} visits=${created}`);
+  const r = await loadScheduleForDate(date, pasted, provider, user);
+  await audit(user.email, "notes.schedule.paste", `${date} rows=${r.kept} visits=${r.created}`);
   revalidatePath("/notes");
-  return { created, summary, otherProviders };
+  return { created: r.created, summary: { kept: r.kept, skippedNoClient: r.skippedNoClient, skippedOtherProvider: r.skippedOtherProvider }, otherProviders: r.otherProviders };
 }
 
 /** Stores the transcript the recorder produced. The audio itself never reaches the server. */

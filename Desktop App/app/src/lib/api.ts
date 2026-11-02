@@ -33,6 +33,22 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
 export const fetchVisits = (session: Session, date: string) =>
   call<{ date: string; visits: Visit[] }>(session, `/notes/visits?date=${encodeURIComponent(date)}`);
 
+export type LoadResult = {
+  created: number;
+  skippedExisting: number;
+  kept: number;
+  skippedNoClient: number;
+  skippedOtherProvider: number;
+  otherProviders: string[];
+};
+
+/**
+ * Sends a pasted board to the practice app, which parses it and creates the visits. The parsing deliberately happens
+ * there: the recorder carries no copy of the board's rules.
+ */
+export const syncSchedule = (session: Session, date: string, pasted: string, provider: string) =>
+  call<LoadResult>(session, "/notes/schedule", { method: "POST", body: JSON.stringify({ date, pasted, provider }) });
+
 export const pushTranscript = (session: Session, visitId: string, transcript: string) =>
   call<{ ok: true }>(session, `/notes/visits/${encodeURIComponent(visitId)}/transcript`, {
     method: "POST",

@@ -17,3 +17,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # No TLS on purpose: the app only ever talks to Ollama on 127.0.0.1.
 ureq = { version = "2", default-features = false, features = ["json"] }
+
+# Capturing the audio of a telehealth call needs a native API: macOS does not let a web page record what comes out
+# of the speakers. ScreenCaptureKit is what Meetily uses for the same reason.
+[target.'cfg(target_os = "macos")'.dependencies]
+# objc2 bindings rather than the screencapturekit crate: that one depends on apple-metal, which builds through Swift
+# and so needs full Xcode. These are generated bindings and build with the Command Line Tools alone.
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-screen-capture-kit = { version = "0.3", features = ["SCStream", "SCShareableContent", "SCError", "block2", "objc2-core-media"] }
+objc2-core-media = { version = "0.3", features = ["CMSampleBuffer", "CMBlockBuffer", "CMFormatDescription", "CMTime"] }
+objc2-core-audio-types = "0.3"
+block2 = "0.6"
+cpal = "0.15"
+hound = "3.5"

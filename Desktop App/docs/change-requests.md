@@ -185,3 +185,16 @@ Status values: `noted` (not built), `building`, `built`.
 - The 12-case evaluation set and the model comparison harness moved to the web app with the code they test.
 - Measured while building: the form questions filled only 3 of 24 fields because the patient had not used the form's own words. Teaching the model to map a description onto the nearest option took it to 9 of 24, correctly.
 - **Not built yet:** system audio capture (ScreenCaptureKit), so today a telehealth visit records the provider only. In-person visits are fine.
+
+## 20. System audio capture, and how the recorder connects
+- Date: 2026-11-01
+- Status: **built**, not yet tried on a real call
+- **System audio** through ScreenCaptureKit, so a telehealth visit records the patient as well as the provider. The microphone and the call are kept on **separate channels** of one WAV, which is what makes speaker attribution a fact rather than a guess. A **Telehealth** tick on the board decides whether the call's audio is captured at all.
+- If only one side is heard, the recorder says so and asks before sending, because a note written from half a conversation is missing whatever the patient said.
+- The crate `screencapturekit` could not be used: it depends on `apple-metal`, which builds through Swift and needs full Xcode. The `objc2` bindings build with the Command Line Tools alone.
+- Audio streams cannot move between threads, so the recorder runs on a thread of its own and the app talks to it through channels.
+- **Paste flow restored in the recorder**, sending the pasted board to the practice app, which parses it. One parser, not two.
+- **How the recorder connects** (the Setup screen previously asked for a token nothing could issue):
+  - **Sign in with Google**: the system browser, PKCE, a loopback redirect, then the practice app checks its allowlist and issues the tokens. Needs a "Desktop app" OAuth client and `GOOGLE_DESKTOP_CLIENT_ID` / `GOOGLE_DESKTOP_CLIENT_SECRET` set on the web app.
+  - **Or a pairing token**: the web app's Settings has **Connect a recorder**, which shows a token once. Works with no OAuth setup at all, which is why it exists.
+- Still to do: compiling whisper.cpp in and downloading the model on first run, and signing and notarisation.
