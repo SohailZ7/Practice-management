@@ -1,6 +1,6 @@
 // Pure access-control rules. No database or framework imports so they are easy to test.
 
-export const MODULES = ["schedule", "tasks", "employees", "billing", "ledger"] as const;
+export const MODULES = ["schedule", "tasks", "employees", "billing", "ledger", "notes"] as const;
 export type ModuleName = (typeof MODULES)[number];
 
 export const LEVELS = ["none", "view", "edit"] as const;
@@ -77,4 +77,5 @@ export const DEFAULT_ACCESS: Record<ModuleName, Level> = {
   employees: "view",
   billing: "none",
   ledger: "none",
+  notes: "none",
 };

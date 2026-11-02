@@ -22,7 +22,7 @@ import { IdleLogoff } from "./IdleLogoff";
 type Props = {
   name: string;
   email: string;
-  levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string };
+  levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string; notes: string };
   isAdmin: boolean;
   timing: { idleMs: number; absoluteDeadline: number; serverNow: number } | null;
   children: ReactNode;
@@ -110,6 +110,7 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
   if (levels.tasks !== "none") items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks" });
   if (levels.employees !== "none") items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users" });
   if (levels.billing !== "none") items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing" });
+  if (levels.notes !== "none") items.push({ id: "/notes", href: "/notes", label: "Notes", icon: "tasks" });
   if (levels.ledger !== "none") items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger" });
   // Visible to everyone; anyone but the Admin who opens it sees the "no access" page (AUTH-13).
   items.push({ id: "/admin", href: "/admin", label: "Admin", icon: "shield" });

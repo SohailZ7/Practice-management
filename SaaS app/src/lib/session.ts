@@ -84,5 +84,6 @@ export function levels(user: CurrentUser) {
     employees: levelFor(user, "employees"),
     billing: levelFor(user, "billing"),
     ledger: levelFor(user, "ledger"),
+    notes: levelFor(user, "notes"),
   };
 }

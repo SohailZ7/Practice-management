@@ -361,3 +361,10 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .notes-done { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px; padding: .4rem 1.1rem; font-weight: 600; cursor: pointer; }
 .idle-dialog { max-width: 460px; }
 .phi-hint { margin: .25rem 0 0; }
+
+/* --- notes: the document pop-up --- */
+.modal-back { position: fixed; inset: 0; background: rgba(10,12,30,.55); display: flex; align-items: center;
+  justify-content: center; padding: 24px; z-index: 50; }
+.modal { background: var(--card, #fff); border-radius: 12px; padding: 16px; width: min(960px, 100%);
+  max-height: 88vh; display: flex; flex-direction: column; gap: 10px; }
+.modal textarea { resize: vertical; }

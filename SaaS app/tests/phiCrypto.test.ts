@@ -114,6 +114,9 @@ describe("applying the cipher to Prisma data", () => {
       Task: ["notes"],
       ImportDraft: ["payload"],
       PatientConsent: ["note"],
+      Visit: ["transcript"],
+      VisitDocument: ["markdown", "attention"],
+      VisitDocumentVersion: ["markdown"],
     });
   });
   it("encrypts only those columns of a create/update payload", () => {

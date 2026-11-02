@@ -205,12 +205,61 @@ model BillingPatient {
   encounters      Encounter[]
   scheduleEntries ScheduleEntry[]
   consents        PatientConsent[]
+  Visit           Visit[]
 
   @@index([lastName, firstName])
 }
 
 // Consent for AI-assisted visit documentation (requirements v19, CON-1). History is kept; at most one row per patient
 // is active (enforced in code, inside a transaction). consentDate: YYYY-MM-DD in the practice time zone.
+// A recorded visit (requirements v17 / change request 17). The audio never reaches the server: the recorder
+// transcribes on the Mac and pushes only the text. visitDate: YYYY-MM-DD in the practice time zone.
+model Visit {
+  id              String          @id @default(cuid())
+  patientId       String
+  visitDate       String
+  appointmentType String          @default("")
+  program         String          @default("")
+  providerName    String          @default("")
+  transcript      String          @default("")
+  createdByEmail  String
+  createdAt       DateTime        @default(now())
+  patient         BillingPatient  @relation(fields: [patientId], references: [id])
+  documents       VisitDocument[]
+
+  @@index([visitDate])
+  @@index([patientId, visitDate])
+}
+
+// One generated document, stored as Markdown. Every save keeps the previous text as a version, so an edit can be
+// traced and nothing a provider wrote is lost.
+model VisitDocument {
+  id        String                 @id @default(cuid())
+  visitId   String
+  kind      String
+  label     String
+  markdown  String
+  draft     Boolean                @default(true)
+  attention String                 @default("")
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  visit     Visit                  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  versions  VisitDocumentVersion[]
+
+  @@index([visitId])
+}
+
+model VisitDocumentVersion {
+  id           String        @id @default(cuid())
+  documentId   String
+  markdown     String
+  savedByEmail String
+  savedAt      DateTime      @default(now())
+  document     VisitDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
 model PatientConsent {
   id               String         @id @default(cuid())
   patientId        String
@@ -359,15 +408,15 @@ model TaskViewer {
 // Every change of a task's assignee. Ids and names only, never task text. Append-only in the database
 // (prisma/sql/audit-append-only.sql). kind: assigned | created-for | tab-removed
 model TaskMove {
-  id         String   @id @default(cuid())
-  taskId     String
-  fromId     String?
-  fromName   String
-  toId       String?
-  toName     String
-  kind       String
-  movedBy    String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  taskId    String
+  fromId    String?
+  fromName  String
+  toId      String?
+  toName    String
+  kind      String
+  movedBy   String
+  createdAt DateTime @default(now())
 
   @@index([createdAt])
   @@index([taskId])

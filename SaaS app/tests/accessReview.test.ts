@@ -65,7 +65,7 @@ describe("buildReviewRows / summarize", () => {
   );
   it("shows each module level; admins get edit everywhere; inactive users none; junk levels none", () => {
     expect(rows[0].levels).toMatchObject({ schedule: "edit", billing: "view", tasks: "none", ledger: "none" });
-    expect(Object.values(rows[1].levels)).toEqual(["edit", "edit", "edit", "edit", "edit"]);
+    expect(Object.values(rows[1].levels)).toEqual(["edit", "edit", "edit", "edit", "edit", "edit"]);
     expect(Object.values(rows[2].levels).every((l) => l === "none")).toBe(true);
     expect(rows[3].levels.ledger).toBe("none");
   });
@@ -80,8 +80,8 @@ describe("buildReviewRows / summarize", () => {
   it("exports CSV with a header, quoting and formula protection", () => {
     const csv = reviewCsv(buildReviewRows([user({ name: "=HYPERLINK(1)", email: "a,b@example.test" })], [], NOW));
     const [head, row] = csv.split("\r\n");
-    expect(head).toBe("Name,Email,Role,Active,Last sign-in,schedule,tasks,employees,billing,ledger,Can view tasks of,Flags");
-    expect(row.startsWith(`'=HYPERLINK(1),"a,b@example.test",STAFF,yes,2026-10-15,edit,none,none,view,none,,`)).toBe(true);
+    expect(head).toBe("Name,Email,Role,Active,Last sign-in,schedule,tasks,employees,billing,ledger,notes,Can view tasks of,Flags");
+    expect(row.startsWith(`'=HYPERLINK(1),"a,b@example.test",STAFF,yes,2026-10-15,edit,none,none,view,none,none,`)).toBe(true);
   });
 });
 
