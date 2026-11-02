@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchVisits, pushTranscript, syncSchedule, type Session, type Visit } from "./lib/api";
+import { fetchAuthConfig, fetchVisits, pushTranscript, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type Settings } from "./lib/engine";
 import { recordingFromFile } from "./lib/recorder";
 
@@ -319,7 +319,21 @@ function Setup({ engine, status, settings, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState("");
+  // null while unknown, so the button is never offered before the practice app has been asked.
+  const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
   const connected = !!settings.access_token;
+
+  const url = draft.practice_url.trim();
+  useEffect(() => {
+    if (!url) return setGoogleAvailable(null);
+    let alive = true;
+    const t = setTimeout(() => {
+      fetchAuthConfig(url)
+        .then((c) => alive && setGoogleAvailable(c.googleSignIn))
+        .catch(() => alive && setGoogleAvailable(false));
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [url]);
 
   return (
     <div className="card" style={{ maxWidth: 760 }}>
@@ -345,9 +359,18 @@ function Setup({ engine, status, settings, onSaved }: {
       )}
       {error && <p className="small err">{error}</p>}
 
+      {url && googleAvailable === false && (
+        <p className="small">
+          This practice app has no Google sign-in set up, so use a pairing token below. To enable it, create an OAuth
+          client of type <strong>Desktop app</strong> in Google Cloud and set GOOGLE_DESKTOP_CLIENT_ID and
+          GOOGLE_DESKTOP_CLIENT_SECRET on the practice app.
+        </p>
+      )}
+      {!url && <p className="small">Enter the address above to see how you can sign in.</p>}
+
       <div className="row" style={{ marginBottom: ".8rem" }}>
         <button
-          disabled={!draft.practice_url.trim() || signingIn}
+          disabled={!url || signingIn || googleAvailable !== true}
           onClick={async () => {
             setSigningIn(true);
             setError("");
@@ -364,7 +387,7 @@ function Setup({ engine, status, settings, onSaved }: {
         </button>
       </div>
 
-      <details style={{ marginBottom: "1rem" }}>
+      <details style={{ marginBottom: "1rem" }} open={googleAvailable === false}>
         <summary className="small">Or paste a token instead</summary>
         <p className="small">
           In the practice app, open Settings and choose <strong>Connect a recorder</strong>. It shows a token once.

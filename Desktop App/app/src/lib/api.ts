@@ -15,6 +15,18 @@ export type Visit = {
 
 export type Session = { baseUrl: string; accessToken: string };
 
+export type AuthConfig = { googleSignIn: boolean };
+
+/**
+ * Whether the practice app has Google sign-in set up. Asked before the button is offered, so a missing OAuth client
+ * shows as an explanation rather than a button that does nothing.
+ */
+export async function fetchAuthConfig(baseUrl: string): Promise<AuthConfig> {
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/desktop/v1/auth/config`);
+  if (!res.ok) throw new Error(`The practice app returned ${res.status}.`);
+  return (await res.json()) as AuthConfig;
+}
+
 async function call<T>(session: Session, path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${session.baseUrl.replace(/\/$/, "")}/api/desktop/v1${path}`, {
     ...init,
