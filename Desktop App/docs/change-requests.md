@@ -176,3 +176,12 @@ Status values: `noted` (not built), `building`, `built`.
 - If a local note-writing model is ever wanted, it is compiled in (`llama-cpp-2`) with the weights downloaded on first run, never a separate install.
 - **BlackHole is no longer needed**, because a native app captures system audio directly. That removes the fragile audio routing.
 - The recorder keeps the microphone and the system audio on separate channels, which gives true speaker attribution on telehealth visits and would retire the worst failure mode in the note writing.
+
+## 19. Built: the split, both apps modified
+- Date: 2026-11-01
+- Status: **built**
+- **Web app** gains a Notes module: a day's visits, the paste flow, generation of every document the appointment type calls for, a pop-up editor that asks before closing with unsaved changes, and a printable copy for Save as PDF. Documents are Markdown; transcript and document text are encrypted at rest; every save keeps the previous text as a version. Patient names show as initials. Notes is a sixth module in the access matrix, granted to providers.
+- **Desktop app** is now a recorder: about 300 lines instead of 1,630. It pulls the day's visits, records, transcribes on the Mac and pushes back the text. Two new endpoints serve it.
+- The 12-case evaluation set and the model comparison harness moved to the web app with the code they test.
+- Measured while building: the form questions filled only 3 of 24 fields because the patient had not used the form's own words. Teaching the model to map a description onto the nearest option took it to 9 of 24, correctly.
+- **Not built yet:** system audio capture (ScreenCaptureKit), so today a telehealth visit records the provider only. In-person visits are fine.
