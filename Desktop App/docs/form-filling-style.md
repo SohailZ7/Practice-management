@@ -67,3 +67,16 @@ originals, ideally fillable PDFs, and the app can fill those instead.
   may not accept it in place of the real one.
 - Page 2 of the progress note was the only page 2 available; if the practice has a newer revision, the rebuilt form should
   be regenerated from it.
+
+## Measured: the form questions were far too cautious (2026-11-01)
+Running a real follow-up transcript through the real model filled only **3 of 24** fields. The transcript plainly
+covered sleep, energy and missed doses, but the patient had not used the form's own words ("about seven hours", not
+"Good"), and the prompt treated a different wording as "not discussed".
+
+Telling the model to map what was said onto the nearest option, with examples, took it to **9 of 24**, and the
+answers were right: seven hours of sleep became Good, low energy became Poor, two missed doses became Intermittent,
+and "better" became Improving. Topics the visit never touched (anxiety, group attendance) stayed blank, so it is
+choosing rather than ticking everything.
+
+The lesson generalises: a prompt that says "only what was said" without saying "in whatever words" produces a form
+that is safe and useless. The safety rule has to be about **inventing facts**, not about matching vocabulary.

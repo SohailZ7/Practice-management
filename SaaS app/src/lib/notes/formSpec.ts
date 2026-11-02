@@ -22,8 +22,13 @@ export type FieldSpec = {
 
 export const FORM_SYSTEM = [
   "You read a psychiatric visit transcript and answer one question about it.",
-  "Answer ONLY from the transcript. Never guess, infer, or add medical knowledge.",
-  "If the transcript does not say, answer NONE. A blank answer on this form means 'not assessed', which is correct and safe.",
+  "Answer ONLY from the transcript. Never guess, invent, or add medical knowledge.",
+  "The patient will rarely use the words on the form. Choose the option that best matches what was actually said:",
+  "  \"sleeping about seven hours\" is Good sleep; \"three hours a night\" is Poor.",
+  "  \"low energy in the afternoons\" is Poor or Fair energy.",
+  "  \"I missed two doses\" is Intermittent compliance.",
+  "  \"the nausea went away\" is Improving.",
+  "Answer NONE only when the topic genuinely never came up. A topic that was discussed must be answered.",
   "Only the patient's own statements count as the patient's. What a relative or the doctor said is not the patient's report.",
   "Reply with exactly two lines and nothing else:",
   "CHOOSE: the option or options from the list that the transcript supports, separated by semicolons, or NONE",
