@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClient, parseSchedule } from "../src/lib/scheduleParse";
+import { parseClient, parseSchedule, withoutAge } from "../src/lib/scheduleParse";
 import { canRecord, documentsFor } from "../src/lib/documents";
 import { patientFolderName, patientInitials } from "../src/lib/patientFolder";
 
@@ -27,7 +27,7 @@ const BOARD = [
 describe("parseClient", () => {
   it("splits name from the age, insurance and note, and keeps the rest as detail", () => {
     expect(parseClient("Alpha Testcase/40F/Insurer/KIOP PM 1")).toEqual({
-      lastName: "Testcase", firstName: "Alpha", detail: "40F / Insurer / KIOP PM 1",
+      lastName: "Testcase", firstName: "Alpha", detail: "F / Insurer / KIOP PM 1",
     });
   });
   it("drops a quoted nickname from the name", () => {
@@ -131,5 +131,29 @@ describe("patientInitials", () => {
   });
   it("does not change the folder name, which keeps the full name", () => {
     expect(patientFolderName("Testcase", "Alpha")).toBe("Testcase, Alpha");
+  });
+});
+
+describe("withoutAge", () => {
+  it("keeps the sex but drops the age", () => {
+    expect(withoutAge("40F")).toBe("F");
+    expect(withoutAge("39M")).toBe("M");
+    expect(withoutAge("33FTM")).toBe("FTM");
+  });
+  it("drops a segment that is only an age", () => {
+    expect(withoutAge("40")).toBe("");
+  });
+  it("leaves insurance, programs and notes alone", () => {
+    for (const v of ["Wellpoint", "UHC Medicare dual", "BIOP-PM1", "Sd from W2 to VIOP EVE", "KIOP PM 1"]) {
+      expect(withoutAge(v)).toBe(v);
+    }
+  });
+  it("is applied when a schedule is parsed, so no age is stored", () => {
+    const line = ["2:00: Psych Eval & Admit Order", "PT Onsite", "Alpha Testcase/40F/Insurer/KIOP PM 1",
+      "FALSE", "FALSE", "Dr. Example Provider", "FALSE", "FALSE", "Select Option"].join("\t");
+    const r = parseSchedule(`${BOARD}\n${line}`, PROVIDER);
+    const row = r.entries.find((e) => e.patient!.firstName === "Alpha")!;
+    expect(row.clientInfo).toBe("F / Insurer / KIOP PM 1");
+    expect(row.clientInfo).not.toMatch(/\d\d/);
   });
 });

@@ -155,4 +155,5 @@ Status values: `noted` (not built), `building`, `built`.
 - Status: **built**
 - The board shows "A.T." rather than the full name, since it is often visible to other people in a clinic room.
 - **Folder and file names keep the full name** ("Testcase, Alpha"), because the provider has to find the documents afterwards and initials would collide between patients.
-- Open for the owner: the row still shows the age, sex and insurance line from the sheet ("40F / Insurer / KIOP PM 1"). Should that be hidden too?
+- **Owner: hide the age, keep the insurance.** The sheet writes age and sex as one token ("40F", "33FTM"), so the digits are dropped and the sex kept: the row now reads "F / Wellpoint / KIOP PM 1".
+- The age is removed when the schedule is parsed, not just hidden on screen, so it is never written to the saved schedule either. Nothing used it: the detail line is display-only and is not given to the model.

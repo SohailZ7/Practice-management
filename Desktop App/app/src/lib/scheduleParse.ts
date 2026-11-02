@@ -29,7 +29,7 @@ export function parseClient(raw: string): { lastName: string; firstName: string;
   const [namePart, ...rest] = text.split("/");
   const name = clean(namePart);
   if (!name) return null;
-  const detail = rest.map(clean).filter(Boolean).join(" / ");
+  const detail = rest.map(clean).map(withoutAge).filter(Boolean).join(" / ");
 
   if (name.includes(",")) {
     const [last, first] = name.split(",");
@@ -39,6 +39,17 @@ export function parseClient(raw: string): { lastName: string; firstName: string;
   const parts = name.replace(/["“][^"”]*["”]/g, " ").split(/\s+/).map(clean).filter(Boolean);
   if (parts.length === 1) return { lastName: parts[0], firstName: "", detail };
   return { lastName: parts[parts.length - 1], firstName: parts.slice(0, -1).join(" "), detail };
+}
+
+/**
+ * Drops the patient's age from a detail segment (owner's request). The sheet writes age and sex together as one
+ * token ("40F", "33FTM"), so the digits go and the sex is kept; a segment that is only an age disappears.
+ * The age is removed here, at parse time, so it is never stored in the saved schedule either.
+ */
+export function withoutAge(segment: string): string {
+  const m = /^(\d{1,3})\s*([A-Za-z]{1,4})?$/.exec(segment.trim());
+  if (!m) return segment;
+  return m[2] ?? "";
 }
 
 /** The program shown on the board: the track name for a track row, otherwise the program from the type column. */
