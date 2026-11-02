@@ -157,3 +157,13 @@ Status values: `noted` (not built), `building`, `built`.
 - **Folder and file names keep the full name** ("Testcase, Alpha"), because the provider has to find the documents afterwards and initials would collide between patients.
 - **Owner: hide the age, keep the insurance.** The sheet writes age and sex as one token ("40F", "33FTM"), so the digits are dropped and the sex kept: the row now reads "F / Wellpoint / KIOP PM 1".
 - The age is removed when the schedule is parsed, not just hidden on screen, so it is never written to the saved schedule either. Nothing used it: the detail line is display-only and is not given to the model.
+
+## 17. Move the note writing into the web app (fully cloud)
+- Date asked: 2026-11-01
+- Status: planned, see `SaaS app/docs/notes-module-plan.md`
+- Documents live in the cloud as **Markdown**, not on a local disk and not as Word files. A document's icon opens a pop-up showing it; the provider edits it there; closing asks whether to save; saving writes to the cloud; a PDF copy can be downloaded.
+- **Both** ways of loading a day: the existing Schedule module and the paste flow ported from the desktop app.
+- Patient names show as initials for now.
+- The desktop app is kept as a separate thing, not deleted.
+- **Correction on the BAA:** it is not blocked on a domain. Google Cloud's BAA is accepted per project, free, in four clicks; only the Workspace BAA is tied to a domain. So there is no need to build "BAA-ready but uncovered": accept it, and keep using invented patients until it is done either way.
+- Open: whether the checkbox forms stay Markdown (which will not look like Fairfax form 4071 when printed), keep a Word rendering, or are rendered back into the Word form on download.
