@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseClient, parseSchedule, withoutAge } from "../src/lib/scheduleParse";
-import { canRecord, documentsFor } from "../src/lib/documents";
-import { patientFolderName, patientInitials } from "../src/lib/patientFolder";
+import { parseClient, parseSchedule, withoutAge } from "../src/lib/notes/scheduleParse";
+import { canRecord, documentsFor } from "../src/lib/notes/documents";
+import { patientFolderName, patientInitials } from "../src/lib/notes/patientFolder";
 
 // Every name below is invented. The sheet's real structure is reproduced; its patients are not.
 const PROVIDER = "Dr. Example Provider";

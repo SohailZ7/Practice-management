@@ -1,4 +1,4 @@
-import type { NoteKind } from "../../src/lib/types";
+import type { NoteKind } from "../../src/lib/notes/types";
 
 /**
  * One synthetic test visit with ground truth. All people, dates and details are invented.

@@ -1,6 +1,6 @@
 // Microphone capture in the webview. Audio stays in memory until it is handed to the native transcriber, which writes it
 // to a private temp file and shreds it afterwards (desktop spec REC-2).
-export type Recording = { bytes: Uint8Array; ext: string };
+import type { Recording } from "./types";
 
 export type Recorder = { stop(): Promise<Recording>; cancel(): void };
 

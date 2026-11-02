@@ -1,7 +1,7 @@
 // Scoring for the model comparison. Pure, so it is unit-tested with hand-made drafts.
-import type { DraftNote } from "../../src/lib/types";
-import { NOT_DISCUSSED } from "../../src/lib/sectionMap";
-import { isNotDiscussed } from "../../src/lib/pipeline";
+import type { DraftNote } from "../../src/lib/notes/types";
+import { NOT_DISCUSSED } from "../../src/lib/notes/sectionMap";
+import { isNotDiscussed } from "../../src/lib/notes/pipeline";
 import type { Case, Check } from "./types";
 
 const title = (h: string) => h.replace(/^\d+\.\s*/, "");

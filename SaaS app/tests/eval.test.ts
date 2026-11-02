@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { evalCases } from "./eval/evalCases";
 import { visitCases } from "./eval/visitCases";
 import { runCheck, scoreCase, summarize, unsupportedRate } from "./eval/score";
-import { PLANS } from "../src/lib/sectionMap";
+import { PLANS } from "../src/lib/notes/sectionMap";
 import type { Case } from "./eval/types";
-import type { DraftNote } from "../src/lib/types";
+import type { DraftNote } from "../src/lib/notes/types";
 
 const cases: Case[] = [...evalCases, ...visitCases];
 const title = (h: string) => h.replace(/^\d+\.\s*/, "");

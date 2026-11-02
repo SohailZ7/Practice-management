@@ -28,7 +28,8 @@ export function handle(fn: (req: Request) => Promise<Response>) {
 /** Reads a JSON body of at most 8 KB; anything else is a 400. */
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
   const text = await req.text();
-  if (text.length > 8192) throw new ApiError(413, "too_large");
+  // A transcript is the one large body this API accepts; everything else is a few hundred bytes.
+  if (text.length > 300_000) throw new ApiError(413, "too_large");
   try {
     const v = JSON.parse(text || "{}");
     if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;

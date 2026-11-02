@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyVerdicts, askRiskQuestion, parseAnswer, parseVerdicts, quoteInSource, verifyParas } from "../src/lib/passes";
-import { draftNote, parseSection } from "../src/lib/pipeline";
-import { stripThinking } from "../src/lib/text";
-import { NOT_DISCUSSED } from "../src/lib/sectionMap";
-import type { Llm, Para } from "../src/lib/types";
+import { applyVerdicts, askRiskQuestion, parseAnswer, parseVerdicts, quoteInSource, verifyParas } from "../src/lib/notes/passes";
+import { draftNote, parseSection } from "../src/lib/notes/pipeline";
+import { stripThinking } from "../src/lib/notes/text";
+import { NOT_DISCUSSED } from "../src/lib/notes/sectionMap";
+import type { Llm, Para } from "../src/lib/notes/types";
 
 const SOURCE = "Doctor, any thoughts of hurting yourself? Patient, no, I deny any thoughts of suicide. My sister tried to kill herself with pills when I was in high school.";
 

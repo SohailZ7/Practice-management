@@ -1,24 +1,35 @@
-# Practice Notes (desktop spike)
+# Practice Recorder
 
-Tauri 2 + React app: schedule board with Record / Dictate, local transcription (whisper.cpp), local note drafting (Ollama),
-review screen, and a Word document saved in `<notes root>/<Last, First>/<date> <type>.docx`.
+A small Mac app that does the two things a browser cannot: capture the audio of a visit (including, in time, the
+system audio of a Zoom or Meet call) and transcribe it on this machine.
 
-**Spike limits:** the schedule is a synthetic mock (`src/lib/mockSchedule.ts`), not the web app's Desktop API yet; sign-in,
-idle lock and encrypted drafts are not built; sections the audio cannot fill stay as the blank template.
+Everything else — the schedule, the notes, the documents, editing and PDFs — lives in the practice web app. This app
+pulls the day's visits, records, transcribes here, and pushes back the text.
+
+**The recording never leaves this Mac.** It is turned into text locally and only the text is sent.
 
 ## Needs (macOS, Apple silicon)
-`brew install rustup cmake ollama whisper-cpp ffmpeg`, `rustup default stable`, a Whisper model at
-`~/Library/Application Support/PracticeNotesSpike/models/ggml-small.en.bin`, and `ollama pull qwen2.5:7b-instruct`.
+```bash
+brew install whisper-cpp ffmpeg
+```
+plus a Whisper model at `~/Library/Application Support/PracticeNotes/models/ggml-small.en.bin` (the app looks in a few
+known places). A shipped build will compile these in and download the model itself; today they are still external.
 
 ## Commands
 ```bash
 npm install
-npm test                # note pipeline, template filler, folder naming (no engines needed)
+npm test                # the practice API client
 npm run typecheck
-npm run dev             # UI in a browser with FAKE engines
-npx tauri dev           # the real app (needs PATH to include ~/.cargo/bin)
-cd src-tauri && cargo test --lib                      # native unit tests
-SPIKE_AUDIO=visit.aiff cargo test --lib -- --ignored  # real Whisper + Ollama on synthetic audio
-SPIKE_AUDIO=visit.aiff npx vitest run tests/real.integration.test.ts   # full pipeline on real engines
+npm run dev             # the screens in a browser, with fake engines
+npm run tauri dev       # the real app (PATH must include ~/.cargo/bin)
+cd src-tauri && cargo test --lib
 ```
-Environment overrides: `PRACTICE_NOTES_ROOT`, `PRACTICE_TEMPLATES_DIR`, `WHISPER_MODEL`, `OLLAMA_URL`.
+
+## Setup inside the app
+The practice app's address, a sign-in token from it, and the transcription model file.
+
+## Still to build
+- **System audio capture** (ScreenCaptureKit), so a telehealth visit records the patient as well as the provider.
+  Until then this records the microphone only, which is enough for an in-person visit.
+- Compiling whisper.cpp in and downloading the model on first run, so nothing is installed alongside the app.
+- Signing and notarisation, which need an Apple Developer account.

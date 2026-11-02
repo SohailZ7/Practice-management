@@ -1,17 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { noteFileName, patientFolderName, safePart } from "../src/lib/patientFolder";
-import { ungroundedTerms, wordsToNumber } from "../src/lib/grounding";
-import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/pipeline";
-import { NOT_DISCUSSED, PLANS } from "../src/lib/sectionMap";
-import { QUESTION_SYSTEM, VERIFY_SYSTEM } from "../src/lib/passes";
-import { docxText, fillTemplate } from "../src/lib/docxFill";
-import type { Llm } from "../src/lib/types";
+import { noteFileName, patientFolderName, safePart } from "../src/lib/notes/patientFolder";
+import { ungroundedTerms, wordsToNumber } from "../src/lib/notes/grounding";
+import { buildPrompt, draftNote, flagParas, isNotDiscussed, parseSection, SYSTEM_RULES, type DraftInput } from "../src/lib/notes/pipeline";
+import { NOT_DISCUSSED, PLANS } from "../src/lib/notes/sectionMap";
+import { QUESTION_SYSTEM, VERIFY_SYSTEM } from "../src/lib/notes/passes";
+import type { Llm } from "../src/lib/notes/types";
 
-const TEMPLATE = path.resolve(__dirname, "../../../Templates/Psychiatric_Master_Template_v2.docx");
 
 describe("patient folder and file names", () => {
   it("uses Last, First and strips characters a file system rejects", () => {
@@ -156,55 +150,3 @@ describe("draftNote", () => {
   });
 });
 
-describe("fillTemplate with the practice's master template", () => {
-  const template = readFileSync(TEMPLATE);
-
-  it("fills an evaluation: keeps the layout, replaces filled sections, drops carry-forward blocks", async () => {
-    const note = await draftNote(base());
-    const { bytes, missingHeadings } = await fillTemplate(template, note);
-    expect(missingHeadings).toEqual([]);
-    const text = await docxText(bytes);
-    expect(text).toContain("PSYCHIATRIC EVALUATION");
-    expect(text).not.toContain("MASTER PSYCHIATRIC EVALUATION");
-    expect(text).toContain("Patient's words: I can't sleep and I feel low.");
-    expect(text).toContain("Patient: Testcase, Alpha");
-    expect(text).not.toContain("19. Progress Note Carry-Forward Block");
-    expect(text).not.toContain("20. Discharge Summary Carry-Forward Block");
-    expect(text).toContain("12. Mental Status Examination"); // kept for the provider
-    expect(text).toContain("Appearance: ☐ Appropriate"); // blank form left in place
-    expect(text).not.toContain("Patient's words: ______");
-  });
-
-  it("writes a progress note with only the sections that follow-ups use", async () => {
-    const note = await draftNote(base({ kind: "FOLLOW_UP", typeLabel: "Follow-up" }));
-    const text = await docxText((await fillTemplate(template, note)).bytes);
-    expect(text).toContain("PSYCHIATRIC PROGRESS NOTE");
-    expect(text).toContain("19. Progress Note Carry-Forward Block");
-    expect(text).toContain("Interval clinical status: Not discussed in this recording.");
-    expect(text).not.toContain("History of Present Illness");
-    expect(text).toContain("21. Attestation / Billing");
-  });
-
-  it("writes a discharge summary", async () => {
-    const note = await draftNote(base({ kind: "DISCHARGE", typeLabel: "DC Orders Only" }));
-    const text = await docxText((await fillTemplate(template, note)).bytes);
-    expect(text).toContain("DISCHARGE SUMMARY");
-    expect(text).toContain("Condition at discharge: Not discussed in this recording.");
-    expect(text).not.toContain("19. Progress Note Carry-Forward Block");
-  });
-
-  it("produces a file macOS can open as a Word document", async () => {
-    const note = await draftNote(base());
-    const { bytes } = await fillTemplate(template, note);
-    const dir = mkdtempSync(path.join(tmpdir(), "docx-"));
-    const file = path.join(dir, "out.docx");
-    writeFileSync(file, bytes);
-    let converted = "";
-    try {
-      converted = execFileSync("textutil", ["-convert", "txt", "-stdout", file], { encoding: "utf8" });
-    } catch {
-      return; // textutil is only on macOS
-    }
-    expect(converted).toContain("Patient's words: I can't sleep and I feel low.");
-  });
-});
