@@ -213,6 +213,8 @@ export function visitErrorMessage(e: unknown): string {
   if (e instanceof ApiFailure) {
     if (e.code === "bad_patient") return "Enter the client as First Last.";
     if (e.code === "bad_time") return "That time is not valid. Use a form like 9:00 or 9:00 - 11:30.";
+    if (e.code === "bad_type") return "Choose an appointment type from the list.";
+    if (e.code === "bad_provider") return "Choose a provider from the list.";
     if (e.code === "bad_date") return "That date is not valid.";
     if (e.code === "not_found") return "That visit no longer exists. Refresh the list.";
   }
@@ -229,12 +231,14 @@ export async function deleteVisits(session: Session, ids: string[]): Promise<{ d
   for (let i = 0; i < ids.length; i += 200) {
     const chunk = ids.slice(i, i + 200);
     try {
-      const r = await call<{ deleted: number; notFound: number }>(session, "/notes/visits/bulk-delete", {
+      // The server answers with the lists of ids (older drafts used counts), so accept either.
+      const r = await call<{ deleted: string[] | number; notFound: string[] | number }>(session, "/notes/visits/bulk-delete", {
         method: "POST",
         body: JSON.stringify({ ids: chunk }),
       });
-      deleted += r.deleted ?? 0;
-      notFound += r.notFound ?? 0;
+      const n = (v: string[] | number | undefined) => (Array.isArray(v) ? v.length : typeof v === "number" ? v : 0);
+      deleted += n(r.deleted);
+      notFound += n(r.notFound);
     } catch (e) {
       if (!(e instanceof ApiFailure) || (e.status !== 404 && e.status !== 405)) throw e;
       for (const id of chunk) {

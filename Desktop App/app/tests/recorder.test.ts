@@ -133,6 +133,12 @@ describe("bulk delete", () => {
       return Promise.resolve(new Response(JSON.stringify({ deleted: 2, notFound: 1 }), { status: 200 }));
     });
     expect(await deleteVisits(s, ["a", "b", "c"])).toEqual({ deleted: 2, notFound: 1 });
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ deleted: ["a", "b"], notFound: ["c"] }), { status: 200 })));
+    expect(await deleteVisits(s, ["a", "b", "c"])).toEqual({ deleted: 2, notFound: 1 });
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => {
+      seen.push(`${i?.method} ${u.split("/v1")[1]}`);
+      return Promise.resolve(new Response(JSON.stringify({ deleted: 2, notFound: 1 }), { status: 200 }));
+    });
     expect(seen).toEqual(["POST /notes/visits/bulk-delete"]);
     seen.length = 0;
     vi.stubGlobal("fetch", (u: string, i?: RequestInit) => {
