@@ -38,6 +38,8 @@ export interface Engine {
   /** Stops, transcribes on this Mac, and saves the transcript in the encrypted queue under the visit id. */
   stopRecording(visitId: string, environment: EnvironmentId): Promise<StopResult>;
   cancelRecording(): Promise<void>;
+  /** Stops a microphone-only dictation and returns the transcript. Nothing is saved on disk. */
+  stopDictation(): Promise<string>;
   queueList(): Promise<QueueItem[]>;
   queueText(visitId: string): Promise<string>;
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
@@ -60,6 +62,7 @@ async function nativeEngine(): Promise<Engine> {
     startRecording: (withSystemAudio) => invoke<{ warning: string | null }>("start_recording", { withSystemAudio }),
     stopRecording: (visitId, environment) => invoke<StopResult>("stop_recording", { visitId, environment }),
     cancelRecording: () => invoke<void>("cancel_recording"),
+    stopDictation: () => invoke<string>("stop_dictation"),
     queueList: () => invoke<QueueItem[]>("queue_list"),
     queueText: (visitId) => invoke<string>("queue_text", { visitId }),
     queueComplete: (visitId) => invoke<void>("queue_complete", { visitId }),
@@ -93,6 +96,7 @@ function fakeEngine(): Engine {
       return { seconds: 12, system_audio: true, one_sided: false };
     },
     cancelRecording: async () => {},
+    stopDictation: async () => FAKE_TRANSCRIPT,
     queueList: async () => [...queue.values()],
     queueText: async () => FAKE_TRANSCRIPT,
     queueComplete: async (id) => { queue.delete(id); },

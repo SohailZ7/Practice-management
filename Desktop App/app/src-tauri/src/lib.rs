@@ -341,6 +341,31 @@ async fn stop_recording(app: tauri::AppHandle, visit_id: String, environment: St
     Ok(summary)
 }
 
+/// Ends a dictation (microphone only), transcribes it here and returns the text. Nothing is written to disk: the
+/// audio and the text exist only in memory and the caller keeps the text only until the feedback is saved.
+#[tauri::command]
+async fn stop_dictation(app: tauri::AppHandle) -> Result<String, String> {
+    let recorder = RECORDER
+        .lock()
+        .map_err(|_| "the recorder is busy".to_string())?
+        .take()
+        .ok_or("no recording is running")?;
+    let channels = recorder.stop()?;
+    if !channels.has_sound() {
+        return Err("the recording is silent; check the microphone and try again".into());
+    }
+    let model = find_model(&app).ok_or("the transcription model is missing")?;
+    let mic = channels.mic;
+    let segments = tauri::async_runtime::spawn_blocking(move || transcribe::transcribe(&model, &mic, &[]))
+        .await
+        .map_err(|_| "transcription failed".to_string())??;
+    let text = queue::assemble_text(&segments);
+    if text.trim().is_empty() {
+        return Err("The recording produced no text.".into());
+    }
+    Ok(text)
+}
+
 /// Throws away a recording without transcribing it.
 #[tauri::command]
 async fn cancel_recording() -> Result<(), String> {
@@ -398,7 +423,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, sign_out, get_access_token,
-            refresh_access_token, start_recording, stop_recording, cancel_recording,
+            refresh_access_token, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_complete, queue_discard
         ])
         .run(tauri::generate_context!())

@@ -46,3 +46,54 @@ describe("initials", () => {
     expect(patientInitials("", "")).toBe("?");
   });
 });
+
+import { cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
+
+describe("the feedback client", () => {
+  const capture = (body: unknown, status = 200) => {
+    const seen: [string, RequestInit?][] = [];
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => (seen.push([u, i]), Promise.resolve(new Response(JSON.stringify(body), { status }))));
+    return seen;
+  };
+
+  it("lists, creates, edits and cleans up with the right calls", async () => {
+    let seen = capture({ items: [] });
+    await fetchFeedback(session);
+    expect(seen[0][0]).toBe("https://notes.example.test/api/desktop/v1/feedback?limit=100");
+    seen = capture({ item: {} }, 201);
+    await createFeedback(session, { kind: "BUG", title: "t", description: "d" });
+    expect(seen[0][1]!.method).toBe("POST");
+    expect(JSON.parse(String(seen[0][1]!.body))).toEqual({ kind: "BUG", title: "t", description: "d" });
+    seen = capture({ item: {} });
+    await updateFeedback(session, "a/b", { title: "new" });
+    expect(seen[0][0]).toContain("/feedback/a%2Fb");
+    expect(seen[0][1]!.method).toBe("PATCH");
+    seen = capture({ title: "t", description: "d", possiblePhi: [] });
+    await cleanupFeedback(session, "some words");
+    expect(seen[0][0]).toContain("/feedback/cleanup");
+    expect(JSON.parse(String(seen[0][1]!.body))).toEqual({ transcript: "some words" });
+  });
+
+  it("renews the token once after a 401 and retries", async () => {
+    const tokens: string[] = [];
+    vi.stubGlobal("fetch", (_u: string, i?: RequestInit) => {
+      const t = (i!.headers as Record<string, string>).authorization;
+      tokens.push(t);
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: t === "Bearer new" ? 200 : 401 }));
+    });
+    const s: Session = { ...session, refresh: async () => "new" };
+    await fetchFeedback(s);
+    expect(tokens).toEqual(["Bearer tok", "Bearer new"]);
+  });
+
+  it("explains the server's errors plainly", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ error: "possible_phi" }), { status: 422 })));
+    const e = await createFeedback(session, { kind: "BUG", title: "t", description: "d" }).catch((x) => x);
+    expect(e).toBeInstanceOf(ApiFailure);
+    expect(feedbackErrorMessage(e)).toMatch(/patient information/);
+    expect(feedbackErrorMessage(new ApiFailure(503, "model_not_configured"))).toMatch(/not set up/);
+    expect(feedbackErrorMessage(new ApiFailure(502, null))).toMatch(/failed/);
+    expect(feedbackErrorMessage(new ApiFailure(413, null))).toMatch(/too long/);
+    expect(feedbackErrorMessage(new ApiFailure(403, null))).toMatch(/your own/);
+  });
+});

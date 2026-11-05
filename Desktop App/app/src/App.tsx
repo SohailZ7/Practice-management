@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Feedback } from "./Feedback";
 import { fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
@@ -28,7 +29,7 @@ export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<"visits" | "setup">("visits");
+  const [tab, setTab] = useState<"visits" | "feedback" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -153,6 +154,7 @@ export function App() {
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
+            <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
           </nav>
         )}
@@ -176,6 +178,10 @@ export function App() {
         {status && engine && signedIn && tab === "setup" && (
           <Setup engine={engine} status={status} env={env} signedIn locked={recording}
             onEnvironment={changeEnvironment} onChanged={() => refreshStatus()} />
+        )}
+
+        {signedIn && tab === "feedback" && session && engine && (
+          <Feedback engine={engine} session={session} visitRecording={recording} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "visits" && (
