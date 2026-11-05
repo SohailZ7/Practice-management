@@ -6,8 +6,11 @@ import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
 import type { VisitOptions } from "@/lib/notes/options";
-import { getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
-import { DocumentEditor } from "./DocumentEditor";
+import { getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import type { DocSummary } from "@/lib/notes/docsClient";
+import { typeIcon } from "@/lib/notes/docUi";
+import { DocumentDialog } from "./DocumentDialog";
+import { GenerateDialog } from "./GenerateDialog";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -27,8 +30,15 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
   const [picked, setPicked] = useState<string[]>([]);
   const selected = picked.filter((id) => visits.some((v) => v.id === id));
   const [note, setNote] = useState("");
-  const [openDoc, setOpenDoc] = useState<{ id: string; label: string } | null>(null);
-  const [busyVisit, setBusyVisit] = useState("");
+  const [openDoc, setOpenDoc] = useState<{ visitId: string; id: string; label: string } | null>(null);
+  const [generating, setGenerating] = useState<VisitRow | null>(null);
+  // Documents just generated, shown at once; the server's list replaces them after the refresh.
+  const [fresh, setFresh] = useState<Record<string, DocSummary[]>>({});
+  const docsOf = (v: VisitRow): DocSummary[] => {
+    const server: DocSummary[] = v.documents.map((d) => ({ id: d.id, docType: d.kind, title: d.label, latestVersion: d.latestVersion ?? 0 }));
+    const extra = (fresh[v.id] ?? []).filter((f) => !server.some((s) => s.id === f.id));
+    return [...server.map((s) => fresh[v.id]?.find((f) => f.id === s.id) ?? s), ...extra];
+  };
   const [reading, setReading] = useState<string | null>(null);
 
   const go = (d: string) => router.push(`/notes?date=${d}`);
@@ -116,15 +126,18 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
                 <td>{v.program}</td>
                 <td>{v.appointmentType}</td>
                 <td>
-                  {v.documents.length === 0 ? (
+                  {docsOf(v).length === 0 ? (
                     <span className="muted small">{documentsFor(v.appointmentType).map((d) => d.label).join(", ") || "none"}</span>
                   ) : (
                     <span className="row" style={{ flexWrap: "wrap", gap: ".3rem" }}>
-                      {v.documents.map((d) => (
-                        <button key={d.id} className="secondary small" onClick={() => setOpenDoc({ id: d.id, label: d.label })}>
-                          {d.label}{d.draft ? " · draft" : ""}
-                        </button>
-                      ))}
+                      {docsOf(v).map((d) => {
+                        const tip = `${d.title}${d.latestVersion ? ` · version ${d.latestVersion}` : ""}`;
+                        return (
+                          <button key={d.id} className="secondary doc-icon" title={tip} aria-label={`Open ${tip}`} onClick={() => setOpenDoc({ visitId: v.id, id: d.id, label: d.title })}>
+                            {typeIcon(d.docType)}
+                          </button>
+                        );
+                      })}
                     </span>
                   )}
                 </td>
@@ -148,24 +161,11 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
                       </button>{" "}
                       <TranscriptButton visitId={v.id} hasTranscript={v.hasTranscript} onSaved={() => router.refresh()} />
                       <button
-                        disabled={!v.hasTranscript || pending || busyVisit === v.id}
-                        onClick={() => {
-                          setBusyVisit(v.id);
-                          void warmUp();
-                          start(async () => {
-                            try {
-                              const r = await generateForVisit(v.id);
-                              setNote(r.error ?? `Wrote ${r.created} document${r.created === 1 ? "" : "s"}.`);
-                              router.refresh();
-                            } catch (e) {
-                              setNote(e instanceof Error ? e.message : String(e));
-                            } finally {
-                              setBusyVisit("");
-                            }
-                          });
-                        }}
+                        disabled={!v.hasTranscript || pending}
+                        title={v.hasTranscript ? "Choose and write this visit's documents" : "Available once the recording is complete"}
+                        onClick={() => { void warmUp(); setGenerating(v); }}
                       >
-                        {busyVisit === v.id ? "Writing…" : "Generate"}
+                        Generate documents
                       </button>
                     </>
                   )}
@@ -178,7 +178,27 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
 
       {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
 
-      {openDoc && <DocumentEditor documentId={openDoc.id} label={openDoc.label} canEdit={canEdit} onClose={() => { setOpenDoc(null); router.refresh(); }} />}
+      {generating && (
+        <GenerateDialog
+          visitId={generating.id}
+          initials={generating.initials}
+          appointmentType={generating.appointmentType}
+          onClose={() => setGenerating(null)}
+          onDone={(docs, errors) => {
+            const id = generating.id;
+            setFresh((f) => ({ ...f, [id]: [...(f[id] ?? []).filter((x) => !docs.some((d) => d.id === x.id)), ...docs] }));
+            setGenerating(null);
+            setNote(
+              errors.length
+                ? `Wrote ${docs.length} document${docs.length === 1 ? "" : "s"}. Could not write: ${errors.map((e) => `${e.docType} (${e.error})`).join(", ")}. You can generate those again.`
+                : `Wrote ${docs.length} document${docs.length === 1 ? "" : "s"}.`,
+            );
+            router.refresh();
+          }}
+        />
+      )}
+
+      {openDoc && <DocumentDialog visitId={openDoc.visitId} docId={openDoc.id} title={openDoc.label} canEdit={canEdit} onClose={() => { setOpenDoc(null); router.refresh(); }} />}
     </>
   );
 }

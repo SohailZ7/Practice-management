@@ -3,7 +3,7 @@
 import { db } from "../db";
 import { patientInitials } from "./patientFolder";
 
-export type DocumentRow = { id: string; kind: string; label: string; draft: boolean; updatedAt: string };
+export type DocumentRow = { id: string; kind: string; label: string; draft: boolean; updatedAt: string; /** Filled in once the versioned store exists. */ latestVersion?: number };
 
 export type VisitRow = {
   id: string;
