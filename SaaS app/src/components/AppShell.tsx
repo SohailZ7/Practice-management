@@ -112,6 +112,8 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
   if (levels.billing !== "none") items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing" });
   if (levels.notes !== "none") items.push({ id: "/notes", href: "/notes", label: "Notes", icon: "tasks" });
   if (levels.ledger !== "none") items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger" });
+  // Feedback is open to every signed-in user.
+  items.push({ id: "/feedback", href: "/feedback", label: "Feedback", icon: "flag" });
   // Visible to everyone; anyone but the Admin who opens it sees the "no access" page (AUTH-13).
   items.push({ id: "/admin", href: "/admin", label: "Admin", icon: "shield" });
 

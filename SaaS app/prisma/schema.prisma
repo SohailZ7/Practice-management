@@ -21,6 +21,7 @@ model User {
   taskViewers     TaskViewer[]
   desktopSessions DesktopSession[]
   apiTokens       ApiToken[]
+  feedback        FeedbackItem[]
 }
 
 // module: schedule | tasks | employees   level: none | view | edit
@@ -439,4 +440,46 @@ model TaskMove {
 
   @@index([createdAt])
   @@index([taskId])
+}
+
+// Timesheets (Admin only for now). Hourly rate and charge are in cents. startMin/endMin are minutes after midnight.
+// userId is unused today; a later release can link an employee to a login so they see only their own sheet.
+model TimesheetEmployee {
+  id               String           @id @default(cuid())
+  name             String           @unique
+  defaultRateCents Int              @default(2300)
+  sortOrder        Int              @default(0)
+  userId           String?
+  createdAt        DateTime         @default(now())
+  entries          TimesheetEntry[]
+}
+
+model TimesheetEntry {
+  id          String            @id @default(cuid())
+  employeeId  String
+  date        String
+  startMin    Int
+  endMin      Int
+  rateCents   Int
+  createdById String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now()) @updatedAt
+  employee    TimesheetEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, date])
+}
+
+// Feedback and bug reports from signed-in users. kind is FEEDBACK or BUG. Text only; never put patient information here.
+model FeedbackItem {
+  id          String   @id @default(cuid())
+  kind        String
+  title       String
+  description String   @default("")
+  authorId    String
+  source      String   @default("web")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
