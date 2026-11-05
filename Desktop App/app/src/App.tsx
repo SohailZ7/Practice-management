@@ -175,7 +175,7 @@ export function App() {
       )}
       <header className="top">
         <img src={logo} alt="" width={26} height={26} style={{ borderRadius: 6 }} />
-        <h1>Practice Recorder</h1>
+        <h1>Brain and Behavior Center <span style={{ fontWeight: 400, opacity: 0.75 }}>· Practice Recorder</span></h1>
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
@@ -575,7 +575,10 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
 
   return (
     <div className="card" style={{ maxWidth: 760 }}>
-      {!signedIn && <img src={logo} alt="Brain and Behavior Center" width={72} height={72} style={{ borderRadius: 14, display: "block", marginBottom: ".6rem" }} />}
+      {!signedIn && <div style={{ display: "flex", alignItems: "center", gap: ".8rem", marginBottom: ".6rem" }}>
+        <img src={logo} alt="" width={72} height={72} style={{ borderRadius: 14 }} />
+        <div><strong style={{ fontSize: "1.15rem" }}>Brain and Behavior Center</strong><div className="small">Practice Recorder</div></div>
+      </div>}
       <h2 style={{ marginTop: 0 }}>{signedIn ? "Setup" : "Sign in"}</h2>
 
       <label className="field">
