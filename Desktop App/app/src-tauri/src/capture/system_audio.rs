@@ -39,7 +39,10 @@ define_class!(
             if kind != SCStreamOutputType::Audio {
                 return;
             }
-            if let Some(samples) = pcm_from_sample_buffer(buffer) {
+            // Nothing may unwind into ScreenCaptureKit's queue: a panic there aborts the whole app.
+            let samples = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pcm_from_sample_buffer(buffer)))
+                .unwrap_or(None);
+            if let Some(samples) = samples {
                 if let Ok(mut c) = self.ivars().channels.lock() {
                     c.system.extend_from_slice(&samples);
                 }
@@ -48,25 +51,32 @@ define_class!(
     }
 );
 
-/// Pulls interleaved float samples out of a CMSampleBuffer and converts them to the recorder's 16 kHz mono.
-///
-/// The stream is configured for one channel of 48 kHz float PCM, so the buffer's bytes are read as f32 rather than
-/// binding the whole CoreMedia and AudioToolbox surface to ask.
+extern "C" {
+    fn CFGetTypeID(cf: *const c_void) -> usize;
+    fn CMSampleBufferGetTypeID() -> usize;
+}
+
+/// True only when `buffer` really is a CMSampleBuffer. ScreenCaptureKit hands the handler a CoreFoundation object,
+/// not an Objective-C one, so sending it Objective-C messages crashes ("unrecognized selector dataBuffer").
+fn is_sample_buffer(buffer: *const c_void) -> bool {
+    !buffer.is_null() && unsafe { CFGetTypeID(buffer) == CMSampleBufferGetTypeID() }
+}
+
+/// Pulls float samples out of a CMSampleBuffer with the CoreMedia C functions and converts them to the recorder's
+/// 16 kHz mono. The stream is configured for one channel of 48 kHz float PCM, so the bytes are read as f32.
 fn pcm_from_sample_buffer(buffer: &AnyObject) -> Option<Vec<i16>> {
+    let raw = buffer as *const AnyObject as *const c_void;
+    if !is_sample_buffer(raw) {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| eprintln!("[system-audio] ignoring a buffer that is not a CMSampleBuffer"));
+        return None;
+    }
     unsafe {
-        let block: *mut AnyObject = msg_send![buffer, dataBuffer];
-        if block.is_null() {
-            return None;
-        }
-        let mut ptr: *mut c_void = std::ptr::null_mut();
+        let sb = &*(raw as *const objc2_core_media::CMSampleBuffer);
+        let block = sb.data_buffer()?;
+        let mut ptr: *mut std::ffi::c_char = std::ptr::null_mut();
         let mut total: usize = 0;
-        let status: i32 = msg_send![
-            block,
-            getDataPointerAtOffset: 0usize,
-            lengthAtOffsetOut: std::ptr::null_mut::<usize>(),
-            totalLengthOut: &mut total,
-            dataPointerOut: &mut ptr
-        ];
+        let status = block.data_pointer(0, std::ptr::null_mut(), &mut total, &mut ptr);
         if status != 0 || ptr.is_null() || total < 4 {
             return None;
         }
@@ -165,5 +175,21 @@ fn shareable_content() -> Result<Retained<SCShareableContent>, String> {
         Ok(None) | Err(_) => Err("macOS did not allow system audio. Grant this app Screen Recording permission in \
              System Settings, under Privacy & Security, then record again."
             .into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    extern "C" {
+        static kCFBooleanTrue: *const c_void;
+    }
+
+    #[test]
+    fn type_guard_rejects_non_sample_buffers() {
+        assert!(!is_sample_buffer(std::ptr::null()));
+        // A real CoreFoundation object that is not a CMSampleBuffer (the shape of the crash on macOS 27).
+        assert!(!is_sample_buffer(unsafe { kCFBooleanTrue }));
     }
 }
