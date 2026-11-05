@@ -242,17 +242,22 @@ model Visit {
 // One generated document, stored as Markdown. Every save keeps the previous text as a version, so an edit can be
 // traced and nothing a provider wrote is lost.
 model VisitDocument {
-  id        String                 @id @default(cuid())
-  visitId   String
-  kind      String
-  label     String
-  markdown  String
-  draft     Boolean                @default(true)
-  attention String                 @default("")
-  createdAt DateTime               @default(now())
-  updatedAt DateTime               @updatedAt
-  visit     Visit                  @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  versions  VisitDocumentVersion[]
+  id            String                 @id @default(cuid())
+  visitId       String
+  kind          String
+  label         String
+  markdown      String
+  draft         Boolean                @default(true)
+  attention     String                 @default("")
+  // Template-based documents (progress_note | psych_eval | admit_order | discharge_order). Null on documents written
+  // before templates existed; those read as a single "content" field whose version 1 is the stored markdown.
+  docType       String?
+  templateId    String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  visit         Visit                  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  versions      VisitDocumentVersion[]
+  fieldVersions DocumentVersion[]
 
   @@index([visitId])
 }
@@ -265,6 +270,23 @@ model VisitDocumentVersion {
   savedAt      DateTime      @default(now())
   document     VisitDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
+  @@index([documentId])
+}
+
+// One saved state of a template-based document: field values by name. Version 1 is source "model" (what the model
+// produced); every later save is source "edit". Rows are never updated, so the original output can always be compared
+// with the clinician's final text. (documentId, version) is unique, which is what makes concurrent saves safe.
+model DocumentVersion {
+  id           String        @id @default(cuid())
+  documentId   String
+  version      Int
+  source       String
+  values       Json
+  authorUserId String?
+  createdAt    DateTime      @default(now())
+  document     VisitDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
   @@index([documentId])
 }
 
