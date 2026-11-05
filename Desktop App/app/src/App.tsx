@@ -208,8 +208,8 @@ export function App() {
               <button className="secondary" onClick={() => void load()}>Refresh</button>
               {session && <button className="secondary" onClick={() => { setAdding((v) => !v); setPasting(false); }}>{adding ? "Cancel" : "Add one visit"}</button>}
               {session && <button className="secondary" onClick={() => { setPasting((v) => !v); setAdding(false); }}>{pasting ? "Cancel" : "Paste schedule"}</button>}
-              <label className="small" title="Tick for video or phone calls on this Mac: the other person's voice comes out of the speakers, so it is recorded too. Untick for in-person visits (microphone only).">
-                <input type="checkbox" checked={telehealth} onChange={(e) => setTelehealth(e.target.checked)} /> Video/phone call (also record the other person)
+              <label className="small" title="Tick for video or phone visits. Untick for in-person visits, where only your microphone is used.">
+                <input type="checkbox" checked={telehealth} onChange={(e) => setTelehealth(e.target.checked)} /> Patient is on a call (record their voice too)
               </label>
             </div>
 
@@ -291,7 +291,7 @@ export function App() {
             <p className="small">
               The recording stays on this Mac and is never saved. It is turned into text here, and only the text is sent
               to the practice app, where the notes are written. Until the practice app confirms it, the text is kept
-              encrypted on this Mac. With <strong>Video/phone call</strong> ticked, the call's audio is recorded as well as
+              encrypted on this Mac. With <strong>Patient is on a call</strong> ticked, the call's audio is recorded as well as
               your microphone, so the patient's side of the visit is captured; macOS asks for System Audio Recording permission the first time. If the other person's side comes out empty, allow Practice Recorder under System Settings &gt; Privacy &amp; Security &gt; System Audio Recording (it is not a Screen Recording permission, and no picture of your screen is ever taken).
             </p>
           </>
