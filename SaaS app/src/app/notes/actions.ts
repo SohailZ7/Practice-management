@@ -30,7 +30,7 @@ export async function loadPastedSchedule(date: string, pasted: string, provider:
 /** Stores the transcript the recorder produced. The audio itself never reaches the server. */
 export async function saveTranscript(visitId: string, transcript: string) {
   const user = await requireAccess("notes", "edit");
-  await db.visit.update({ where: { id: visitId }, data: { transcript: transcript.slice(0, MAX_TRANSCRIPT) } });
+  await db.visit.update({ where: { id: visitId }, data: { transcript: transcript.slice(0, MAX_TRANSCRIPT), transcriptAt: new Date() } });
   await audit(user.email, "notes.transcript.save", `visit ${visitId} chars=${transcript.length}`);
   revalidatePath("/notes");
 }
@@ -139,4 +139,13 @@ export async function deleteVisitsAction(ids: string[]) {
 export async function visitOptions() {
   await requireAccess("notes", "edit");
   return loadVisitOptions();
+}
+
+/** The stored transcript for the read-only pop-up. Returned, not thrown, so a missing visit reads as a message. */
+export async function getVisitTranscript(visitId: string) {
+  const user = await requireAccess("notes", "view");
+  const v = await db.visit.findUnique({ where: { id: visitId }, select: { transcript: true, transcriptAt: true, createdAt: true } });
+  if (!v) return { ok: false as const, error: "Visit not found." };
+  await audit(user.email, "notes.transcript.read", `visit ${visitId} chars=${v.transcript.length}`);
+  return { ok: true as const, transcript: v.transcript, updatedAt: (v.transcriptAt ?? v.createdAt).toISOString() };
 }

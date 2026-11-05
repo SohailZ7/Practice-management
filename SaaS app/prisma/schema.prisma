@@ -229,6 +229,7 @@ model Visit {
   apptTime        String          @default("")
   providerName    String          @default("")
   transcript      String          @default("")
+  transcriptAt    DateTime?
   createdByEmail  String
   createdAt       DateTime        @default(now())
   patient         BillingPatient  @relation(fields: [patientId], references: [id])

@@ -6,7 +6,7 @@ import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
 import type { VisitOptions } from "@/lib/notes/options";
-import { visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import { DocumentEditor } from "./DocumentEditor";
 
 const shift = (iso: string, days: number) => {
@@ -29,6 +29,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
   const [note, setNote] = useState("");
   const [openDoc, setOpenDoc] = useState<{ id: string; label: string } | null>(null);
   const [busyVisit, setBusyVisit] = useState("");
+  const [reading, setReading] = useState<string | null>(null);
 
   const go = (d: string) => router.push(`/notes?date=${d}`);
 
@@ -93,7 +94,18 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
                     <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => setPicked(e.target.checked ? [...selected, v.id] : selected.filter((i) => i !== v.id))} />
                   </td>
                 )}
-                <td title="Shown as initials">{v.initials}</td>
+                <td title="Shown as initials">
+                  {v.initials}{" "}
+                  <button
+                    className="link"
+                    title={v.hasTranscript ? "View the transcript (read-only)" : "No transcript yet"}
+                    aria-label={`View transcript for ${v.initials}`}
+                    disabled={!v.hasTranscript}
+                    onClick={() => setReading(v.id)}
+                  >
+                    📄
+                  </button>
+                </td>
                 <td>
                   {canEdit ? (
                     <EditableTime visitId={v.id} value={v.apptTime} onError={setNote} onSaved={() => router.refresh()} />
@@ -163,6 +175,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
           </tbody>
         </table>
       )}
+
+      {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
 
       {openDoc && <DocumentEditor documentId={openDoc.id} label={openDoc.label} canEdit={canEdit} onClose={() => { setOpenDoc(null); router.refresh(); }} />}
     </>
@@ -296,6 +310,32 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
           setBusy(false);
         }
       }}>{busy ? "Adding…" : "Add visit"}</button>
+    </div>
+  );
+}
+
+function TranscriptView({ visitId, onClose }: { visitId: string; onClose: () => void }) {
+  const [state, setState] = useState<{ text: string; at: string } | { error: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    void getVisitTranscript(visitId).then((r) => setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }));
+  }, [visitId]);
+  return (
+    <div role="dialog" aria-label="Transcript" className="card" style={{ position: "fixed", inset: "8% 10%", overflow: "auto", zIndex: 50, background: "var(--card, Canvas)" }}>
+      <div className="row">
+        <h2 style={{ margin: 0 }}>Transcript</h2>
+        <span className="grow" />
+        <button className="secondary" disabled={!state || "error" in state} onClick={async () => {
+          if (state && "text" in state) {
+            try { await navigator.clipboard.writeText(state.text); setCopied(true); } catch { setCopied(false); }
+          }
+        }}>{copied ? "Copied" : "Copy"}</button>
+        <button className="secondary" onClick={onClose}>Close</button>
+      </div>
+      {state && "text" in state && <p className="small muted">Uploaded to the cloud · {new Date(state.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. Read-only.</p>}
+      {!state && <p className="muted">Loading…</p>}
+      {state && "error" in state && <p role="alert">{state.error}</p>}
+      {state && "text" in state && <pre style={{ whiteSpace: "pre-wrap", userSelect: "text" }}>{state.text || "No transcript stored for this visit."}</pre>}
     </div>
   );
 }
