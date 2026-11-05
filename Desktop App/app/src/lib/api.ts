@@ -250,3 +250,17 @@ export async function deleteVisits(session: Session, ids: string[]): Promise<{ d
   }
   return { deleted, notFound };
 }
+
+export type VisitOptions = { programs: string[]; appointmentTypes: string[]; providers: string[] };
+
+/** The programs, appointment types and providers the practice uses. Null when the server has no such list yet. */
+export async function fetchVisitOptions(session: Session): Promise<VisitOptions | null> {
+  try {
+    const o = await call<Partial<VisitOptions>>(session, "/notes/options");
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : []);
+    return { programs: list(o.programs), appointmentTypes: list(o.appointmentTypes), providers: list(o.providers) };
+  } catch (e) {
+    if (e instanceof ApiFailure && (e.status === 404 || e.status === 405 || e.status === 403)) return null;
+    throw e;
+  }
+}

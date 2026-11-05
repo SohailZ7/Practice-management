@@ -47,7 +47,8 @@ describe("initials", () => {
   });
 });
 
-import { deleteVisits, createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
+import { normalizeTime, TIME_SLOTS } from "../src/lib/times";
+import { fetchVisitOptions, deleteVisits, createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
 
 describe("the feedback client", () => {
   const capture = (body: unknown, status = 200) => {
@@ -140,5 +141,31 @@ describe("bulk delete", () => {
     });
     expect((await deleteVisits(s, ["a", "b"])).deleted).toBe(2);
     expect(seen).toEqual(["POST /notes/visits/bulk-delete", "DELETE /notes/visits/a", "DELETE /notes/visits/b"]);
+  });
+});
+
+describe("times", () => {
+  it("offers 15-minute slots from 6:00 AM to 8:00 PM", () => {
+    expect(TIME_SLOTS[0]).toBe("6:00 AM");
+    expect(TIME_SLOTS.at(-1)).toBe("8:00 PM");
+    expect(TIME_SLOTS).toHaveLength(57);
+  });
+  it("accepts times and ranges, rejects everything else", () => {
+    expect(normalizeTime("")).toBe("");
+    expect(normalizeTime("9:00")).toBe("9:00");
+    expect(normalizeTime("9 am")).toBe("9:00 AM");
+    expect(normalizeTime("13:30")).toBe("1:30 PM");
+    expect(normalizeTime("9:00 - 11:30")).toBe("9:00-11:30");
+    for (const bad of ["abc", "25:00", "9:75", "9", "9:00-", "1-2-3", "noon"]) expect(normalizeTime(bad)).toBeNull();
+  });
+});
+
+describe("visit options", () => {
+  it("reads the lists, and returns null when the server has none yet", async () => {
+    const s: Session = { baseUrl: "https://example.run.app", accessToken: "t" };
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ programs: ["KIOP-AM", ""], appointmentTypes: ["Follow-up"], providers: ["Dr. A"] }), { status: 200 })));
+    expect(await fetchVisitOptions(s)).toEqual({ programs: ["KIOP-AM"], appointmentTypes: ["Follow-up"], providers: ["Dr. A"] });
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("", { status: 404 })));
+    expect(await fetchVisitOptions(s)).toBeNull();
   });
 });

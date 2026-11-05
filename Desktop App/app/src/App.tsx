@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Feedback } from "./Feedback";
-import { createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
+import { normalizeTime } from "./lib/times";
+import { fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { retryAll, setCopyLabel, uploadQueued } from "./lib/queue";
@@ -38,6 +40,7 @@ export function App() {
   const [provider, setProvider] = useState("");
   const [telehealth, setTelehealth] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [options, setOptions] = useState<VisitOptions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -90,6 +93,14 @@ export function App() {
           },
         }
       : null;
+
+  useEffect(() => {
+    setOptions(null);
+    if (!session || !adding) return;
+    let alive = true;
+    fetchVisitOptions(session).then((o) => alive && setOptions(o)).catch(() => {});
+    return () => { alive = false; };
+  }, [session?.baseUrl, token, adding]);
 
   const load = useCallback(async () => {
     if (!session) { setVisits(null); return; }
@@ -222,6 +233,8 @@ export function App() {
 
             {adding && session && (
               <AddVisit
+                date={date}
+                options={mergeOptions(options, visits ?? [], provider)}
                 provider={provider}
                 onProvider={setProvider}
                 onDone={(m) => { setAdding(false); setMessage(m); void load(); }}
@@ -301,30 +314,53 @@ export function App() {
   );
 }
 
+/** Option lists from the server, topped up with what is already on the loaded day when the server has no list. */
+function mergeOptions(server: VisitOptions | null, visits: Visit[], provider: string): VisitOptions {
+  const distinct = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))].sort();
+  return {
+    programs: distinct([...(server?.programs ?? []), ...visits.map((v) => v.program)]),
+    appointmentTypes: distinct([...(server?.appointmentTypes ?? []), ...visits.map((v) => v.appointmentType)]),
+    providers: distinct([...(server?.providers ?? []), ...visits.map((v) => v.providerName), provider]),
+  };
+}
+
 /** One visit by hand, sent straight to the practice app. Use made-up names when testing. */
-function AddVisit({ provider, onProvider, onDone, create }: {
-  provider: string; onProvider: (p: string) => void; onDone: (message: string) => void;
+function AddVisit({ date, options, provider, onProvider, onDone, create }: {
+  date: string; options: VisitOptions; provider: string; onProvider: (p: string) => void; onDone: (message: string) => void;
   create: (v: import("./lib/api").NewVisit) => Promise<unknown>;
 }) {
   const [patient, setPatient] = useState("");
   const [program, setProgram] = useState("");
   const [time, setTime] = useState("");
-  const [type, setType] = useState("Follow-up");
+  const [type, setType] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
+  const cleanTime = normalizeTime(time);
+  const errors = {
+    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? "" : "Pick a date first.",
+    patient: /\S+\s+\S+/.test(patient.trim()) ? "" : "Enter the client as First Last.",
+    time: cleanTime === null ? "Enter a time like 9:00 AM or 9:00 - 11:30." : "",
+  };
+  const invalid = Object.values(errors).some(Boolean);
+  const show = (m: string) => tried && m && <div className="small err">{m}</div>;
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add one visit</h2>
-      <label className="field"><span>Client (First Last)</span><input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Alpha Testcase" /></label>
-      <label className="field"><span>Program</span><input value={program} onChange={(e) => setProgram(e.target.value)} placeholder="KIOP-AM" /></label>
-      <label className="field"><span>Time</span><input value={time} onChange={(e) => setTime(e.target.value)} placeholder="9:00 - 11:30" /></label>
-      <label className="field"><span>Type</span><input value={type} onChange={(e) => setType(e.target.value)} /></label>
-      <label className="field"><span>Provider</span><input value={provider} onChange={(e) => onProvider(e.target.value)} placeholder="Dr. Khalid Ahmed" /></label>
+      <p className="small">For {longDate(date)}.</p>
+      {show(errors.date)}
+      <label className="field"><span>Client (First Last)</span><input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Alpha Testcase" />{show(errors.patient)}</label>
+      <label className="field"><span>Time</span><TimeField value={time} onChange={setTime} /></label>
+      <label className="field"><span>Program</span><ComboField label="Program" value={program} onChange={setProgram} options={options.programs} placeholder="KIOP-AM" /></label>
+      <label className="field"><span>Type</span><StrictSelect label="Type" value={type} onChange={setType} options={options.appointmentTypes} /></label>
+      <label className="field"><span>Provider</span><StrictSelect label="Provider" value={provider} onChange={onProvider} options={options.providers} /></label>
       <div className="row">
-        <button disabled={!patient.trim() || busy} onClick={async () => {
+        <button disabled={busy} onClick={async () => {
+          setTried(true);
+          if (invalid) return;
           setBusy(true);
           try {
             await create({
-              patient: patient.trim(), apptTime: time.trim() || undefined, program: program.trim() || undefined,
+              patient: patient.trim(), apptTime: cleanTime || undefined, program: program.trim() || undefined,
               appointmentType: type.trim() || undefined, providerName: provider.trim() || undefined,
             });
             onDone("Added 1 visit.");
@@ -447,14 +483,12 @@ function Row({ visit, date, selected, onSelect, state, ready, queued, env, onSta
       <td><input type="checkbox" aria-label={`Select visit for ${visit.initials}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>
       <td title="Shown as initials">{visit.initials}</td>
       <td style={{ whiteSpace: "nowrap" }}>
-        <input
-          aria-label="Time" size={11} defaultValue={visit.apptTime ?? ""} key={visit.apptTime ?? ""}
-          placeholder="9:00 - 11:30" disabled={busy || state.phase === "recording" || state.phase === "working"}
-          onBlur={async (e) => {
-            const v = e.target.value.trim();
-            if (v === (visit.apptTime ?? "")) return;
+        <TimeCell
+          value={visit.apptTime ?? ""}
+          disabled={busy || state.phase === "recording" || state.phase === "working"}
+          onSave={async (v) => {
             try { await updateVisit(session, visit.id, { apptTime: v }); onSent(); }
-            catch (err) { e.target.value = visit.apptTime ?? ""; onState(visit.id, { phase: "failed", message: visitErrorMessage(err) }); }
+            catch (err) { onState(visit.id, { phase: "failed", message: visitErrorMessage(err) }); throw err; }
           }}
         />
       </td>
