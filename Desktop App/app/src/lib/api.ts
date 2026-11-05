@@ -191,14 +191,30 @@ export const cleanupFeedback = (session: Session, transcript: string) =>
     body: JSON.stringify({ transcript }),
   });
 
-/** Removes a visit from the day's list. The server decides whether it may (for example not once a note exists). */
-export async function deleteVisit(session: Session, id: string): Promise<void> {
-  try {
-    await call<unknown>(session, `/notes/visits/${encodeURIComponent(id)}`, { method: "DELETE" });
-  } catch (e) {
-    if (e instanceof ApiFailure && (e.status === 404 || e.status === 405)) {
-      throw new Error("This practice app version cannot delete visits yet.");
-    }
-    throw e;
+export type NewVisit = { patient: string; apptTime?: string; program?: string; appointmentType?: string; providerName?: string };
+
+/** Adds one visit by hand. `patient` is "First Last". */
+export const createVisit = (session: Session, date: string, v: NewVisit) =>
+  call<{ id: string; apptTime: string; program: string; appointmentType: string }>(session, "/notes/visits", {
+    method: "POST",
+    body: JSON.stringify({ date, ...v }),
+  });
+
+/** Changes a visit's time, program, type or provider. */
+export const updateVisit = (session: Session, id: string, patch: Partial<Omit<NewVisit, "patient">>) =>
+  call<unknown>(session, `/notes/visits/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+/** Removes a visit, including its transcript and documents. */
+export const deleteVisit = (session: Session, id: string) =>
+  call<{ ok: boolean }>(session, `/notes/visits/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/** Plain wording for the add/edit errors. */
+export function visitErrorMessage(e: unknown): string {
+  if (e instanceof ApiFailure) {
+    if (e.code === "bad_patient") return "Enter the client as First Last.";
+    if (e.code === "bad_time") return "That time is not valid. Use a form like 9:00 or 9:00 - 11:30.";
+    if (e.code === "bad_date") return "That date is not valid.";
+    if (e.code === "not_found") return "That visit no longer exists. Refresh the list.";
   }
+  return e instanceof Error ? e.message : String(e);
 }

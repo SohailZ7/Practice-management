@@ -47,7 +47,7 @@ describe("initials", () => {
   });
 });
 
-import { fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
+import { createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
 
 describe("the feedback client", () => {
   const capture = (body: unknown, status = 200) => {
@@ -104,5 +104,21 @@ describe("auth config", () => {
     expect((await fetchAuthConfig("https://example.run.app")).googleSignIn).toBe(true);
     vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
     await expect(fetchAuthConfig("https://example.run.app")).rejects.toThrow(/Could not reach/);
+  });
+});
+
+describe("visit add / edit / delete", () => {
+  it("uses POST, PATCH and DELETE on /notes/visits", async () => {
+    const seen: [string, RequestInit | undefined][] = [];
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => (seen.push([u, i]), Promise.resolve(new Response(JSON.stringify({ ok: true, id: "v1" }), { status: 200 }))));
+    const s: Session = { baseUrl: "https://example.run.app", accessToken: "t" };
+    await createVisit(s, "2026-11-05", { patient: "Alpha Testcase", apptTime: "9:00" });
+    await updateVisit(s, "v1", { apptTime: "10:00" });
+    await deleteVisit(s, "v1");
+    expect(seen.map(([u, i]) => `${i?.method} ${u.replace("https://example.run.app/api/desktop/v1", "")}`)).toEqual([
+      "POST /notes/visits", "PATCH /notes/visits/v1", "DELETE /notes/visits/v1",
+    ]);
+    expect(JSON.parse(String(seen[0][1]?.body))).toMatchObject({ date: "2026-11-05", patient: "Alpha Testcase" });
+    expect(visitErrorMessage(new ApiFailure(400, "bad_time"))).toMatch(/not valid/);
   });
 });

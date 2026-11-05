@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Feedback } from "./Feedback";
-import { deleteVisit, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { createVisit, deleteVisit, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { retryAll, uploadQueued } from "./lib/queue";
@@ -214,7 +214,7 @@ export function App() {
                 provider={provider}
                 onProvider={setProvider}
                 onDone={(m) => { setAdding(false); setMessage(m); void load(); }}
-                sync={(text) => syncSchedule(session, date, text, provider)}
+                create={(v) => createVisit(session, date, v)}
               />
             )}
 
@@ -259,40 +259,35 @@ export function App() {
   );
 }
 
-/**
- * One visit by hand. It builds a one-row board in the same tab-separated shape as a pasted one and sends it through
- * the same call, so the practice app applies exactly the same rules as for a paste.
- */
-function AddVisit({ provider, onProvider, onDone, sync }: {
+/** One visit by hand, sent straight to the practice app. Use made-up names when testing. */
+function AddVisit({ provider, onProvider, onDone, create }: {
   provider: string; onProvider: (p: string) => void; onDone: (message: string) => void;
-  sync: (text: string) => Promise<import("./lib/api").LoadResult>;
+  create: (v: import("./lib/api").NewVisit) => Promise<unknown>;
 }) {
-  const [client, setClient] = useState("");
+  const [patient, setPatient] = useState("");
   const [program, setProgram] = useState("");
   const [time, setTime] = useState("");
   const [type, setType] = useState("Follow-up");
   const [busy, setBusy] = useState(false);
-  const clean = (v: string) => v.replace(/[\t\r\n]+/g, " ").trim();
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add one visit</h2>
-      <p className="small">Use made-up names when testing. Client as on the board, for example <em>Alpha Testcase/40F/Insurer</em>.</p>
-      <label className="field"><span>Client</span><input value={client} onChange={(e) => setClient(e.target.value)} placeholder="First Last/40F/Insurer" /></label>
+      <label className="field"><span>Client (First Last)</span><input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Alpha Testcase" /></label>
       <label className="field"><span>Program</span><input value={program} onChange={(e) => setProgram(e.target.value)} placeholder="KIOP-AM" /></label>
       <label className="field"><span>Time</span><input value={time} onChange={(e) => setTime(e.target.value)} placeholder="9:00 - 11:30" /></label>
       <label className="field"><span>Type</span><input value={type} onChange={(e) => setType(e.target.value)} /></label>
       <label className="field"><span>Provider</span><input value={provider} onChange={(e) => onProvider(e.target.value)} placeholder="Dr. Khalid Ahmed" /></label>
       <div className="row">
-        <button disabled={!clean(client) || busy} onClick={async () => {
+        <button disabled={!patient.trim() || busy} onClick={async () => {
           setBusy(true);
           try {
-            const head = "Tracks\tType\tClient Info\tAbsent\tCanceled\tProvider\tComplete\tColumn1\tColumn2";
-            const track = clean(`${program} ${time}`);
-            const row = [track, clean(type), clean(client), "FALSE", "FALSE", clean(provider), "FALSE", "FALSE", "Select Option"].join("\t");
-            const r = await sync(`${head}\n${row}`);
-            onDone(r.created ? "Added 1 visit." : r.skippedExisting ? "That visit is already there." : "The practice app did not add that visit (check the provider and client).");
+            await create({
+              patient: patient.trim(), apptTime: time.trim() || undefined, program: program.trim() || undefined,
+              appointmentType: type.trim() || undefined, providerName: provider.trim() || undefined,
+            });
+            onDone("Added 1 visit.");
           } catch (e) {
-            onDone(e instanceof Error ? e.message : String(e));
+            onDone(visitErrorMessage(e));
           } finally {
             setBusy(false);
           }
@@ -407,7 +402,18 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
   return (
     <tr>
       <td title="Shown as initials">{visit.initials}</td>
-      <td style={{ whiteSpace: "nowrap" }}>{visit.apptTime ?? ""}</td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        <input
+          aria-label="Time" size={11} defaultValue={visit.apptTime ?? ""} key={visit.apptTime ?? ""}
+          placeholder="9:00 - 11:30" disabled={busy || state.phase === "recording" || state.phase === "working"}
+          onBlur={async (e) => {
+            const v = e.target.value.trim();
+            if (v === (visit.apptTime ?? "")) return;
+            try { await updateVisit(session, visit.id, { apptTime: v }); onSent(); }
+            catch (err) { e.target.value = visit.apptTime ?? ""; onState(visit.id, { phase: "failed", message: visitErrorMessage(err) }); }
+          }}
+        />
+      </td>
       <td>{visit.program}</td>
       <td>{visit.appointmentType}</td>
       <td className="small">
@@ -439,7 +445,7 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
         {state.phase !== "recording" && state.phase !== "working" && (
           confirmDelete ? (
             <>
-              <span className="small">Delete this visit?</span>
+              <span className="small">Delete this visit and its transcript and documents?</span>
               <button className="secondary" disabled={busy} onClick={async () => {
                 setBusy(true);
                 try {
@@ -447,7 +453,7 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
                   onSent();
                 } catch (e) {
                   setConfirmDelete(false);
-                  onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
+                  onState(visit.id, { phase: "failed", message: visitErrorMessage(e) });
                 } finally {
                   setBusy(false);
                 }
