@@ -127,13 +127,10 @@ export function Icon({ name, filled = false }: { name: IconName; filled?: boolea
   );
 }
 
-export function Logo() {
+/** The practice's app icon. It is a rounded square with its own background, so it reads the same in light and dark. */
+export function Logo({ size = 32 }: { size?: number }) {
   return (
-    <span className="logo" aria-hidden="true">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 20V12a7 7 0 0 1 14 0v8" />
-        <path d="M9 20v-6a3 3 0 0 1 6 0v6" />
-      </svg>
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className="logo" src="/brand/bbc-icon-180.png" alt="" width={size} height={size} aria-hidden="true" />
   );
 }

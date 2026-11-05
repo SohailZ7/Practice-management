@@ -100,7 +100,7 @@ h2 { font-size: 1.05rem; font-weight: 650; margin: 1.5rem 0 .5rem; }
 .shell.rail .side:not(:hover) .brand { flex: none; padding: .3rem; }
 .side .pin-toggle.on { color: var(--accent); }
 .side .brand:hover { text-decoration: none; }
-.logo { width: 32px; height: 32px; border-radius: 10px; background: var(--logo-bg); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.logo { width: 32px; height: 32px; border-radius: 22%; display: inline-block; object-fit: contain; flex: none; }
 .side nav { display: flex; flex-direction: column; gap: .3rem; flex: 1; overflow-y: auto; min-height: 0; }
 .side nav a, .side .foot a, .side .foot button { display: flex; gap: .8rem; align-items: center; padding: .65rem .8rem; border-radius: 11px; color: var(--side-text); background: transparent; border: 0; white-space: nowrap; font-size: .92rem; width: 100%; text-align: left; cursor: pointer; }
 .side nav a:hover, .side .foot a:hover, .side .foot button:hover { background: var(--side-hover); text-decoration: none; }

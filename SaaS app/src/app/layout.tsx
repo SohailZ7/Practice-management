@@ -7,8 +7,12 @@ import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Practice Management",
-  description: "Schedule, tasks, employees and access for the practice.",
+  title: { default: "Brain and Behavior Center", template: "%s · Brain and Behavior Center" },
+  description: "Schedule, tasks, employees and access for Brain and Behavior Center.",
+  icons: {
+    icon: [{ url: "/brand/bbc-icon-64.png", sizes: "64x64", type: "image/png" }],
+    apple: [{ url: "/brand/bbc-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const dynamic = "force-dynamic";

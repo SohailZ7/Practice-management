@@ -154,7 +154,7 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
         <div className="brand-row">
           <Link href="/" className="brand" title="Home">
             <Logo />
-            <span className="label">Practice Management</span>
+            <span className="label">Brain and Behavior Center</span>
           </Link>
           <button
             type="button"
