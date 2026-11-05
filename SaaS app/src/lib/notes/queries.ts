@@ -12,6 +12,7 @@ export type VisitRow = {
   visitDate: string;
   appointmentType: string;
   program: string;
+  apptTime: string;
   providerName: string;
   hasTranscript: boolean;
   documents: DocumentRow[];
@@ -30,6 +31,7 @@ export async function visitsForDate(date: string): Promise<VisitRow[]> {
     visitDate: v.visitDate,
     appointmentType: v.appointmentType,
     program: v.program,
+    apptTime: v.apptTime,
     providerName: v.providerName,
     hasTranscript: v.transcript.trim().length > 0,
     documents: v.documents.map((d) => ({

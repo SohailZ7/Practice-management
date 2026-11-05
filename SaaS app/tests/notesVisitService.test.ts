@@ -1,0 +1,72 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { apptTimeOf, parseSchedule } from "../src/lib/notes/scheduleParse";
+
+const db = {
+  visit: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  billingPatient: { findFirst: vi.fn(), create: vi.fn() },
+};
+vi.mock("../src/lib/db", () => ({ db }));
+const audit = vi.fn();
+vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));
+
+const { addVisit, cleanApptTime, deleteVisit, updateVisit, VisitError } = await import("../src/lib/notes/visitService");
+const actor = { id: "u1", email: "a@example.org" };
+
+beforeEach(() => vi.clearAllMocks());
+
+describe("appointment time from the pasted sheet", () => {
+  it("takes the clock time from a psych eval cell and a track cell", () => {
+    expect(apptTimeOf("2:00: Psych Eval & Admit Order")).toBe("2:00");
+    expect(apptTimeOf(" KIOP-AM  9:00 - 11:30")).toBe("9:00-11:30");
+    expect(apptTimeOf("BPHP-AM   9:00-12:30")).toBe("9:00-12:30");
+    expect(apptTimeOf("PE: Select Time")).toBe("");
+  });
+  it("is set on parsed rows", () => {
+    const board = ["Time\tType\tClient Info\tAbsent\tCanceled\tProvider", "2:00: Psych Eval & Admit Order\tZoom\tAlpha Testcase/40F\tFALSE\tFALSE\tDr. X"].join("\n");
+    expect(parseSchedule(board, "").entries[0].apptTime).toBe("2:00");
+  });
+});
+
+describe("cleanApptTime", () => {
+  it("accepts and tidies typed times, and refuses nonsense", () => {
+    expect(cleanApptTime("")).toBe("");
+    expect(cleanApptTime("2:00 pm")).toBe("2:00 PM");
+    expect(cleanApptTime("9:00 - 11:30")).toBe("9:00-11:30");
+    expect(cleanApptTime("2 pm")).toBe("2 PM");
+    expect(() => cleanApptTime("after lunch")).toThrow(VisitError);
+  });
+});
+
+describe("addVisit", () => {
+  it("finds or creates the patient and stores the visit with its time", async () => {
+    db.billingPatient.findFirst.mockResolvedValue(null);
+    db.billingPatient.create.mockResolvedValue({ id: "p1" });
+    db.visit.create.mockResolvedValue({ id: "v1" });
+    await addVisit(actor, { date: "2026-11-05", patient: "Alpha Testcase", apptTime: "2:00 PM", program: "KIOP-AM" });
+    expect(db.visit.create.mock.calls[0][0].data).toMatchObject({ patientId: "p1", visitDate: "2026-11-05", apptTime: "2:00 PM", program: "KIOP-AM" });
+    expect(audit.mock.calls[0][2]).toBe("visit v1 2026-11-05");
+  });
+  it("refuses a bad date and a blank name", async () => {
+    await expect(addVisit(actor, { date: "nope", patient: "A B" })).rejects.toMatchObject({ code: "bad_date" });
+    await expect(addVisit(actor, { date: "2026-11-05", patient: " " })).rejects.toMatchObject({ code: "bad_patient" });
+    expect(db.visit.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateVisit and deleteVisit", () => {
+  it("edits only the time and audits field names, not values", async () => {
+    db.visit.findUnique.mockResolvedValue({ id: "v1" });
+    db.visit.update.mockResolvedValue({ id: "v1" });
+    await updateVisit(actor, "v1", { apptTime: "3:00 PM" });
+    expect(db.visit.update).toHaveBeenCalledWith({ where: { id: "v1" }, data: { apptTime: "3:00 PM" } });
+    expect(audit.mock.calls[0][2]).toBe("visit v1 fields=apptTime");
+  });
+  it("deletes an existing visit and says not_found for a missing one", async () => {
+    db.visit.findUnique.mockResolvedValueOnce({ id: "v1", visitDate: "2026-11-05", documents: [{ id: "d" }] });
+    await deleteVisit(actor, "v1");
+    expect(db.visit.delete).toHaveBeenCalledWith({ where: { id: "v1" } });
+    expect(audit.mock.calls[0][2]).toBe("visit v1 2026-11-05 documents=1");
+    db.visit.findUnique.mockResolvedValueOnce(null);
+    await expect(deleteVisit(actor, "x")).rejects.toMatchObject({ code: "not_found" });
+  });
+});

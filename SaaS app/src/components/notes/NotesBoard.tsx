@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
-import { generateForVisit, loadPastedSchedule, saveTranscript, warmUp } from "@/app/notes/actions";
+import { addVisitAction, deleteVisitAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import { DocumentEditor } from "./DocumentEditor";
 
 const shift = (iso: string, days: number) => {
@@ -21,6 +21,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [pasting, setPasting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [note, setNote] = useState("");
   const [openDoc, setOpenDoc] = useState<{ id: string; label: string } | null>(null);
   const [busyVisit, setBusyVisit] = useState("");
@@ -32,6 +33,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
       <div className="row" style={{ marginBottom: ".75rem" }}>
         <h1 style={{ margin: 0 }}>Notes</h1>
         <span className="grow" />
+        {canEdit && <button className="secondary" onClick={() => setAdding((v) => !v)}>{adding ? "Cancel" : "Add a visit"}</button>}
         {canEdit && <button className="secondary" onClick={() => setPasting((v) => !v)}>{pasting ? "Cancel" : "Paste a schedule"}</button>}
       </div>
 
@@ -45,6 +47,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
 
       {note && <div className="card" role="status">{note} <button className="link" onClick={() => setNote("")}>Dismiss</button></div>}
 
+      {adding && <AddVisit date={date} defaultProvider={defaultProvider} onDone={(m) => { setAdding(false); setNote(m); router.refresh(); }} />}
+
       {pasting && <PasteSchedule date={date} defaultProvider={defaultProvider} onDone={(m) => { setPasting(false); setNote(m); router.refresh(); }} />}
 
       {visits.length === 0 ? (
@@ -52,12 +56,19 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
       ) : (
         <table className="xl">
           <thead>
-            <tr><th>Patient</th><th>Program</th><th>Type</th><th>Documents</th><th /></tr>
+            <tr><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th /></tr>
           </thead>
           <tbody>
             {visits.map((v) => (
               <tr key={v.id}>
                 <td title="Shown as initials">{v.initials}</td>
+                <td>
+                  {canEdit ? (
+                    <EditableTime visitId={v.id} value={v.apptTime} onError={setNote} onSaved={() => router.refresh()} />
+                  ) : (
+                    v.apptTime
+                  )}
+                </td>
                 <td>{v.program}</td>
                 <td>{v.appointmentType}</td>
                 <td>
@@ -76,6 +87,21 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   {canEdit && (
                     <>
+                      <button
+                        className="secondary"
+                        disabled={pending}
+                        onClick={() => {
+                          const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
+                          if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
+                          start(async () => {
+                            const r = await deleteVisitAction(v.id);
+                            setNote(r.ok ? "Visit deleted." : r.error);
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        Delete
+                      </button>{" "}
                       <TranscriptButton visitId={v.id} hasTranscript={v.hasTranscript} onSaved={() => router.refresh()} />
                       <button
                         disabled={!v.hasTranscript || pending || busyVisit === v.id}
@@ -159,6 +185,59 @@ function PasteSchedule({ date, defaultProvider, onDone }: { date: string; defaul
           setBusy(false);
         }
       }}>{busy ? "Loading…" : "Load schedule"}</button>
+    </div>
+  );
+}
+
+function EditableTime({ visitId, value, onSaved, onError }: { visitId: string; value: string; onSaved: () => void; onError: (m: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <input
+      value={v}
+      aria-label="Appointment time"
+      placeholder="2:00 PM"
+      style={{ width: "8.5rem" }}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={async () => {
+        if (v.trim() === value) return;
+        const r = await updateVisitAction(visitId, { apptTime: v });
+        if (r.ok) onSaved();
+        else {
+          onError(r.error);
+          setV(value);
+        }
+      }}
+    />
+  );
+}
+
+function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProvider: string; onDone: (m: string) => void }) {
+  const [f, setF] = useState({ patient: "", apptTime: "", program: "", appointmentType: "", providerName: defaultProvider });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>
+      <div className="row" style={{ flexWrap: "wrap" }}>
+        <label>Patient <input value={f.patient} onChange={set("patient")} placeholder="First Last" /></label>
+        <label>Time <input value={f.apptTime} onChange={set("apptTime")} placeholder="2:00 PM" style={{ width: "8.5rem" }} /></label>
+        <label>Program <input value={f.program} onChange={set("program")} placeholder="KIOP-AM" /></label>
+        <label>Type <input value={f.appointmentType} onChange={set("appointmentType")} placeholder="Follow-up" /></label>
+        <label>Provider <input value={f.providerName} onChange={set("providerName")} /></label>
+      </div>
+      {err && <p role="alert" className="small">{err}</p>}
+      <button disabled={!f.patient.trim() || busy} onClick={async () => {
+        setBusy(true);
+        setErr("");
+        try {
+          const r = await addVisitAction({ date, ...f });
+          if (r.ok) onDone("Visit added.");
+          else setErr(r.error);
+        } finally {
+          setBusy(false);
+        }
+      }}>{busy ? "Adding…" : "Add visit"}</button>
     </div>
   );
 }

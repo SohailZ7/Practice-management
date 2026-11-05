@@ -51,6 +51,7 @@ export async function loadScheduleForDate(
         visitDate: date,
         appointmentType: e.type,
         program: e.program,
+        apptTime: e.apptTime,
         providerName: e.provider?.name ?? "",
         createdByEmail: actor.email,
       },

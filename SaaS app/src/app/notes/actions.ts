@@ -10,6 +10,7 @@ import { generateDocuments } from "@/lib/notes/generate";
 import { makeLlm, modelConfigured, warmModel } from "@/lib/notes/model";
 import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
+import { addVisit, deleteVisit, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
 // Audit entries hold ids and counts only, never patient names or note text.
 
@@ -93,4 +94,36 @@ export async function getDocument(documentId: string) {
 export async function warmUp() {
   await requireAccess("notes", "edit");
   return warmModel();
+}
+
+// Thrown messages are hidden in production, so these return the message for the page to show.
+async function guard<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+  try {
+    return { ok: true, value: await fn() };
+  } catch (e) {
+    if (e instanceof VisitError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+/** Adds one visit by hand, in addition to pasting a whole board. */
+export async function addVisitAction(input: { date: string; patient: string } & VisitPatch) {
+  const user = await requireAccess("notes", "edit");
+  const r = await guard(() => addVisit(user, input));
+  revalidatePath("/notes");
+  return r.ok ? { ok: true as const } : r;
+}
+
+export async function updateVisitAction(id: string, patch: VisitPatch) {
+  const user = await requireAccess("notes", "edit");
+  const r = await guard(() => updateVisit(user, id, patch));
+  revalidatePath("/notes");
+  return r.ok ? { ok: true as const } : r;
+}
+
+export async function deleteVisitAction(id: string) {
+  const user = await requireAccess("notes", "edit");
+  const r = await guard(() => deleteVisit(user, id));
+  revalidatePath("/notes");
+  return r.ok ? { ok: true as const } : r;
 }

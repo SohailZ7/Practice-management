@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { isISODate, todayISO } from "@/lib/dates";
-import { ApiError, authenticate, handle, json } from "@/lib/desktop/api";
+import { ApiError, authenticate, handle, json, readJson } from "@/lib/desktop/api";
 import { patientInitials } from "@/lib/notes/patientFolder";
+import { addVisit, VisitError } from "@/lib/notes/visitService";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,32 @@ export const GET = handle(async (req) => {
       id: v.id,
       initials: patientInitials(v.patient.lastName, v.patient.firstName),
       program: v.program,
+      apptTime: v.apptTime,
       appointmentType: v.appointmentType,
       providerName: v.providerName,
       hasTranscript: v.transcript.trim().length > 0,
       documentCount: v.documents.length,
     })),
   });
+});
+
+/** Adds one visit by hand. Body: { date, patient: "First Last", apptTime?, program?, appointmentType?, providerName? }. */
+export const POST = handle(async (req) => {
+  const { user } = await authenticate(req, { module: "notes", level: "edit" });
+  const body = await readJson(req);
+  const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : undefined);
+  try {
+    const v = await addVisit(user, {
+      date: str("date") ?? "",
+      patient: str("patient") ?? "",
+      apptTime: str("apptTime"),
+      program: str("program"),
+      appointmentType: str("appointmentType"),
+      providerName: str("providerName"),
+    });
+    return json({ id: v.id, apptTime: v.apptTime, program: v.program, appointmentType: v.appointmentType }, 201);
+  } catch (e) {
+    if (e instanceof VisitError) throw new ApiError(400, e.code);
+    throw e;
+  }
 });

@@ -4,6 +4,8 @@ export type ConsentBadge = "unlinked" | "none" | "on_file";
 export type ScheduleItem = {
   id: string;
   time: string;
+  /** Just the clock time(s) from the time cell, e.g. "2:00" or "9:00-11:30". */
+  apptTime: string;
   program: string;
   type: string;
   provider: { id: string | null; name: string } | null;

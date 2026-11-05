@@ -222,6 +222,7 @@ model Visit {
   visitDate       String
   appointmentType String          @default("")
   program         String          @default("")
+  apptTime        String          @default("")
   providerName    String          @default("")
   transcript      String          @default("")
   createdByEmail  String

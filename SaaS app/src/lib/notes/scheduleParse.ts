@@ -69,6 +69,16 @@ function appointmentType(time: string, type: string): string {
   return clean(type);
 }
 
+/**
+ * The appointment time as written in the sheet's time cell: "2:00" from "2:00: Psych Eval & Admit Order", or
+ * "9:00-11:30" from "KIOP-AM  9:00 - 11:30". Empty when the cell holds no clock time ("Select Time").
+ */
+export function apptTimeOf(time: string): string {
+  const m = /(\d{1,2}:\d{2})(?:\s*-\s*(\d{1,2}:\d{2}))?/.exec(clean(time));
+  if (!m) return "";
+  return m[2] ? `${m[1]}-${m[2]}` : m[1];
+}
+
 const HEADER_HINTS = ["time", "tracks", "type", "client info", "absent", "canceled", "provider", "completed", "missed"];
 
 function columnsFrom(cells: string[]): Record<string, number> | null {
@@ -150,6 +160,7 @@ export function parseSchedule(text: string, provider: string): ParseResult {
     entries.push({
       id: `p${i}`,
       time,
+      apptTime: apptTimeOf(time),
       program: programOf(time, at("type")),
       type,
       provider: { id: null, name: providerName },
