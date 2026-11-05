@@ -191,7 +191,7 @@ pub fn api_request(
     if !path.starts_with("/api/desktop/v1/") || path.contains("..") || path.contains('\\') {
         return Err("Not a practice app address.".into());
     }
-    if !matches!(method, "GET" | "POST" | "PATCH") {
+    if !matches!(method, "GET" | "POST" | "PATCH" | "DELETE") {
         return Err("Unsupported request.".into());
     }
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60)).build();

@@ -8,6 +8,8 @@ export type Visit = {
   id: string;
   initials: string;
   program: string;
+  /** Clock time(s) from the pasted board, e.g. "9:00-11:30". Empty or missing when the board had none. */
+  apptTime?: string;
   appointmentType: string;
   providerName: string;
   hasTranscript: boolean;
@@ -188,3 +190,15 @@ export const cleanupFeedback = (session: Session, transcript: string) =>
     method: "POST",
     body: JSON.stringify({ transcript }),
   });
+
+/** Removes a visit from the day's list. The server decides whether it may (for example not once a note exists). */
+export async function deleteVisit(session: Session, id: string): Promise<void> {
+  try {
+    await call<unknown>(session, `/notes/visits/${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch (e) {
+    if (e instanceof ApiFailure && (e.status === 404 || e.status === 405)) {
+      throw new Error("This practice app version cannot delete visits yet.");
+    }
+    throw e;
+  }
+}

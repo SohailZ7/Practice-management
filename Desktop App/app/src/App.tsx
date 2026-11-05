@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Feedback } from "./Feedback";
-import { fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { deleteVisit, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { retryAll, uploadQueued } from "./lib/queue";
@@ -37,6 +37,7 @@ export function App() {
   const [pasting, setPasting] = useState(false);
   const [provider, setProvider] = useState("");
   const [telehealth, setTelehealth] = useState(true);
+  const [adding, setAdding] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [retrying, setRetrying] = useState(false);
 
@@ -194,9 +195,10 @@ export function App() {
               <button className="secondary" onClick={() => setDate(practiceToday())}>Today</button>
               <span className="grow" />
               <button className="secondary" onClick={() => void load()}>Refresh</button>
-              {session && <button className="secondary" onClick={() => setPasting((v) => !v)}>{pasting ? "Cancel" : "Paste schedule"}</button>}
-              <label className="small" title="A telehealth visit also records what comes out of the speakers">
-                <input type="checkbox" checked={telehealth} onChange={(e) => setTelehealth(e.target.checked)} /> Telehealth
+              {session && <button className="secondary" onClick={() => { setAdding((v) => !v); setPasting(false); }}>{adding ? "Cancel" : "Add one visit"}</button>}
+              {session && <button className="secondary" onClick={() => { setPasting((v) => !v); setAdding(false); }}>{pasting ? "Cancel" : "Paste schedule"}</button>}
+              <label className="small" title="Tick for video or phone calls on this Mac: the other person's voice comes out of the speakers, so it is recorded too. Untick for in-person visits (microphone only).">
+                <input type="checkbox" checked={telehealth} onChange={(e) => setTelehealth(e.target.checked)} /> Video/phone call (also record the other person)
               </label>
             </div>
 
@@ -205,6 +207,15 @@ export function App() {
                 Recording is off because {missing.join(", ")} {missing.length === 1 ? "is" : "are"} not set up. Open{" "}
                 <button className="link" onClick={() => setTab("setup")}>Setup</button>.
               </div>
+            )}
+
+            {adding && session && (
+              <AddVisit
+                provider={provider}
+                onProvider={setProvider}
+                onDone={(m) => { setAdding(false); setMessage(m); void load(); }}
+                sync={(text) => syncSchedule(session, date, text, provider)}
+              />
             )}
 
             {pasting && session && (
@@ -220,10 +231,10 @@ export function App() {
             {!session ? null : visits === null ? (
               <p className="small">Could not reach the practice app.</p>
             ) : visits.length === 0 ? (
-              <p className="small">No visits for this day. Load the day's schedule in the practice app first.</p>
+              <p className="small">No visits for this day. Use Add one visit or Paste schedule.</p>
             ) : (
               <table className="board">
-                <thead><tr><th>Patient</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
+                <thead><tr><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {visits.map((v) => (
                     <Row key={v.id} visit={v} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
@@ -237,7 +248,7 @@ export function App() {
             <p className="small">
               The recording stays on this Mac and is never saved. It is turned into text here, and only the text is sent
               to the practice app, where the notes are written. Until the practice app confirms it, the text is kept
-              encrypted on this Mac. With <strong>Telehealth</strong> ticked, the call's audio is recorded as well as
+              encrypted on this Mac. With <strong>Video/phone call</strong> ticked, the call's audio is recorded as well as
               your microphone, so the patient's side of the visit is captured; macOS asks for Screen Recording permission
               the first time, which is what it calls listening to another app.
             </p>
@@ -245,6 +256,49 @@ export function App() {
         )}
       </main>
     </>
+  );
+}
+
+/**
+ * One visit by hand. It builds a one-row board in the same tab-separated shape as a pasted one and sends it through
+ * the same call, so the practice app applies exactly the same rules as for a paste.
+ */
+function AddVisit({ provider, onProvider, onDone, sync }: {
+  provider: string; onProvider: (p: string) => void; onDone: (message: string) => void;
+  sync: (text: string) => Promise<import("./lib/api").LoadResult>;
+}) {
+  const [client, setClient] = useState("");
+  const [program, setProgram] = useState("");
+  const [time, setTime] = useState("");
+  const [type, setType] = useState("Follow-up");
+  const [busy, setBusy] = useState(false);
+  const clean = (v: string) => v.replace(/[\t\r\n]+/g, " ").trim();
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Add one visit</h2>
+      <p className="small">Use made-up names when testing. Client as on the board, for example <em>Alpha Testcase/40F/Insurer</em>.</p>
+      <label className="field"><span>Client</span><input value={client} onChange={(e) => setClient(e.target.value)} placeholder="First Last/40F/Insurer" /></label>
+      <label className="field"><span>Program</span><input value={program} onChange={(e) => setProgram(e.target.value)} placeholder="KIOP-AM" /></label>
+      <label className="field"><span>Time</span><input value={time} onChange={(e) => setTime(e.target.value)} placeholder="9:00 - 11:30" /></label>
+      <label className="field"><span>Type</span><input value={type} onChange={(e) => setType(e.target.value)} /></label>
+      <label className="field"><span>Provider</span><input value={provider} onChange={(e) => onProvider(e.target.value)} placeholder="Dr. Khalid Ahmed" /></label>
+      <div className="row">
+        <button disabled={!clean(client) || busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const head = "Tracks\tType\tClient Info\tAbsent\tCanceled\tProvider\tComplete\tColumn1\tColumn2";
+            const track = clean(`${program} ${time}`);
+            const row = [track, clean(type), clean(client), "FALSE", "FALSE", clean(provider), "FALSE", "FALSE", "Select Option"].join("\t");
+            const r = await sync(`${head}\n${row}`);
+            onDone(r.created ? "Added 1 visit." : r.skippedExisting ? "That visit is already there." : "The practice app did not add that visit (check the provider and client).");
+          } catch (e) {
+            onDone(e instanceof Error ? e.message : String(e));
+          } finally {
+            setBusy(false);
+          }
+        }}>{busy ? "Adding…" : "Add visit"}</button>
+      </div>
+    </div>
   );
 }
 
@@ -297,6 +351,7 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
 }) {
   const [secs, setSecs] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const since = state.phase === "recording" ? state.since : 0;
 
   useEffect(() => {
@@ -352,6 +407,7 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
   return (
     <tr>
       <td title="Shown as initials">{visit.initials}</td>
+      <td style={{ whiteSpace: "nowrap" }}>{visit.apptTime ?? ""}</td>
       <td>{visit.program}</td>
       <td>{visit.appointmentType}</td>
       <td className="small">
@@ -379,6 +435,28 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
           <button className="record" disabled={!ready || busy} onClick={start}>
             {visit.hasTranscript || state.phase === "sent" ? "Record again" : "Record"}
           </button>
+        )}
+        {state.phase !== "recording" && state.phase !== "working" && (
+          confirmDelete ? (
+            <>
+              <span className="small">Delete this visit?</span>
+              <button className="secondary" disabled={busy} onClick={async () => {
+                setBusy(true);
+                try {
+                  await deleteVisit(session, visit.id);
+                  onSent();
+                } catch (e) {
+                  setConfirmDelete(false);
+                  onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
+                } finally {
+                  setBusy(false);
+                }
+              }}>Yes, delete</button>
+              <button className="secondary" onClick={() => setConfirmDelete(false)}>Keep</button>
+            </>
+          ) : (
+            <button className="secondary" disabled={busy} title="Remove this row from the day's list" onClick={() => setConfirmDelete(true)}>Delete</button>
+          )
         )}
       </td>
     </tr>
