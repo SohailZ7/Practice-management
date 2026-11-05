@@ -194,7 +194,8 @@ pub fn api_request(
     if !matches!(method, "GET" | "POST" | "PATCH" | "DELETE") {
         return Err("Unsupported request.".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60)).build();
+    // Generating a note can take about two minutes.
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(170)).build();
     let mut req = agent.request(method, &format!("{}{}", base_url.trim_end_matches('/'), path));
     if let Some(t) = token {
         req = req.set("authorization", &format!("Bearer {t}"));

@@ -160,6 +160,8 @@ export type FeedbackItem = {
   createdAt: string;
   updatedAt: string;
   mine: boolean;
+  /** Set by the server (or locally after a promote) when the item was copied to production. */
+  promotedAt?: string | null;
 };
 export type FeedbackInput = { kind: FeedbackKind; title: string; description: string };
 
@@ -275,3 +277,68 @@ export async function fetchVisitOptions(session: Session): Promise<VisitOptions 
  */
 export const fetchTranscript = (session: Session, visitId: string) =>
   call<{ transcript: string; updatedAt?: string }>(session, `/notes/visits/${encodeURIComponent(visitId)}/transcript`);
+
+// ---------------------------------------------------------------------------------------------- generate a note
+
+export type NoteDocument = { id: string; title: string; type?: string; createdAt: string };
+export type NoteContent = { id: string; title: string; content: string; createdAt?: string };
+
+/** Writes the draft note for a visit from its transcript. Can take about two minutes. */
+export const generateNote = (session: Session, visitId: string) =>
+  call<{ documentId: string; title: string; content: string }>(session, `/notes/visits/${encodeURIComponent(visitId)}/generate`, { method: "POST", body: "{}" });
+
+export const listDocuments = (session: Session, visitId: string) =>
+  call<{ documents: NoteDocument[] }>(session, `/notes/visits/${encodeURIComponent(visitId)}/documents`);
+
+export const fetchDocument = (session: Session, visitId: string, docId: string) =>
+  call<NoteContent>(session, `/notes/visits/${encodeURIComponent(visitId)}/documents/${encodeURIComponent(docId)}`);
+
+/** Plain wording for the generate / read-note errors. */
+export function noteErrorMessage(e: unknown): string {
+  if (e instanceof ApiFailure) {
+    if (e.code === "no_transcript") return "This visit has no transcript yet. Record it first.";
+    if (e.code === "model_not_configured") return "The note-writing model is not set up on this server yet.";
+    if (e.code === "generate_failed" || e.status === 502) return "The note-writing model failed. Try again in a minute.";
+    if (e.code === "not_found" || e.status === 404) return "That visit or note no longer exists. Refresh the list.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+// ---------------------------------------------------------------------------------------------- promote feedback
+
+/** Copies a feedback item from Staging to Production. Only offered when the environment is Staging. */
+export const promoteFeedback = (session: Session, id: string) =>
+  call<{ promoted: boolean; promotedAt: string }>(session, `/feedback/${encodeURIComponent(id)}/promote`, { method: "POST", body: "{}" });
+
+export function promoteErrorMessage(e: unknown): string {
+  if (e instanceof ApiFailure) {
+    if (e.code === "already_promoted") return "This item was already promoted to Production.";
+    if (e.code === "is_test_item") return "This is a test item, so it cannot be promoted.";
+    if (e.code === "promote_failed" || e.status === 502) return "Production did not accept it. Try again in a minute.";
+    if (e.code === "not_found" || e.status === 404) return "That feedback item no longer exists. Refresh the list.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+// ---------------------------------------------------------------------------------------------- my tasks
+
+export type TaskStatus = "open" | "done";
+export type Task = { id: string; title: string; dueDate: string | null; status: TaskStatus; createdAt: string };
+
+export const fetchTasks = (session: Session, status: "open" | "done" | "all") =>
+  call<{ tasks: Task[] }>(session, `/tasks?status=${status}`);
+
+export const createTask = (session: Session, title: string, dueDate?: string) =>
+  call<{ task?: Task; id?: string }>(session, "/tasks", { method: "POST", body: JSON.stringify({ title, ...(dueDate ? { dueDate } : {}) }) });
+
+export const updateTask = (session: Session, id: string, patch: { status?: TaskStatus; title?: string; dueDate?: string | null }) =>
+  call<unknown>(session, `/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export function taskErrorMessage(e: unknown): string {
+  if (e instanceof ApiFailure) {
+    if (e.code === "bad_title") return "Give the task a title.";
+    if (e.status === 403) return "This account does not have access to Tasks.";
+    if (e.code === "not_found" || e.status === 404) return "That task no longer exists. Refresh the list.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}

@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
+import { NoteDialog } from "./NoteDialog";
+import { Tasks } from "./Tasks";
+import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
@@ -33,7 +36,7 @@ export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<"visits" | "feedback" | "setup">("visits");
+  const [tab, setTab] = useState<"visits" | "tasks" | "feedback" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -180,6 +183,7 @@ export function App() {
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
+            <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>Tasks</button>
             <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
           </nav>
@@ -206,8 +210,12 @@ export function App() {
             onEnvironment={changeEnvironment} onChanged={() => refreshStatus()} />
         )}
 
+        {signedIn && tab === "tasks" && session && (
+          <Tasks session={session} onSignedOut={() => refreshStatus()} />
+        )}
+
         {signedIn && tab === "feedback" && session && engine && (
-          <Feedback engine={engine} session={session} visitRecording={recording} onSignedOut={() => refreshStatus()} />
+          <Feedback engine={engine} env={env} session={session} visitRecording={recording} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "visits" && (
@@ -429,6 +437,11 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const gen = useSyncExternalStore(subscribe, () => generationFor(visit.id));
+  const canGenerate = visit.hasTranscript || state.phase === "sent";
+  // When a generation finishes, refresh the day so the note count updates.
+  useEffect(() => { if (gen?.phase === "done") onSent(); }, [gen?.phase]);
   const since = state.phase === "recording" ? state.since : 0;
 
   useEffect(() => {
@@ -503,6 +516,9 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
         {state.phase === "saved" && <span className="err">{state.reason}</span>}
+        {gen?.phase === "running" && <div>Writing the note… this can take up to 2 minutes. You can leave this screen.</div>}
+        {gen?.phase === "failed" && <div className="err">{gen.message}</div>}
+        {gen?.phase === "done" && <div>Note ready.</div>}
         {state.phase === "sent" && <>Transcript sent{state.note && <span className="err"> ({state.note})</span>}</>}
         {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
         {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
@@ -518,6 +534,18 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             onClose={() => setViewing(false)}
           />
         )}
+        {noteOpen && (
+          <NoteDialog visit={visit} date={date} session={session} focusDocId={gen?.phase === "done" ? gen.documentId : undefined}
+            onClose={() => { setNoteOpen(false); if (gen?.phase === "done") clearGeneration(visit.id); }} />
+        )}
+        {(visit.documentCount > 0 || gen?.phase === "done") && (
+          <button className="secondary" onClick={() => setNoteOpen(true)}>{gen?.phase === "done" ? "View note" : "Note"}</button>
+        )}
+        <button className="secondary" disabled={!canGenerate || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
+          title={canGenerate ? "Write the draft note from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
+          onClick={() => void startGenerate(session, visit.id)}>
+          {gen?.phase === "running" ? "Generating…" : "Generate"}
+        </button>
         {state.phase === "recording" ? (
           <>
             <span className="rec"><span className="dot" />{mmss}</span>

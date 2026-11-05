@@ -47,6 +47,8 @@ describe("initials", () => {
   });
 });
 
+import { generateNote, listDocuments, fetchDocument, noteErrorMessage, promoteFeedback, promoteErrorMessage, fetchTasks, createTask, updateTask, taskErrorMessage, fetchTranscript } from "../src/lib/api";
+import { startGenerate, generationFor } from "../src/lib/generate";
 import { describeTranscript } from "../src/TranscriptDialog";
 import { normalizeTime, TIME_SLOTS } from "../src/lib/times";
 import { fetchVisitOptions, deleteVisits, createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
@@ -188,5 +190,56 @@ describe("transcript status", () => {
     expect(describeTranscript({ ...base, phase: "idle", hasTranscript: true }).state).toBe("uploaded");
     expect(describeTranscript({ ...base, phase: "failed", reason: "x" }).text).toMatch(/Failed: x/);
     expect(describeTranscript({ ...base, phase: "idle" }).state).toBe("none");
+  });
+});
+
+describe("generate, notes, promote, tasks", () => {
+  const s: Session = { baseUrl: "https://example.run.app", accessToken: "t" };
+  const record = (body: unknown = {}, status = 200) => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => {
+      seen.push(`${i?.method} ${u.split("/api/desktop/v1")[1]}`);
+      return Promise.resolve(new Response(JSON.stringify(body), { status }));
+    });
+    return seen;
+  };
+
+  it("calls the right endpoints", async () => {
+    const seen = record({ documentId: "d1", title: "T", content: "C", documents: [], tasks: [], promoted: true, promotedAt: "x", transcript: "t" });
+    await fetchTranscript(s, "v1");
+    await generateNote(s, "v1");
+    await listDocuments(s, "v1");
+    await fetchDocument(s, "v1", "d1");
+    await promoteFeedback(s, "f1");
+    await fetchTasks(s, "open");
+    await createTask(s, "Call back", "2026-11-10");
+    await updateTask(s, "t1", { status: "done" });
+    expect(seen).toEqual([
+      "GET /notes/visits/v1/transcript", "POST /notes/visits/v1/generate", "GET /notes/visits/v1/documents",
+      "GET /notes/visits/v1/documents/d1", "POST /feedback/f1/promote", "GET /tasks?status=open", "POST /tasks", "PATCH /tasks/t1",
+    ]);
+  });
+
+  it("explains each error plainly", () => {
+    const f = (status: number, code: string) => new ApiFailure(status, code);
+    expect(noteErrorMessage(f(409, "no_transcript"))).toMatch(/Record it first/);
+    expect(noteErrorMessage(f(409, "model_not_configured"))).toMatch(/not set up/);
+    expect(noteErrorMessage(f(502, "generate_failed"))).toMatch(/failed/);
+    expect(noteErrorMessage(f(404, "not_found"))).toMatch(/no longer exists/);
+    expect(promoteErrorMessage(f(409, "already_promoted"))).toMatch(/already/);
+    expect(promoteErrorMessage(f(409, "is_test_item"))).toMatch(/test item/);
+    expect(promoteErrorMessage(f(502, "promote_failed"))).toMatch(/did not accept/);
+    expect(taskErrorMessage(f(400, "bad_title"))).toMatch(/title/);
+  });
+
+  it("generation runs outside the screen and records the result", async () => {
+    record({ documentId: "d9", title: "Progress note", content: "x" });
+    const p = startGenerate(s, "vx");
+    expect(generationFor("vx")?.phase).toBe("running");
+    await p;
+    expect(generationFor("vx")).toMatchObject({ phase: "done", documentId: "d9" });
+    record({ error: "model_not_configured" }, 409);
+    await startGenerate(s, "vy");
+    expect(generationFor("vy")).toMatchObject({ phase: "failed" });
   });
 });

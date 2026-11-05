@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, SignedOutError, updateFeedback,
+  cleanupFeedback, createFeedback, promoteErrorMessage, promoteFeedback, feedbackErrorMessage, fetchFeedback, ApiFailure, SignedOutError, updateFeedback,
   type FeedbackItem, type FeedbackKind, type Session,
 } from "./lib/api";
 import type { Engine } from "./lib/engine";
+import type { EnvironmentId } from "./lib/environments";
 
 type Draft = { id: string | null; kind: FeedbackKind; title: string; description: string };
 const EMPTY: Draft = { id: null, kind: "FEEDBACK", title: "", description: "" };
 const KIND_LABEL: Record<FeedbackKind, string> = { FEEDBACK: "Feedback", BUG: "Bug" };
 
-export function Feedback({ engine, session, visitRecording, onSignedOut }: {
-  engine: Engine; session: Session; visitRecording: boolean; onSignedOut: () => void;
+export function Feedback({ engine, env, session, visitRecording, onSignedOut }: {
+  engine: Engine; env: EnvironmentId; session: Session; visitRecording: boolean; onSignedOut: () => void;
 }) {
   const [items, setItems] = useState<FeedbackItem[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [promoting, setPromoting] = useState<string | null>(null); // the item awaiting its confirm
   const [dictating, setDictating] = useState(false);
   const [working, setWorking] = useState("");
   // The dictated text lives only here, in memory, until it is turned into a description or discarded.
@@ -161,6 +163,28 @@ export function Feedback({ engine, session, visitRecording, onSignedOut }: {
               <p style={{ whiteSpace: "pre-wrap", margin: ".4rem 0" }}>{it.description}</p>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <span className="small">{it.authorName} · {new Date(it.createdAt).toLocaleString()}</span>
+                {env === "staging" && (
+                  it.promotedAt ? <span className="small" title={new Date(it.promotedAt).toLocaleString()}>✔ Promoted to Production</span>
+                  : promoting === it.id ? (
+                    <span>
+                      <span className="small">Copy this to Production? </span>
+                      <button disabled={busy} onClick={async () => {
+                        setBusy(true); setError("");
+                        try {
+                          const r = await promoteFeedback(session, it.id);
+                          setItems((cur) => cur && cur.map((x) => (x.id === it.id ? { ...x, promotedAt: r.promotedAt } : x)));
+                          setPromoting(null);
+                        } catch (e) {
+                          if (e instanceof ApiFailure && e.code === "already_promoted") {
+                            setItems((cur) => cur && cur.map((x) => (x.id === it.id ? { ...x, promotedAt: new Date().toISOString() } : x)));
+                          }
+                          setPromoting(null); fail(e) ; if (!(e instanceof SignedOutError)) setError(promoteErrorMessage(e));
+                        } finally { setBusy(false); }
+                      }}>Yes, promote</button>
+                      <button className="secondary" onClick={() => setPromoting(null)}>Cancel</button>
+                    </span>
+                  ) : <button className="secondary" onClick={() => setPromoting(it.id)}>Promote to Production</button>
+                )}
                 {it.mine && !draft && (
                   <button className="secondary" onClick={() => { setError(""); setDraft({ id: it.id, kind: it.kind, title: it.title, description: it.description }); }}>
                     Edit
