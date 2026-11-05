@@ -2,7 +2,7 @@
 // screens, it falls back to clearly labelled fakes so nothing pretends to record or transcribe.
 import type { EnvironmentId } from "./environments";
 
-export type Settings = { environment: EnvironmentId };
+export type Settings = { environment: EnvironmentId; transcript_copy_dir?: string | null };
 
 export type EngineStatus = {
   whisper_model: boolean;
@@ -45,6 +45,12 @@ export interface Engine {
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
   queueComplete(visitId: string): Promise<void>;
   queueDiscard(visitId: string): Promise<void>;
+  /** Opens the folder chooser. Null if cancelled. */
+  chooseTranscriptDir(): Promise<string | null>;
+  /** Turns the plain-text transcript copy on (a folder) or off (null). */
+  setTranscriptCopyDir(dir: string | null): Promise<Settings>;
+  /** Writes the copy of an uploaded transcript, if enabled. True when a file was written. */
+  saveTranscriptCopy(visitId: string, label: string): Promise<boolean>;
 }
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -66,6 +72,9 @@ async function nativeEngine(): Promise<Engine> {
     queueList: () => invoke<QueueItem[]>("queue_list"),
     queueText: (visitId) => invoke<string>("queue_text", { visitId }),
     queueComplete: (visitId) => invoke<void>("queue_complete", { visitId }),
+    chooseTranscriptDir: () => invoke<string | null>("choose_transcript_dir"),
+    setTranscriptCopyDir: (dir) => invoke<Settings>("set_transcript_copy_dir", { dir }),
+    saveTranscriptCopy: (visitId, label) => invoke<boolean>("save_transcript_copy", { visitId, label }),
     queueDiscard: (visitId) => invoke<void>("queue_discard", { visitId }),
   };
 }
@@ -101,6 +110,9 @@ function fakeEngine(): Engine {
     queueText: async () => FAKE_TRANSCRIPT,
     queueComplete: async (id) => { queue.delete(id); },
     queueDiscard: async (id) => { queue.delete(id); },
+    chooseTranscriptDir: async () => null,
+    setTranscriptCopyDir: async (dir) => ({ environment, transcript_copy_dir: dir }),
+    saveTranscriptCopy: async () => false,
   };
 }
 

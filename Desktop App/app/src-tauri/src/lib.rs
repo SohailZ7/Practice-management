@@ -58,11 +58,14 @@ pub fn env_url(env: &str) -> Result<&'static str, String> {
 #[serde(default)]
 pub struct Settings {
     pub environment: String,
+    /// Optional folder where a plain-text copy of each transcript is written after the upload is confirmed. Off
+    /// (None) by default. That copy is patient information on this Mac, outside the encrypted queue.
+    pub transcript_copy_dir: Option<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { environment: "production".into() }
+        Self { environment: "production".into(), transcript_copy_dir: None }
     }
 }
 
@@ -86,13 +89,14 @@ fn parse_settings(v: &serde_json::Value) -> (Settings, Option<Legacy>, bool) {
         let e = text("environment");
         if env_url(&e).is_ok() { e } else { url_env.clone().unwrap_or_else(|| "production".into()) }
     };
+    let transcript_copy_dir = v.get("transcript_copy_dir").and_then(|x| x.as_str()).filter(|d| !d.is_empty()).map(String::from);
     let (access, refresh) = (text("access_token"), text("refresh_token"));
     let legacy = match (&url_env, access.is_empty()) {
         (Some(env), false) => Some(Legacy { env: env.clone(), access: access.clone(), refresh: refresh.clone() }),
         _ => None,
     };
     let dirty = ["practice_url", "access_token", "refresh_token", "whisper_model"].iter().any(|k| v.get(*k).is_some());
-    (Settings { environment }, legacy, dirty)
+    (Settings { environment, transcript_copy_dir }, legacy, dirty)
 }
 
 pub fn load_settings() -> Settings {
@@ -216,7 +220,7 @@ async fn set_environment(environment: String) -> Result<Settings, String> {
     if recording_running() {
         return Err("Stop the recording before switching environment.".into());
     }
-    let s = Settings { environment };
+    let s = Settings { environment, ..load_settings() };
     store_settings(&s)?;
     Ok(s)
 }
@@ -432,6 +436,72 @@ async fn queue_complete(visit_id: String) -> Result<(), String> {
     queue::shred_folder(&support, &visit_id)
 }
 
+/// Opens the macOS folder chooser and returns the chosen folder, or None if cancelled.
+#[tauri::command]
+async fn choose_transcript_dir() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let out = std::process::Command::new("osascript")
+            .args(["-e", "POSIX path of (choose folder with prompt \"Save a copy of each transcript to:\")"])
+            .output()
+            .map_err(|_| "could not open the folder chooser".to_string())?;
+        if !out.status.success() {
+            return Ok(None); // cancelled
+        }
+        let p = String::from_utf8_lossy(&out.stdout).trim().trim_end_matches('/').to_string();
+        Ok(if p.is_empty() { None } else { Some(p) })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Turns the transcript copy on (a folder) or off (None).
+#[tauri::command]
+async fn set_transcript_copy_dir(dir: Option<String>) -> Result<Settings, String> {
+    if let Some(d) = dir.as_deref() {
+        if !std::path::Path::new(d).is_dir() {
+            return Err("That folder does not exist.".into());
+        }
+    }
+    let s = Settings { transcript_copy_dir: dir.filter(|d| !d.is_empty()), ..load_settings() };
+    store_settings(&s)?;
+    Ok(s)
+}
+
+/// A file name made of letters, digits, dash, underscore and dot only.
+fn clean_file_stem(label: &str) -> String {
+    let s: String = label.chars().map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' }).collect();
+    let s = s.trim_matches(|c| c == '.' || c == '_').to_string();
+    if s.is_empty() { "transcript".into() } else { s.chars().take(80).collect() }
+}
+
+/// Writes a plain-text copy of a queued transcript to the chosen folder, if one is set. Called after the server
+/// confirmed the upload and before the queue copy is shredded. Returns whether a file was written. No audio, and
+/// nothing is logged.
+#[tauri::command]
+async fn save_transcript_copy(visit_id: String, label: String) -> Result<bool, String> {
+    let Some(dir) = load_settings().transcript_copy_dir else { return Ok(false) };
+    let dir = PathBuf::from(dir);
+    if !dir.is_dir() {
+        return Err("The folder for transcript copies is missing. Choose it again in Setup.".into());
+    }
+    let segments = queue::read_segments(&support_dir(), &keystore::queue_key()?, &visit_id)?;
+    let text = queue::assemble_text(&segments);
+    let stem = clean_file_stem(&label);
+    let mut path = dir.join(format!("{stem}.txt"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem}-{n}.txt"));
+        n += 1;
+    }
+    fs::write(&path, text).map_err(|_| "could not save the transcript copy".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(true)
+}
+
 /// Deletes a queued transcript the provider chose not to send.
 #[tauri::command]
 async fn queue_discard(visit_id: String) -> Result<(), String> {
@@ -443,7 +513,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_complete, queue_discard
+            queue_list, queue_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");
@@ -480,7 +550,7 @@ mod tests {
     fn settings_round_trip_and_default_to_production() {
         with_temp_root(|| {
             assert_eq!(load_settings().environment, "production");
-            store_settings(&Settings { environment: "staging".into() }).unwrap();
+            store_settings(&Settings { environment: "staging".into(), transcript_copy_dir: None }).unwrap();
             assert_eq!(load_settings().environment, "staging");
             assert!(!fs::read_to_string(settings_path()).unwrap().contains("token"));
         })

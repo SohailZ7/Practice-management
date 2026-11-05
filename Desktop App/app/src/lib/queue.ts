@@ -6,6 +6,10 @@ import type { Engine, QueueItem } from "./engine";
 
 export type UploadResult = { visitId: string; ok: boolean; reason?: string };
 
+/** A readable name for the optional transcript copy (initials, date, time), set when a visit is recorded. */
+const labels = new Map<string, string>();
+export const setCopyLabel = (visitId: string, label: string) => { labels.set(visitId, label); };
+
 const inFlight = new Map<string, Promise<UploadResult>>();
 
 /** A session for an environment, using the stored sign-in; null when not signed in there. */
@@ -26,8 +30,16 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
         if (!s) return { visitId: item.visit_id, ok: false, reason: "Not signed in to that environment." };
         await pushTranscript(s, item.visit_id, await engine.queueText(item.visit_id));
       }
+      let warning: string | undefined;
+      try {
+        // The queue copy is shredded next, so the optional plain-text copy is written first.
+        await engine.saveTranscriptCopy(item.visit_id, labels.get(item.visit_id) ?? `visit_${item.created_at.slice(0, 16)}_${item.visit_id.slice(0, 8)}`);
+      } catch (e) {
+        warning = typeof e === "string" ? e : e instanceof Error ? e.message : "Could not save the transcript copy.";
+      }
       await engine.queueComplete(item.visit_id);
-      return { visitId: item.visit_id, ok: true };
+      labels.delete(item.visit_id);
+      return { visitId: item.visit_id, ok: true, reason: warning };
     } catch (e) {
       const reason = e instanceof SignedOutError ? "Signed out." : e instanceof Error ? e.message : "Upload failed.";
       return { visitId: item.visit_id, ok: false, reason };

@@ -3,7 +3,7 @@ import { Feedback } from "./Feedback";
 import { createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
-import { retryAll, uploadQueued } from "./lib/queue";
+import { retryAll, setCopyLabel, uploadQueued } from "./lib/queue";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
 const practiceToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
@@ -19,7 +19,7 @@ type RowState =
   | { phase: "idle" }
   | { phase: "recording"; since: number; warning?: string }
   | { phase: "working"; detail: string }
-  | { phase: "sent" }
+  | { phase: "sent"; note?: string }
   | { phase: "saved"; reason: string }
   | { phase: "failed"; message: string };
 
@@ -277,7 +277,7 @@ export function App() {
                 <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {visits.map((v) => (
-                    <Row key={v.id} visit={v}
+                    <Row key={v.id} visit={v} date={date}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} env={env}
@@ -381,8 +381,8 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
-  visit: Visit; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, date, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
+  visit: Visit; date: string; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void; telehealth: boolean;
 }) {
@@ -429,8 +429,9 @@ function Row({ visit, selected, onSelect, state, ready, queued, env, onState, en
       }
       onState(visit.id, { phase: "working", detail: "sending to the practice app" });
       const item = (await engine.queueList()).find((q) => q.visit_id === visit.id);
+      setCopyLabel(visit.id, `${visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
       const result = item ? await uploadQueued(engine, item, session) : { ok: false, reason: "missing" };
-      onState(visit.id, result.ok ? { phase: "sent" } : { phase: "saved", reason: SAVED_MESSAGE });
+      onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: SAVED_MESSAGE });
       onSent();
     } catch (e) {
       onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
@@ -464,7 +465,7 @@ function Row({ visit, selected, onSelect, state, ready, queued, env, onState, en
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
         {state.phase === "saved" && <span className="err">{state.reason}</span>}
-        {state.phase === "sent" && "Transcript sent"}
+        {state.phase === "sent" && <>Transcript sent{state.note && <span className="err"> ({state.note})</span>}</>}
         {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
         {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
       </td>
@@ -606,6 +607,28 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
             {engine.kind === "fake" && <li><strong>Running in a browser with fake engines.</strong> Nothing is recorded.</li>}
           </ul>
           <p className="small">Transcription runs inside this app, on this Mac. The recording is never saved.</p>
+
+          <h3>Transcript copy</h3>
+          <p className="small">
+            Optional. Save a copy of each transcript to:{" "}
+            <strong>{status.settings.transcript_copy_dir ?? "off"}</strong>
+          </p>
+          <div className="row">
+            <button className="secondary" disabled={locked} onClick={async () => {
+              setError("");
+              try {
+                const dir = await engine.chooseTranscriptDir();
+                if (dir) { await engine.setTranscriptCopyDir(dir); await onChanged(); }
+              } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+            }}>Choose folder…</button>
+            {status.settings.transcript_copy_dir && (
+              <button className="secondary" onClick={async () => { await engine.setTranscriptCopyDir(null); await onChanged(); }}>Turn off</button>
+            )}
+          </div>
+          <p className="small err">
+            Warning: a copy is patient information stored as a plain file on this Mac, outside the encrypted queue. It is
+            written only after the practice app confirms the upload. Choose a protected folder.
+          </p>
         </>
       )}
     </div>
