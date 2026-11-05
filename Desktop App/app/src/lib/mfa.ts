@@ -1,5 +1,6 @@
 // Two-factor sign-in helpers: input cleanup and friendly messages. Secrets and codes are never stored or logged.
-import type { Engine, EnvironmentId, MfaStep } from "./engine";
+import type { Engine, MfaStep } from "./engine";
+import type { EnvironmentId } from "./environments";
 
 /** Keeps only digits (so pasting "123 456" or "123-456" works) and caps at 6. */
 export const cleanCode = (s: string): string => s.replace(/\D/g, "").slice(0, 6);

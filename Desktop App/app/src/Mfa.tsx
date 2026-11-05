@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import qrcode from "qrcode-generator";
-import type { Engine, EnvironmentId } from "./lib/engine";
+import type { Engine } from "./lib/engine";
+import type { EnvironmentId } from "./lib/environments";
 import { cleanCode, isSixDigits, mfaCall } from "./lib/mfa";
 
 /** The QR code is drawn here from the otpauth address; nothing is sent to any outside service. */
