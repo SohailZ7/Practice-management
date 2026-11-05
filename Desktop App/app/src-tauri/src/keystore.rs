@@ -12,11 +12,39 @@ pub struct Tokens {
     pub refresh: String,
 }
 
+/// Counts every Keychain call so a prompt loop is visible. Prints the count only, never a value.
+static KEYCHAIN_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn note_call(op: &str, account: &str) {
+    let n = KEYCHAIN_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    eprintln!("[keychain] call #{n}: {op} {account}");
+}
+
+// ---- DEV ONLY fallback -----------------------------------------------------------------------------------------
+// Compiled only with `--features dev-keystore` (never in a normal or release build) and only used when the
+// environment variable BBC_DEV_FILE_KEYSTORE=1 is set. Secrets then live in a 0600 file under Application Support
+// instead of the Keychain, UNENCRYPTED. For testing on builds whose signature changes every time. Not for real use.
+#[cfg(feature = "dev-keystore")]
+fn dev_path(account: &str) -> Option<std::path::PathBuf> {
+    if std::env::var("BBC_DEV_FILE_KEYSTORE").ok().as_deref() != Some("1") {
+        return None;
+    }
+    let home = std::env::var("HOME").ok()?;
+    let dir = std::path::PathBuf::from(home).join("Library/Application Support/PracticeNotes/DEV-ONLY-keystore");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(account))
+}
+
 fn entry(account: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, account).map_err(|_| "could not reach the Keychain".to_string())
 }
 
 fn get(account: &str) -> Result<Option<String>, String> {
+    note_call("read", account);
+    #[cfg(feature = "dev-keystore")]
+    if let Some(p) = dev_path(account) {
+        return Ok(std::fs::read_to_string(p).ok());
+    }
     match entry(account)?.get_password() {
         Ok(v) => Ok(Some(v)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -25,10 +53,24 @@ fn get(account: &str) -> Result<Option<String>, String> {
 }
 
 fn set(account: &str, value: &str) -> Result<(), String> {
+    note_call("write", account);
+    #[cfg(feature = "dev-keystore")]
+    if let Some(p) = dev_path(account) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(&p, value).map_err(|_| "could not save the dev keystore".to_string())?;
+        let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+        return Ok(());
+    }
     entry(account)?.set_password(value).map_err(|_| "could not save to the Keychain".to_string())
 }
 
 fn delete(account: &str) {
+    note_call("delete", account);
+    #[cfg(feature = "dev-keystore")]
+    if let Some(p) = dev_path(account) {
+        let _ = std::fs::remove_file(p);
+        return;
+    }
     if let Ok(e) = entry(account) {
         let _ = e.delete_credential();
     }
