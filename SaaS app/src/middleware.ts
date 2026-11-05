@@ -8,7 +8,8 @@ import { clientIp, createLimiter, ruleFor, type Rule } from "@/lib/security/rate
 // Everything except static assets requires a valid session. Per-module authorization happens on the
 // server in requireAccess(). Sign-in pages and the Auth.js routes are public.
 // The Desktop API (requirements v19) authenticates with a bearer token inside each handler, not a cookie.
-const PUBLIC = [/^\/login(\/|$)/, /^\/api\/auth(\/|$)/, /^\/api\/desktop\/v1(\/|$)/, /^\/api\/mcp\/v1(\/|$)/];
+const PUBLIC = [/^\/login(\/|$)/, /^\/api\/auth(\/|$)/, /^\/api\/desktop\/v1(\/|$)/, /^\/api\/mcp\/v1(\/|$)/, /^\/api\/internal\/promote$/];
+// /api/internal/promote (Promote to production) authenticates with PROMOTE_SERVICE_KEY inside the handler.
 // /api/mcp/v1 (Claude MCP server) authenticates with an admin-issued bearer token inside each handler.
 
 // One limiter per rule, kept in this process only (see src/lib/security/rateLimit.ts for the multi-instance caveat).

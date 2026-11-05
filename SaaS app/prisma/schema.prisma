@@ -135,6 +135,10 @@ model Task {
   // Set when the task is mirrored from another app (the Sohail Todo App): source name and that app's id.
   externalSource String?
   externalId     String?
+  // Staging only (docs/promote-to-production.md): isTest items are never promoted; promotedAt/promotedProdId record a promotion.
+  isTest         Boolean        @default(false)
+  promotedAt     DateTime?
+  promotedProdId String?
   recurring      RecurringTask? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
 
   @@unique([recurringId, occurrenceDate])
@@ -475,17 +479,32 @@ model TimesheetEntry {
 
 // Feedback and bug reports from signed-in users. kind is FEEDBACK or BUG. Text only; never put patient information here.
 model FeedbackItem {
-  id          String   @id @default(cuid())
-  kind        String
-  title       String
-  description String   @default("")
-  authorId    String
-  source      String   @default("web")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  kind           String
+  title          String
+  description    String    @default("")
+  authorId       String
+  source         String    @default("web")
+  isTest         Boolean   @default(false)
+  promotedAt     DateTime?
+  promotedProdId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+  author         User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
+}
+
+// Production side of "Promote to production": one row per staging item received, so a retry of the same sourceId
+// returns the existing item instead of creating a duplicate. kind: task | feedback. targetId = the new Task/FeedbackItem id.
+model PromotedItem {
+  id        String   @id @default(cuid())
+  kind      String
+  sourceId  String
+  targetId  String
+  createdAt DateTime @default(now())
+
+  @@unique([kind, sourceId])
 }
 
 // What has been paid to a timesheet employee. Each payment has a matching cash-out row in the Ledger (ledgerEntryId);

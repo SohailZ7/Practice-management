@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/session";
+import { isStaging } from "@/lib/promote/rules";
 import { AdminTabs } from "@/components/AdminTabs";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <>
       <h1>Admin console</h1>
-      <AdminTabs />
+      <AdminTabs showPromote={isStaging()} />
       {children}
     </>
   );
