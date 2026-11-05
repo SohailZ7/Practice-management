@@ -20,6 +20,7 @@ model User {
   access          ModuleAccess[]
   taskViewers     TaskViewer[]
   desktopSessions DesktopSession[]
+  apiTokens       ApiToken[]
 }
 
 // module: schedule | tasks | employees   level: none | view | edit
@@ -286,6 +287,24 @@ model DesktopSession {
   expiresAt   DateTime
   revokedAt   DateTime?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Admin-issued token for the Claude MCP server (docs/mcp-server.md). Acts as `userId`, limited to `scope`.
+// Only the SHA-256 hash is stored; the token is shown once. scope: tasks
+model ApiToken {
+  id             String    @id @default(cuid())
+  userId         String
+  label          String    @default("")
+  scope          String    @default("tasks")
+  tokenHash      String    @unique
+  createdByEmail String
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }

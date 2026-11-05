@@ -85,7 +85,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
                           start(async () => {
                             try {
                               const r = await generateForVisit(v.id);
-                              setNote(`Wrote ${r.created} document${r.created === 1 ? "" : "s"}.`);
+                              setNote(r.error ?? `Wrote ${r.created} document${r.created === 1 ? "" : "s"}.`);
                               router.refresh();
                             } catch (e) {
                               setNote(e instanceof Error ? e.message : String(e));

@@ -1,7 +1,9 @@
 import { requireUser } from "@/lib/session";
 import { normalizeTheme } from "@/lib/theme";
 import { Banner } from "@/components/Banner";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { RECORDER_TOKEN_COOKIE } from "@/lib/desktop/tokens";
 import { connectRecorder, revokeMyDesktopSession, saveTheme } from "./actions";
 
 const OPTIONS = [
@@ -18,10 +20,16 @@ export default async function SettingsPage({
   const user = await requireUser();
   const current = normalizeTheme(user.theme);
   const macs = await db.desktopSession.findMany({ where: { userId: user.id, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { lastUsedAt: "desc" } });
+  const fresh = cookies().get(RECORDER_TOKEN_COOKIE)?.value.split("\n");
   return (
     <>
       <h1>Settings</h1>
       <Banner error={searchParams.error} notice={searchParams.notice} />
+      {fresh && fresh.length === 2 && (
+        <div className="notice">
+          <strong>{fresh[0]}</strong>: <code>{fresh[1]}</code>
+        </div>
+      )}
       <form action={saveTheme} className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>Appearance</h2>
         <p className="muted small">Saved to your account, so it follows you to other browsers and devices.</p>

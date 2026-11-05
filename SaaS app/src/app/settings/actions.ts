@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { newRefreshToken, sessionExpiry } from "@/lib/desktop/tokens";
 import { requireUser } from "@/lib/session";
 import { THEMES, normalizeTheme } from "@/lib/theme";
 import { audit } from "@/lib/audit";
+import { RECORDER_TOKEN_COOKIE } from "@/lib/desktop/tokens";
 import { flash, str } from "@/lib/flash";
 
 export async function saveTheme(form: FormData) {
@@ -40,6 +42,7 @@ export async function connectRecorder(form: FormData) {
   });
   await audit(user.email, "desktop.recorder.connect", `session ${session.id}`);
   revalidatePath("/settings");
-  // The token travels back through the flash message, which is the one place it is ever shown.
-  flash("/settings", "notice", `Recorder token for ${label} (copy it now, it is not shown again): ${token.token}`);
+  // The token travels in a 60-second HttpOnly cookie, not the redirect URL (URLs end up in request logs).
+  cookies().set(RECORDER_TOKEN_COOKIE, `${label}\n${token.token}`, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/settings", maxAge: 60 });
+  flash("/settings", "notice", "Recorder connected. Copy the token below now; it is not shown again.");
 }

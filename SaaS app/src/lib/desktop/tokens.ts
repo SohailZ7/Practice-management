@@ -65,3 +65,6 @@ export function desktopSecret(env: Record<string, string | undefined> = process.
 export function sessionExpiry(now = Date.now()): Date {
   return new Date(now + REFRESH_TTL_MS);
 }
+
+/** Short-lived HttpOnly cookie that carries a freshly created recorder token to the Settings page. */
+export const RECORDER_TOKEN_COOKIE = "recorder_new_token";

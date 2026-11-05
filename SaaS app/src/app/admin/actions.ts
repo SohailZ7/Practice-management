@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
+import { NEW_TOKEN_COOKIE, clampTtlDays, expiryFrom, newApiToken } from "@/lib/mcpApi/tokens";
 import {
   DEFAULT_ACCESS,
   MODULES,
@@ -79,7 +81,10 @@ export async function updateUser(form: FormData) {
   // Keep the linked employee record (their task list) in step with the login.
   if (employee) await db.employee.update({ where: { id: employee.id }, data: { name, email } });
   // API-9: deactivating a user, or changing their email, ends their Desktop App sessions at once.
-  if (!active || emailChanged) await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+  if (!active || emailChanged) {
+    await db.desktopSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await db.apiToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+  }
   await audit(
     admin.email,
     "user.update",
@@ -208,4 +213,36 @@ export async function revokeDesktopSessions(form: FormData) {
   await audit(admin.email, "desktop.sessions.revoke", `user ${id} sessions=${res.count}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Signed ${target!.email} out of ${res.count} Mac app session(s).`);
+}
+
+const TOKENS = "/admin/api-tokens";
+
+/**
+ * Issues a Claude MCP token (tasks scope) for a user. The token is shown once: it travels in a short-lived HttpOnly
+ * cookie, not in the redirect URL (URLs end up in request logs). Only its hash is stored.
+ */
+export async function issueApiToken(form: FormData) {
+  const admin = await requireAdmin();
+  const userId = str(form, "userId");
+  const label = str(form, "label").slice(0, 60) || "Claude";
+  const target = await db.user.findUnique({ where: { id: userId } });
+  if (!target || !target.active) flash(TOKENS, "error", "Choose an active user.");
+  const { token, hash } = newApiToken();
+  const days = clampTtlDays(str(form, "days"));
+  const row = await db.apiToken.create({
+    data: { userId, label, scope: "tasks", tokenHash: hash, createdByEmail: admin.email, expiresAt: expiryFrom(days) },
+  });
+  await audit(admin.email, "mcp.token.issue", `token ${row.id} user ${userId} scope=tasks days=${days}`);
+  cookies().set(NEW_TOKEN_COOKIE, `${label}\n${token}`, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: TOKENS, maxAge: 60 });
+  revalidatePath(TOKENS);
+  flash(TOKENS, "notice", "Token created. Copy it now; it is not shown again.");
+}
+
+export async function revokeApiToken(form: FormData) {
+  const admin = await requireAdmin();
+  const id = str(form, "id");
+  const res = await db.apiToken.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: new Date() } });
+  if (res.count) await audit(admin.email, "mcp.token.revoke", `token ${id}`);
+  revalidatePath(TOKENS);
+  flash(TOKENS, "notice", res.count ? "Token revoked." : "That token was already revoked.");
 }

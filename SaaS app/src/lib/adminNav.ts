@@ -4,6 +4,7 @@ export const ADMIN_PAGES = [
   { href: "/admin/access", label: "Module access" },
   { href: "/admin/task-tabs", label: "Task tabs" },
   { href: "/admin/task-access", label: "Task tab access" },
+  { href: "/admin/api-tokens", label: "Claude tokens" },
   { href: "/admin/activity", label: "Recent activity" },
   { href: "/admin/access-review", label: "Access review" },
 ] as const;

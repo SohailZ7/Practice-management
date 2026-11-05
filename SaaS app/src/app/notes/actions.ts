@@ -7,7 +7,7 @@ import { requireAccess } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { loadScheduleForDate } from "@/lib/notes/loadSchedule";
 import { generateDocuments } from "@/lib/notes/generate";
-import { makeLlm, warmModel } from "@/lib/notes/model";
+import { makeLlm, modelConfigured, warmModel } from "@/lib/notes/model";
 import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
 
@@ -39,6 +39,10 @@ export async function generateForVisit(visitId: string) {
   const visit = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true, documents: true } });
   if (!visit) throw new Error("Visit not found");
   if (!visit.transcript.trim()) throw new Error("This visit has no transcript yet.");
+  // Returned, not thrown: Next.js hides thrown messages in production, and this one is meant to be read.
+  if (!modelConfigured()) {
+    return { created: 0, skipped: 0, error: "No note-writing model is set up yet. Ask the administrator to configure one." };
+  }
 
   const prior = await priorDocument(visit.patientId, visit.visitDate);
   const docs = await generateDocuments({
@@ -59,7 +63,7 @@ export async function generateForVisit(visitId: string) {
   }
   await audit(user.email, "notes.generate", `visit ${visitId} documents=${made.length}`);
   revalidatePath("/notes");
-  return { created: made.length, skipped: docs.length - made.length };
+  return { created: made.length, skipped: docs.length - made.length, error: undefined as string | undefined };
 }
 
 /** Saves an edit, keeping the previous text as a version so nothing a provider wrote is lost. */

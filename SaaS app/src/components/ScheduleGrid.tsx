@@ -25,10 +25,10 @@ type Props = {
 
 const SECTION_RANK: Record<Section, number> = { PSYCH_EVAL: 0, TRACK: 1 };
 const FLAGS = [
-  { key: "absent", head: "Abs", title: "Absent" },
-  { key: "canceled", head: "Can", title: "Canceled" },
-  { key: "completed", head: "Done", title: "Completed" },
-  { key: "missed", head: "Miss", title: "Missed" },
+  { key: "absent", head: "Absent", title: "Absent" },
+  { key: "canceled", head: "Canceled", title: "Canceled" },
+  { key: "completed", head: "Completed", title: "Completed" },
+  { key: "missed", head: "Missed", title: "Missed" },
 ] as const;
 
 function rowClass(r: Row) {
