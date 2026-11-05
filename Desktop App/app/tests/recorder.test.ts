@@ -47,7 +47,7 @@ describe("initials", () => {
   });
 });
 
-import { cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
+import { fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
 
 describe("the feedback client", () => {
   const capture = (body: unknown, status = 200) => {
@@ -95,5 +95,14 @@ describe("the feedback client", () => {
     expect(feedbackErrorMessage(new ApiFailure(502, null))).toMatch(/failed/);
     expect(feedbackErrorMessage(new ApiFailure(413, null))).toMatch(/too long/);
     expect(feedbackErrorMessage(new ApiFailure(403, null))).toMatch(/your own/);
+  });
+});
+
+describe("auth config", () => {
+  it("reads googleSignIn, and a network failure is an error, not 'not set up'", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ googleSignIn: true }), { status: 200 })));
+    expect((await fetchAuthConfig("https://example.run.app")).googleSignIn).toBe(true);
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
+    await expect(fetchAuthConfig("https://example.run.app")).rejects.toThrow(/Could not reach/);
   });
 });

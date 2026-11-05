@@ -181,6 +181,38 @@ pub fn check_base_url(url: &str) -> Result<(), String> {
     bad()
 }
 
+/// One call to the practice app's desktop API, made here instead of in the webview: the webview is a different origin
+/// from the server, and the server sends no CORS headers. Any HTTP status comes back as data; `Err` means the server
+/// could not be reached at all.
+pub fn api_request(
+    base_url: &str, method: &str, path: &str, token: Option<&str>, body: Option<&str>,
+) -> Result<(u16, String), String> {
+    check_base_url(base_url)?;
+    if !path.starts_with("/api/desktop/v1/") || path.contains("..") || path.contains('\\') {
+        return Err("Not a practice app address.".into());
+    }
+    if !matches!(method, "GET" | "POST" | "PATCH") {
+        return Err("Unsupported request.".into());
+    }
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60)).build();
+    let mut req = agent.request(method, &format!("{}{}", base_url.trim_end_matches('/'), path));
+    if let Some(t) = token {
+        req = req.set("authorization", &format!("Bearer {t}"));
+    }
+    let result = match body {
+        Some(b) => req.set("content-type", "application/json").send_string(b),
+        None => req.call(),
+    };
+    match result {
+        Ok(r) => {
+            let status = r.status();
+            Ok((status, r.into_string().map_err(|_| "The practice app gave an unreadable reply.".to_string())?))
+        }
+        Err(ureq::Error::Status(code, r)) => Ok((code, r.into_string().unwrap_or_default())),
+        Err(e) => Err(format!("Could not reach the practice app ({}).", e.kind())),
+    }
+}
+
 /// Swaps a refresh token for a new pair. The server rotates the refresh token, so the old one is dead afterwards.
 /// `Ok(None)` means the server refused it (signed out for good); `Err` means it could not be reached.
 pub fn refresh(practice_url: &str, refresh_token: &str) -> Result<Option<PracticeTokens>, String> {
@@ -329,5 +361,16 @@ mod tests {
     fn form_values_are_escaped() {
         assert_eq!(form_encode(&[("a", "x y"), ("b", "p/q")]), "a=x%20y&b=p%2Fq");
         assert_eq!(urlencode("safe-_.~"), "safe-_.~");
+    }
+
+    /// Live check, run by hand: `cargo test --lib live_config -- --ignored`.
+    #[test]
+    #[ignore]
+    fn live_config() {
+        for u in ["https://practice-mgmt-321509350517.us-east4.run.app", "https://practice-mgmt-802176721153.us-east4.run.app"] {
+            let (st, body) = api_request(u, "GET", "/api/desktop/v1/auth/config", None, None).unwrap();
+            assert_eq!(st, 200);
+            assert!(body.contains("\"googleSignIn\":true"), "{u}");
+        }
     }
 }

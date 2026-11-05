@@ -249,6 +249,25 @@ static REFRESH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Called after a 401. `stale` is the access token that was rejected. Returns the new access token, or None when the
 /// refresh was refused (the stored sign-in is then removed and the UI shows the sign-in screen).
+#[derive(Serialize)]
+struct ApiReply {
+    status: u16,
+    body: String,
+}
+
+/// Makes one practice-app API call from Rust (see `google::api_request`). Carries no patient data of its own.
+#[tauri::command]
+async fn api_request(
+    base_url: String, method: String, path: String, token: Option<String>, body: Option<String>,
+) -> Result<ApiReply, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        google::api_request(&base_url, &method, &path, token.as_deref(), body.as_deref())
+            .map(|(status, body)| ApiReply { status, body })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn refresh_access_token(environment: String, stale: String) -> Result<Option<String>, String> {
     let url = env_url(&environment)?;
@@ -423,7 +442,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, sign_out, get_access_token,
-            refresh_access_token, start_recording, stop_recording, stop_dictation, cancel_recording,
+            refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_complete, queue_discard
         ])
         .run(tauri::generate_context!())

@@ -40,21 +40,53 @@ export type AuthConfig = { googleSignIn: boolean };
  */
 export async function fetchAuthConfig(baseUrl: string): Promise<AuthConfig> {
   assertSafeBaseUrl(baseUrl);
-  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/desktop/v1/auth/config`);
-  if (!res.ok) throw new Error(`The practice app returned ${res.status}.`);
-  const c = (await res.json()) as AuthConfig;
+  const res = await transport(baseUrl, "GET", "/api/desktop/v1/auth/config", null);
+  if (res.status < 200 || res.status > 299) throw new Error(`The practice app returned ${res.status}.`);
+  let c: AuthConfig;
+  try { c = JSON.parse(res.body) as AuthConfig; } catch { throw new Error("The practice app gave an unreadable reply."); }
   return { googleSignIn: c.googleSignIn === true };
 }
 
-async function send(session: Session, path: string, init: RequestInit): Promise<Response> {
-  return fetch(`${session.baseUrl.replace(/\/$/, "")}/api/desktop/v1${path}`, {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      authorization: `Bearer ${session.accessToken}`,
-      ...(init.body ? { "content-type": "application/json" } : {}),
-    },
-  });
+/** The reply to one API call: just the status and the body text. */
+export type ApiReply = { status: number; body: string };
+
+const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/**
+ * Every API call goes through here. In the app it runs in Rust, because the webview is a different origin from the
+ * server and the server sends no CORS headers, so a webview fetch would always fail. In a plain browser (development
+ * only) it falls back to fetch.
+ */
+export async function transport(
+  baseUrl: string, method: string, path: string, token: string | null, body?: string,
+): Promise<ApiReply> {
+  const base = baseUrl.replace(/\/$/, "");
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    try {
+      return await invoke<ApiReply>("api_request", { baseUrl: base, method, path, token, body: body ?? null });
+    } catch (e) {
+      throw new Error(typeof e === "string" ? e : "Could not reach the practice app.");
+    }
+  }
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      body,
+    });
+    return { status: res.status, body: await res.text() };
+  } catch {
+    throw new Error("Could not reach the practice app.");
+  }
+}
+
+async function send(session: Session, path: string, init: RequestInit): Promise<ApiReply> {
+  return transport(session.baseUrl, init.method ?? "GET", `/api/desktop/v1${path}`, session.accessToken,
+    typeof init.body === "string" ? init.body : undefined);
 }
 
 /** A non-success reply, with the server's short error code when it sent one. */
@@ -65,9 +97,9 @@ export class ApiFailure extends Error {
   }
 }
 
-async function errorCode(res: Response): Promise<string | null> {
+function errorCode(res: ApiReply): string | null {
   try {
-    const b = (await res.json()) as { error?: unknown };
+    const b = JSON.parse(res.body) as { error?: unknown };
     return typeof b.error === "string" ? b.error : null;
   } catch {
     return null;
@@ -84,9 +116,9 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
     res = await send(session, path, init);
   }
   if (res.status === 401) throw new SignedOutError();
-  if (res.status === 403) throw new ApiFailure(403, await errorCode(res), "This account does not have access to Notes.");
-  if (!res.ok) throw new ApiFailure(res.status, await errorCode(res));
-  return (await res.json()) as T;
+  if (res.status === 403) throw new ApiFailure(403, errorCode(res), "This account does not have access to Notes.");
+  if (res.status < 200 || res.status > 299) throw new ApiFailure(res.status, errorCode(res));
+  try { return JSON.parse(res.body) as T; } catch { throw new Error("The practice app gave an unreadable reply."); }
 }
 
 export const fetchVisits = (session: Session, date: string) =>

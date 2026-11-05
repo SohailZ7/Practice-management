@@ -393,17 +393,21 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
   const [error, setError] = useState("");
   // null while unknown, so the button is never offered before the server has been asked.
   const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
+  // A failed check is shown as what it is (with Retry), never as "not set up".
+  const [configError, setConfigError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const url = urlFor(env);
 
   useEffect(() => {
     setGoogleAvailable(null);
+    setConfigError("");
     setError("");
     let alive = true;
     fetchAuthConfig(url)
       .then((c) => alive && setGoogleAvailable(c.googleSignIn))
-      .catch(() => alive && setGoogleAvailable(false));
+      .catch((e) => alive && setConfigError(e instanceof Error ? e.message : String(e)));
     return () => { alive = false; };
-  }, [url]);
+  }, [url, attempt]);
 
   return (
     <div className="card" style={{ maxWidth: 760 }}>
@@ -425,6 +429,13 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
         <p className="small">Sign in with your Google account to use the recorder. Nothing works until you do.</p>
       )}
       {error && <p className="small err">{error}</p>}
+
+      {configError && (
+        <p className="small err">
+          Could not check sign-in with the practice app: {configError}{" "}
+          <button className="secondary" onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+        </p>
+      )}
 
       {googleAvailable === false && (
         <p className="small">
