@@ -96,7 +96,6 @@ export function App() {
     try {
       const r = await fetchVisits(session, date);
       setVisits(r.visits);
-      setMessage("");
     } catch (e) {
       setVisits(null);
       if (e instanceof SignedOutError) await refreshStatus(); // the sign-in screen takes over
@@ -108,6 +107,7 @@ export function App() {
   useEffect(() => {
     setRows({});
     setVisits(null);
+    setMessage("");
     void load();
   }, [load]);
 
