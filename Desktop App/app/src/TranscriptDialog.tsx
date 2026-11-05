@@ -52,7 +52,10 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
           if (alive) { setText(t); setSource("This Mac (encrypted copy)"); }
         } else if (visit.hasTranscript || status.phase === "sent") {
           const r = await fetchTranscript(session, visit.id);
-          if (alive) { setText(r.transcript); setSource("The cloud (practice app)"); }
+          if (alive) {
+            setText(r.transcript);
+            setSource(`The cloud (practice app)${r.updatedAt ? `, saved ${new Date(r.updatedAt).toLocaleString()}` : ""}`);
+          }
         }
       } catch (e) {
         if (!alive) return;
@@ -77,14 +80,15 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
         </p>
         <p className={info.state === "failed" ? "small err" : "small"} role="status"><strong>Status:</strong> {info.text}</p>
         {problem && <p className="small err">{problem}</p>}
-        {text !== null && (
+        {text === "" && <p className="small">The practice app has no transcript stored for this visit.</p>}
+        {text !== null && text !== "" && (
           <>
             <p className="small">Showing the copy from: {source}</p>
             <textarea readOnly rows={14} value={text} aria-label="Transcript text" style={{ width: "100%" }} />
           </>
         )}
         <div className="row">
-          {text !== null && (
+          {text && (
             <button className="secondary" onClick={async () => {
               try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
             }}>{copied ? "Copied" : "Copy"}</button>
