@@ -3,6 +3,9 @@ import { apptTimeOf, parseSchedule } from "../src/lib/notes/scheduleParse";
 
 const db = {
   visit: { findMany: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  provider: { findMany: vi.fn() },
+  trackDef: { findMany: vi.fn() },
+  entryType: { findMany: vi.fn() },
   billingPatient: { findFirst: vi.fn(), create: vi.fn() },
 };
 vi.mock("../src/lib/db", () => ({ db }));
@@ -12,7 +15,13 @@ vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }))
 const { addVisit, cleanApptTime, deleteVisit, deleteVisits, updateVisit, VisitError } = await import("../src/lib/notes/visitService");
 const actor = { id: "u1", email: "a@example.org" };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  db.visit.findMany.mockResolvedValue([]);
+  db.provider.findMany.mockResolvedValue([{ name: "Dr. Example" }]);
+  db.trackDef.findMany.mockResolvedValue([{ name: "KIOP-AM" }]);
+  db.entryType.findMany.mockResolvedValue([]);
+});
 
 describe("appointment time from the pasted sheet", () => {
   it("takes the clock time from a psych eval cell and a track cell", () => {
@@ -34,6 +43,10 @@ describe("cleanApptTime", () => {
     expect(cleanApptTime("9:00 - 11:30")).toBe("9:00-11:30");
     expect(cleanApptTime("2 pm")).toBe("2 PM");
     expect(() => cleanApptTime("after lunch")).toThrow(VisitError);
+    expect(cleanApptTime("14:00")).toBe("14:00");
+    expect(() => cleanApptTime("2:75")).toThrow(VisitError);
+    expect(() => cleanApptTime("25:00")).toThrow(VisitError);
+    expect(() => cleanApptTime("13:00 PM")).toThrow(VisitError);
   });
 });
 
@@ -50,6 +63,28 @@ describe("addVisit", () => {
     await expect(addVisit(actor, { date: "nope", patient: "A B" })).rejects.toMatchObject({ code: "bad_date" });
     await expect(addVisit(actor, { date: "2026-11-05", patient: " " })).rejects.toMatchObject({ code: "bad_patient" });
     expect(db.visit.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("options and strict fields", () => {
+  it("builds options from tables and visits, with 15-minute slots", async () => {
+    db.visit.findMany.mockResolvedValue([{ program: "BPHP-AM", appointmentType: "Follow-up", providerName: "dr. example" }]);
+    const { loadVisitOptions, timeSlots } = await import("../src/lib/notes/options");
+    const o = await loadVisitOptions();
+    expect(o.programs).toEqual(["BPHP-AM", "KIOP-AM"]);
+    expect(o.providers).toEqual(["Dr. Example"]);
+    expect(o.appointmentTypes).toContain("Psych Eval");
+    expect(timeSlots()[0]).toBe("6:00 AM");
+    expect(timeSlots()).toContain("12:15 PM");
+    expect(timeSlots().at(-1)).toBe("8:00 PM");
+  });
+  it("refuses a type or provider that is not listed, and stores the listed spelling", async () => {
+    await expect(addVisit(actor, { date: "2026-11-05", patient: "A B", appointmentType: "Haircut" })).rejects.toMatchObject({ code: "bad_type" });
+    await expect(addVisit(actor, { date: "2026-11-05", patient: "A B", providerName: "Nobody" })).rejects.toMatchObject({ code: "bad_provider" });
+    db.billingPatient.findFirst.mockResolvedValue({ id: "p1" });
+    db.visit.create.mockResolvedValue({ id: "v2" });
+    await addVisit(actor, { date: "2026-11-05", patient: "A B", appointmentType: "follow-up", providerName: "dr. example" });
+    expect(db.visit.create.mock.calls[0][0].data).toMatchObject({ appointmentType: "Follow-up", providerName: "Dr. Example" });
   });
 });
 

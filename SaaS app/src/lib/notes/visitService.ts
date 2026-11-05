@@ -6,9 +6,10 @@ import { audit } from "../audit";
 import { isISODate } from "../dates";
 import { validatePatient } from "../billing/validate";
 import { apptTimeOf, parseClient } from "./scheduleParse";
+import { loadVisitOptions, matchOption } from "./options";
 
 export class VisitError extends Error {
-  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many", message: string) {
+  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many" | "bad_type" | "bad_provider", message: string) {
     super(message);
   }
 }
@@ -28,18 +29,37 @@ export function cleanApptTime(raw: unknown): string {
   if (/^\d{1,2}\s*([ap]\.?m\.?)$/i.test(t)) return t.replace(/\s+/g, " ").toUpperCase().replace(/\./g, "");
   const m = /^(\d{1,2}:\d{2})(\s*[ap]\.?m\.?)?(?:\s*-\s*(\d{1,2}:\d{2})(\s*[ap]\.?m\.?)?)?$/i.exec(t);
   if (!m) throw new VisitError("bad_time", "Enter the time like 2:00 PM or 9:00-11:30.");
+  for (const hm of [m[1], m[3]]) {
+    if (!hm) continue;
+    const [h, mi] = hm.split(":").map(Number);
+    const limit = m[2] || m[4] ? 12 : 23;
+    if (h > limit || (limit === 12 && h < 1) || mi > 59) throw new VisitError("bad_time", "Enter the time like 2:00 PM or 14:00 (minutes 00 to 59).");
+  }
   const mer = (x?: string) => (x ? ` ${x.replace(/[\s.]/g, "").toUpperCase()}` : "");
   return m[3] ? `${m[1]}${mer(m[2])}-${m[3]}${mer(m[4])}` : `${m[1]}${mer(m[2])}`;
 }
 
 export { apptTimeOf };
 
-function cleanFields(input: VisitPatch): VisitPatch {
+/** Type and provider must be one of the listed options (blank is allowed); they are stored with the listed spelling. */
+async function cleanFields(input: VisitPatch): Promise<VisitPatch> {
   const out: VisitPatch = {};
+  const strict = async () => (input.appointmentType?.trim() || input.providerName?.trim() ? loadVisitOptions() : null);
+  const opts = await strict();
   if (input.apptTime !== undefined) out.apptTime = cleanApptTime(input.apptTime);
   if (input.program !== undefined) out.program = text(input.program, 120);
-  if (input.appointmentType !== undefined) out.appointmentType = text(input.appointmentType, 200);
-  if (input.providerName !== undefined) out.providerName = text(input.providerName, 120);
+  if (input.appointmentType !== undefined) {
+    const t = text(input.appointmentType, 200);
+    const hit = t ? matchOption(opts!.appointmentTypes, t) : "";
+    if (hit === null) throw new VisitError("bad_type", "Choose an appointment type from the list.");
+    out.appointmentType = hit;
+  }
+  if (input.providerName !== undefined) {
+    const t = text(input.providerName, 120);
+    const hit = t ? matchOption(opts!.providers, t) : "";
+    if (hit === null) throw new VisitError("bad_provider", "Choose a provider from the list.");
+    out.providerName = hit;
+  }
   return out;
 }
 
@@ -54,7 +74,7 @@ export async function addVisit(
   const { values, errors } = validatePatient({ lastName: parsed.lastName, firstName: parsed.firstName });
   if (Object.keys(errors).length) throw new VisitError("bad_patient", Object.values(errors)[0] ?? "Enter the patient's name.");
 
-  const fields = cleanFields(input);
+  const fields = await cleanFields(input);
   const patient =
     (await db.billingPatient.findFirst({ where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null } })) ??
     (await db.billingPatient.create({ data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id } }));
@@ -77,7 +97,7 @@ export async function addVisit(
 export async function updateVisit(actor: { email: string }, id: string, patch: VisitPatch) {
   const existing = await db.visit.findUnique({ where: { id } });
   if (!existing) throw new VisitError("not_found", "Visit not found");
-  const data = cleanFields(patch);
+  const data = await cleanFields(patch);
   const visit = await db.visit.update({ where: { id }, data });
   await audit(actor.email, "notes.visit.update", `visit ${id} fields=${Object.keys(data).join(",")}`);
   return visit;

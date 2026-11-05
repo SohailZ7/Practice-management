@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
-import { addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { useEffect } from "react";
+import type { VisitOptions } from "@/lib/notes/options";
+import { visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import { DocumentEditor } from "./DocumentEditor";
 
 const shift = (iso: string, days: number) => {
@@ -243,21 +245,47 @@ function EditableTime({ visitId, value, onSaved, onError }: { visitId: string; v
 
 function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProvider: string; onDone: (m: string) => void }) {
   const [f, setF] = useState({ patient: "", apptTime: "", program: "", appointmentType: "", providerName: defaultProvider });
+  const [opts, setOpts] = useState<VisitOptions | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  useEffect(() => {
+    void visitOptions().then(setOpts);
+  }, []);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const timeOk = !f.apptTime.trim() || /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(f.apptTime.trim()) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(f.apptTime.trim());
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>
       <div className="row" style={{ flexWrap: "wrap" }}>
-        <label>Patient <input value={f.patient} onChange={set("patient")} placeholder="First Last" /></label>
-        <label>Time <input value={f.apptTime} onChange={set("apptTime")} placeholder="2:00 PM" style={{ width: "8.5rem" }} /></label>
-        <label>Program <input value={f.program} onChange={set("program")} placeholder="KIOP-AM" /></label>
-        <label>Type <input value={f.appointmentType} onChange={set("appointmentType")} placeholder="Follow-up" /></label>
-        <label>Provider <input value={f.providerName} onChange={set("providerName")} /></label>
+        <label>Patient <input value={f.patient} onChange={set("patient")} placeholder="First Last" required /></label>
+        <label>
+          Time{" "}
+          <input value={f.apptTime} onChange={set("apptTime")} list="visit-times" placeholder="2:00 PM or 14:00" style={{ width: "9.5rem" }} aria-invalid={!timeOk} />
+          <datalist id="visit-times">{opts?.times.map((t) => <option key={t} value={t} />)}</datalist>
+        </label>
+        <label>
+          Program{" "}
+          <input value={f.program} onChange={set("program")} list="visit-programs" placeholder="Pick or type" />
+          <datalist id="visit-programs">{opts?.programs.map((t) => <option key={t} value={t} />)}</datalist>
+        </label>
+        <label>
+          Type{" "}
+          <select value={f.appointmentType} onChange={set("appointmentType")}>
+            <option value="">Choose a type</option>
+            {opts?.appointmentTypes.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </label>
+        <label>
+          Provider{" "}
+          <select value={f.providerName} onChange={set("providerName")}>
+            <option value="">Choose a provider</option>
+            {opts?.providers.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </label>
       </div>
+      {!timeOk && <p role="alert" className="small">Enter the time like 2:00 PM or 14:00.</p>}
       {err && <p role="alert" className="small">{err}</p>}
-      <button disabled={!f.patient.trim() || busy} onClick={async () => {
+      <button disabled={!f.patient.trim() || !timeOk || busy} onClick={async () => {
         setBusy(true);
         setErr("");
         try {
