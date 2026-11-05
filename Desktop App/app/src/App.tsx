@@ -3,6 +3,7 @@ import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { NoteDialog } from "./NoteDialog";
 import { Tasks } from "./Tasks";
+import { Search } from "./Search";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
@@ -36,7 +37,7 @@ export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<"visits" | "tasks" | "feedback" | "setup">("visits");
+  const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -183,6 +184,7 @@ export function App() {
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
+            <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Find a visit</button>
             <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>Tasks</button>
             <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
@@ -208,6 +210,10 @@ export function App() {
         {status && engine && signedIn && tab === "setup" && (
           <Setup engine={engine} status={status} env={env} signedIn locked={recording}
             onEnvironment={changeEnvironment} onChanged={() => refreshStatus()} />
+        )}
+
+        {signedIn && tab === "search" && session && engine && (
+          <Search engine={engine} session={session} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "tasks" && session && (

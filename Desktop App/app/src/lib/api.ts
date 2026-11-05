@@ -342,3 +342,36 @@ export function taskErrorMessage(e: unknown): string {
   }
   return e instanceof Error ? e.message : String(e);
 }
+
+// ---------------------------------------------------------------------------------------------- visit lookup
+
+/** One search hit. Only these fields are ever shown. */
+export type VisitHit = {
+  id: string; date: string; time: string; program: string; type: string; provider: string;
+  initials: string; hasTranscript: boolean; hasDocuments: boolean;
+};
+
+/** Finds visits by initials and/or date (at least one), newest first, at most 50. */
+export const searchVisits = (session: Session, q: { initials?: string; date?: string }) => {
+  const p = new URLSearchParams();
+  if (q.initials) p.set("initials", q.initials);
+  if (q.date) p.set("date", q.date);
+  return call<{ visits: VisitHit[] }>(session, `/notes/visits/search?${p.toString()}`);
+};
+
+export function searchErrorMessage(e: unknown): string {
+  if (e instanceof ApiFailure) {
+    if (e.code === "bad_query") return "Enter the patient's initials, a date, or both.";
+    if (e.code === "bad_date") return "That date is not valid.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** Checks the search inputs before asking the server. Returns a message, or "" when fine. */
+export function searchInputProblem(initials: string, date: string): string {
+  const i = initials.trim();
+  if (!i && !date) return "Enter the patient's initials, a date, or both.";
+  if (i && !/^[A-Za-z]{1,5}$/.test(i)) return "Initials are letters only, like AB.";
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "That date is not valid.";
+  return "";
+}

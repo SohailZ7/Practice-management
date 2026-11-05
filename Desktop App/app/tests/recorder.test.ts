@@ -48,6 +48,7 @@ describe("initials", () => {
 });
 
 import { generateNote, listDocuments, fetchDocument, noteErrorMessage, promoteFeedback, promoteErrorMessage, fetchTasks, createTask, updateTask, taskErrorMessage, fetchTranscript } from "../src/lib/api";
+import { searchVisits, searchErrorMessage, searchInputProblem } from "../src/lib/api";
 import { startGenerate, generationFor } from "../src/lib/generate";
 import { describeTranscript } from "../src/TranscriptDialog";
 import { normalizeTime, TIME_SLOTS } from "../src/lib/times";
@@ -241,5 +242,25 @@ describe("generate, notes, promote, tasks", () => {
     record({ error: "model_not_configured" }, 409);
     await startGenerate(s, "vy");
     expect(generationFor("vy")).toMatchObject({ phase: "failed" });
+  });
+});
+
+describe("visit search", () => {
+  const s: Session = { baseUrl: "https://example.run.app", accessToken: "t" };
+  it("builds the query and explains errors", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (u: string) => { seen.push(u.split("/api/desktop/v1")[1]); return Promise.resolve(new Response(JSON.stringify({ visits: [] }), { status: 200 })); });
+    await searchVisits(s, { initials: "AB", date: "2026-11-05" });
+    await searchVisits(s, { initials: "AB" });
+    await searchVisits(s, { date: "2026-11-05" });
+    expect(seen).toEqual(["/notes/visits/search?initials=AB&date=2026-11-05", "/notes/visits/search?initials=AB", "/notes/visits/search?date=2026-11-05"]);
+    expect(searchErrorMessage(new ApiFailure(400, "bad_query"))).toMatch(/initials, a date, or both/);
+    expect(searchErrorMessage(new ApiFailure(400, "bad_date"))).toMatch(/not valid/);
+  });
+  it("needs at least one input and plain initials", () => {
+    expect(searchInputProblem("", "")).toMatch(/initials, a date, or both/);
+    expect(searchInputProblem("A1", "")).toMatch(/letters only/);
+    expect(searchInputProblem("ab", "")).toBe("");
+    expect(searchInputProblem("", "2026-11-05")).toBe("");
   });
 });
