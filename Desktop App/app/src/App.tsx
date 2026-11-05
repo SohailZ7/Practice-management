@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import logo from "./assets/logo.png";
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
@@ -173,6 +174,7 @@ export function App() {
         </div>
       )}
       <header className="top">
+        <img src={logo} alt="" width={26} height={26} style={{ borderRadius: 6 }} />
         <h1>Practice Recorder</h1>
         {signedIn && (
           <nav className="tabs">
@@ -573,6 +575,7 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
 
   return (
     <div className="card" style={{ maxWidth: 760 }}>
+      {!signedIn && <img src={logo} alt="Brain and Behavior Center" width={72} height={72} style={{ borderRadius: 14, display: "block", marginBottom: ".6rem" }} />}
       <h2 style={{ marginTop: 0 }}>{signedIn ? "Setup" : "Sign in"}</h2>
 
       <label className="field">
