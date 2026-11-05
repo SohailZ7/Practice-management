@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAdmin, type CurrentUser } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
+import { addPayment, editPayment, PaymentError, removePayment } from "@/lib/timesheets/payments";
 import {
   chargeCents,
   entryError,
@@ -100,4 +101,57 @@ export async function setEmployeeRate(form: FormData) {
   if (res.count) await audit(user.email, "timesheet.rate", `emp ${id}: default ${formatMoney(rate as number)}/hr`);
   revalidatePath(BASE);
   flash(back(id, ""), "notice", "Default rate saved. Existing entries keep their own rate.");
+}
+
+// ---- Payments (each mirrored by a Ledger cash-out row) ----
+
+function readPayment(form: FormData, backTo: string) {
+  const amount = parseRate(str(form, "amount"));
+  if (amount === null) flash(backTo, "error", "Enter the amount paid like 500 or 209.80.");
+  const month = str(form, "coversMonth");
+  return {
+    p: { date: str(form, "date"), amountCents: amount as number, coversMonth: month ? month : null, note: str(form, "note").slice(0, 300) },
+    methodId: str(form, "methodId") || null,
+  };
+}
+
+export async function addTimesheetPayment(form: FormData) {
+  const user = await gate();
+  const employeeId = str(form, "employeeId");
+  const month = str(form, "m");
+  const to = back(employeeId, month);
+  const { p, methodId } = readPayment(form, to);
+  try {
+    await addPayment(user, employeeId, p, methodId);
+  } catch (e) {
+    if (e instanceof PaymentError) flash(to, "error", e.message);
+    throw e;
+  }
+  revalidatePath(BASE);
+  revalidatePath("/ledger", "layout");
+  flash(to, "notice", "Payment added, with a matching Payroll entry in the Ledger.");
+}
+
+export async function updateTimesheetPayment(form: FormData) {
+  const user = await gate();
+  const id = str(form, "id");
+  const to = back(str(form, "employeeId"), str(form, "m"));
+  const { p, methodId } = readPayment(form, to);
+  try {
+    await editPayment(user, id, p, methodId);
+  } catch (e) {
+    if (e instanceof PaymentError) flash(to, "error", e.message);
+    throw e;
+  }
+  revalidatePath(BASE);
+  revalidatePath("/ledger", "layout");
+  flash(to, "notice", "Payment saved; the Ledger entry was updated to match.");
+}
+
+export async function deleteTimesheetPayment(form: FormData) {
+  const user = await gate();
+  await removePayment(user, str(form, "id"));
+  revalidatePath(BASE);
+  revalidatePath("/ledger", "layout");
+  flash(back(str(form, "employeeId"), str(form, "m")), "notice", "Payment deleted, and its Ledger entry removed.");
 }

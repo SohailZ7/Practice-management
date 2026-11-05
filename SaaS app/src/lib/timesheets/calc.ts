@@ -141,3 +141,39 @@ export function toCsv(rows: SheetEntry[]): string {
 
 export const EMPLOYEE_NAMES = ["Muntaha", "Janita", "Zaid"] as const;
 export const DEFAULT_RATE_CENTS = 2300;
+
+// ---- Payments and balances ----
+
+export type PaymentInput = { date: string; amountCents: number; coversMonth: string | null; note: string };
+
+export const MAX_PAYMENT_CENTS = 100_000_000; // $1,000,000
+
+export function paymentError(p: PaymentInput): string | null {
+  if (!isISODate(p.date)) return "Enter the date paid.";
+  if (!Number.isInteger(p.amountCents) || p.amountCents <= 0 || p.amountCents > MAX_PAYMENT_CENTS) return "Enter the amount paid, more than $0.";
+  if (p.coversMonth !== null && !isMonthKey(p.coversMonth)) return "Choose a month the payment covers, or leave it blank.";
+  if (p.note.length > 300) return "Keep the note to 300 characters or fewer.";
+  return null;
+}
+
+export type PaidRow = { amountCents: number; coversMonth: string | null };
+
+/** Charged minus paid. A payment counts toward a month only when it says which month it covers; every payment counts toward the employee. */
+export function balances(charged: SheetEntry[], payments: PaidRow[], month: string) {
+  const all = totals(charged);
+  const inMonth = totals(charged.filter((r) => monthKey(r.date) === month));
+  const paidAll = payments.reduce((s, p) => s + p.amountCents, 0);
+  const paidMonth = payments.filter((p) => p.coversMonth === month).reduce((s, p) => s + p.amountCents, 0);
+  return {
+    month: { chargedCents: inMonth.chargeCents, paidCents: paidMonth, balanceCents: inMonth.chargeCents - paidMonth },
+    employee: { chargedCents: all.chargeCents, paidCents: paidAll, balanceCents: all.chargeCents - paidAll },
+  };
+}
+
+/** Text of the matching Ledger row. Names the employee and month; never pay details beyond the amount in the row itself. */
+export function ledgerComment(employeeName: string, coversMonth: string | null, note: string): string {
+  const parts = [`Timesheet payment: ${employeeName}`];
+  if (coversMonth) parts.push(`for ${monthLabel(coversMonth)}`);
+  const base = parts.join(" ");
+  return (note ? `${base}. ${note}` : base).slice(0, 1000);
+}

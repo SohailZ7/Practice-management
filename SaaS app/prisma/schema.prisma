@@ -390,6 +390,8 @@ model LedgerEntry {
   category    LedgerCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   method      LedgerMethod?   @relation(fields: [methodId], references: [id], onDelete: SetNull)
 
+  timesheetPayment TimesheetPayment?
+
   @@index([date])
 }
 
@@ -445,13 +447,14 @@ model TaskMove {
 // Timesheets (Admin only for now). Hourly rate and charge are in cents. startMin/endMin are minutes after midnight.
 // userId is unused today; a later release can link an employee to a login so they see only their own sheet.
 model TimesheetEmployee {
-  id               String           @id @default(cuid())
-  name             String           @unique
-  defaultRateCents Int              @default(2300)
-  sortOrder        Int              @default(0)
+  id               String             @id @default(cuid())
+  name             String             @unique
+  defaultRateCents Int                @default(2300)
+  sortOrder        Int                @default(0)
   userId           String?
-  createdAt        DateTime         @default(now())
+  createdAt        DateTime           @default(now())
   entries          TimesheetEntry[]
+  payments         TimesheetPayment[]
 }
 
 model TimesheetEntry {
@@ -482,4 +485,25 @@ model FeedbackItem {
   author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
+}
+
+// What has been paid to a timesheet employee. Each payment has a matching cash-out row in the Ledger (ledgerEntryId);
+// edits and deletes here update that row, and the Ledger refuses to edit or delete it directly, so nothing is counted twice.
+// methodId is a LedgerMethod id (no foreign key, so a removed method just shows blank). coversMonth is YYYY-MM or null.
+model TimesheetPayment {
+  id            String            @id @default(cuid())
+  employeeId    String
+  date          String
+  amountCents   Int
+  methodId      String?
+  note          String            @default("")
+  coversMonth   String?
+  ledgerEntryId String?           @unique
+  createdById   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now()) @updatedAt
+  employee      TimesheetEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  ledgerEntry   LedgerEntry?      @relation(fields: [ledgerEntryId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, date])
 }

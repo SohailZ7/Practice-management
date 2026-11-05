@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { formatMoney } from "@/lib/ledger/money";
 import { ledgerEntryError } from "@/lib/ledger/validate";
+import { isLinkedLedgerEntry, LINKED_LEDGER_MESSAGE } from "@/lib/timesheets/payments";
 import { queryLedger, toLedgerDTO } from "@/lib/ledger/queries";
 import type { LedgerDTO, LedgerFilters, LedgerPatch, OptionKind } from "@/lib/ledger/types";
 
@@ -47,6 +48,7 @@ export async function updateLedgerEntry(id: string, patch: LedgerPatch): Promise
   const user = await requireAccess("ledger", "edit");
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) throw new Error("Entry not found.");
+  if (await isLinkedLedgerEntry(id)) throw new Error(LINKED_LEDGER_MESSAGE);
   const next = {
     date: patch.date !== undefined ? clean(patch.date, 10) : existing.date,
     cashIn: patch.cashIn ?? existing.cashIn,
@@ -69,6 +71,7 @@ export async function deleteLedgerEntry(id: string): Promise<void> {
   const user = await requireAccess("ledger", "edit");
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) return;
+  if (await isLinkedLedgerEntry(id)) throw new Error(LINKED_LEDGER_MESSAGE);
   await db.ledgerEntry.delete({ where: { id } });
   // The audit log keeps what was removed (date and amount only).
   await audit(user.email, "ledger.delete", `${id}: ${describe(existing)}`);
