@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import logo from "./assets/logo.png";
+import { TranscriptDialog } from "./TranscriptDialog";
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
@@ -295,7 +296,7 @@ export function App() {
                     <Row key={v.id} visit={v} date={date}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
-                      queued={queuedIds.has(v.id)} env={env}
+                      queued={queuedIds.has(v.id)} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
                       onState={setRow} engine={engine!} session={session} telehealth={telehealth}
                       onSent={() => { void load(); void loadQueue(); }} />
                   ))}
@@ -419,14 +420,15 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, date, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
-  visit: Visit; date: string; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
+  visit: Visit; date: string; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void; telehealth: boolean;
 }) {
   const [secs, setSecs] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const since = state.phase === "recording" ? state.since : 0;
 
   useEffect(() => {
@@ -506,6 +508,16 @@ function Row({ visit, date, selected, onSelect, state, ready, queued, env, onSta
         {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
       </td>
       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+        <button className="secondary" title="View the transcript (read-only)" aria-label="View transcript" onClick={() => setViewing(true)}>
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2.5" /></svg>
+        </button>
+        {viewing && (
+          <TranscriptDialog
+            visit={visit} date={date} queued={queued} queueItem={queueItem} engine={engine} session={session}
+            status={{ phase: state.phase, reason: state.phase === "failed" ? state.message : undefined }}
+            onClose={() => setViewing(false)}
+          />
+        )}
         {state.phase === "recording" ? (
           <>
             <span className="rec"><span className="dot" />{mmss}</span>
@@ -518,9 +530,11 @@ function Row({ visit, date, selected, onSelect, state, ready, queued, env, onSta
         ) : state.phase === "working" ? (
           <span className="small">Working…</span>
         ) : (
+          <>
           <button className="record" disabled={!ready || busy} onClick={start}>
             {visit.hasTranscript || state.phase === "sent" ? "Record again" : "Record"}
           </button>
+          </>
         )}
         {state.phase !== "recording" && state.phase !== "working" && (
           confirmDelete ? (
@@ -639,16 +653,13 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
         )}
       </div>
 
-      {signedIn && (
-        <>
-          <h3>Transcription</h3>
-          <ul className="small">
-            <li>Transcription model: {status.whisper_model ? "found" : "missing"}</li>
-            {engine.kind === "fake" && <li><strong>Running in a browser with fake engines.</strong> Nothing is recorded.</li>}
-          </ul>
-          <p className="small">Transcription runs inside this app, on this Mac. The recording is never saved.</p>
-
-          <h3>Transcript copy</h3>
+      <h3>Where transcripts are saved</h3>
+      <p className="small">
+        While a transcript waits for upload it is kept <strong>encrypted</strong> on this Mac, in
+        ~/Library/Application Support/PracticeNotes, and deleted as soon as the practice app confirms the upload. Audio is never saved.
+        To read one, use the transcript icon next to Record on the Visits screen.
+      </p>
+      <h3>Transcript copy</h3>
           <p className="small">
             Optional. Save a copy of each transcript to:{" "}
             <strong>{status.settings.transcript_copy_dir ?? "off"}</strong>
@@ -669,6 +680,16 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
             Warning: a copy is patient information stored as a plain file on this Mac, outside the encrypted queue. It is
             written only after the practice app confirms the upload. Choose a protected folder.
           </p>
+
+      {signedIn && (
+        <>
+          <h3>Transcription</h3>
+          <ul className="small">
+            <li>Transcription model: {status.whisper_model ? "found" : "missing"}</li>
+            {engine.kind === "fake" && <li><strong>Running in a browser with fake engines.</strong> Nothing is recorded.</li>}
+          </ul>
+          <p className="small">Transcription runs inside this app, on this Mac. The recording is never saved.</p>
+
         </>
       )}
     </div>

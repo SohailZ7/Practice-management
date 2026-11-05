@@ -268,3 +268,10 @@ export async function fetchVisitOptions(session: Session): Promise<VisitOptions 
     throw e;
   }
 }
+
+/**
+ * The transcript the practice app holds for a visit. Needs GET /notes/visits/{id}/transcript on the server; a 404 or
+ * 405 means it is not there yet.
+ */
+export const fetchTranscript = (session: Session, visitId: string) =>
+  call<{ transcript: string; updatedAt?: string }>(session, `/notes/visits/${encodeURIComponent(visitId)}/transcript`);

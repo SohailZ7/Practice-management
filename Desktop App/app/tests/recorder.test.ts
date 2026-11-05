@@ -47,6 +47,7 @@ describe("initials", () => {
   });
 });
 
+import { describeTranscript } from "../src/TranscriptDialog";
 import { normalizeTime, TIME_SLOTS } from "../src/lib/times";
 import { fetchVisitOptions, deleteVisits, createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
 
@@ -173,5 +174,19 @@ describe("visit options", () => {
     expect(await fetchVisitOptions(s)).toEqual({ programs: ["KIOP-AM"], appointmentTypes: ["Follow-up"], providers: ["Dr. A"] });
     vi.stubGlobal("fetch", () => Promise.resolve(new Response("", { status: 404 })));
     expect(await fetchVisitOptions(s)).toBeNull();
+  });
+});
+
+describe("transcript status", () => {
+  const base = { queued: false, hasTranscript: false };
+  it("says what is true for each stage", () => {
+    expect(describeTranscript({ ...base, phase: "recording" }).state).toBe("recording");
+    expect(describeTranscript({ ...base, phase: "working" }).state).toBe("working");
+    expect(describeTranscript({ ...base, phase: "idle", queued: true }).text).toMatch(/not uploaded yet/);
+    expect(describeTranscript({ ...base, phase: "saved", queued: true }).text).toMatch(/Upload failed/);
+    expect(describeTranscript({ ...base, phase: "sent" }).text).toMatch(/Uploaded to the cloud.*deleted/);
+    expect(describeTranscript({ ...base, phase: "idle", hasTranscript: true }).state).toBe("uploaded");
+    expect(describeTranscript({ ...base, phase: "failed", reason: "x" }).text).toMatch(/Failed: x/);
+    expect(describeTranscript({ ...base, phase: "idle" }).state).toBe("none");
   });
 });
