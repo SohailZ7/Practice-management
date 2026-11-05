@@ -249,8 +249,7 @@ export function App() {
               The recording stays on this Mac and is never saved. It is turned into text here, and only the text is sent
               to the practice app, where the notes are written. Until the practice app confirms it, the text is kept
               encrypted on this Mac. With <strong>Video/phone call</strong> ticked, the call's audio is recorded as well as
-              your microphone, so the patient's side of the visit is captured; macOS asks for Screen Recording permission
-              the first time, which is what it calls listening to another app.
+              your microphone, so the patient's side of the visit is captured; macOS asks for System Audio Recording permission the first time. If the other person's side comes out empty, allow Practice Recorder under System Settings &gt; Privacy &amp; Security &gt; System Audio Recording (it is not a Screen Recording permission, and no picture of your screen is ever taken).
             </p>
           </>
         )}

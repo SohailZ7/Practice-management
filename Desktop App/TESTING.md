@@ -14,9 +14,9 @@ Use **Staging** and **made-up data only**. Never read real patient details aloud
 3. Back in the app, Setup should show you as signed in.
    - If you see "forbidden"/not allowed: your email is not on the staging allowlist. Check in the staging web app under the admin Users page (your email must be listed and active). Ask the main chat to add it.
 
-## 3. Allow Microphone and Screen Recording
+## 3. Allow Microphone and System Audio Recording
 1. When macOS asks for **Microphone**, click Allow.
-2. For a Telehealth visit it also needs **Screen Recording** (for speaker audio): System Settings > Privacy & Security > Screen Recording, switch on Practice Recorder, then quit and reopen the app.
+2. For a video/phone call (the checkbox on Visits) it also needs **System Audio Recording** (for the other person's voice from the speakers), not Screen Recording. Start a recording with the checkbox ticked; macOS asks once, click Allow. If it does not ask, or the other side comes out empty: System Settings > Privacy & Security > scroll to **System Audio Recording** (the section below Screen Recording), switch on Practice Recorder, quit and reopen the app. Needs macOS 14.2 or later. Until it is allowed the app records silence for that side and warns you that only one side was heard.
 3. If you missed a prompt: System Settings > Privacy & Security > Microphone, switch it on.
 
 ## 4. Load a fake schedule row

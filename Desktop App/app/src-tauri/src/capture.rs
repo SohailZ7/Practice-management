@@ -83,7 +83,24 @@ pub struct Recorder {
     channels: Arc<Mutex<Channels>>,
     _mic: Option<cpal::Stream>,
     #[cfg(target_os = "macos")]
-    system: Option<system_audio::Capture>,
+    system: Option<SystemCapture>,
+}
+
+/// The other party's audio. A Core Audio process tap by default (no Screen Recording permission); ScreenCaptureKit
+/// only when PRACTICE_SYSTEM_AUDIO=sck is set, as a fallback.
+#[cfg(target_os = "macos")]
+enum SystemCapture {
+    Tap(#[allow(dead_code)] system_tap::Capture),
+    Sck(#[allow(dead_code)] system_audio::Capture),
+}
+
+#[cfg(target_os = "macos")]
+fn start_system(channels: Arc<Mutex<Channels>>) -> Result<SystemCapture, String> {
+    if std::env::var("PRACTICE_SYSTEM_AUDIO").ok().as_deref() == Some("sck") {
+        system_audio::Capture::start(channels).map(SystemCapture::Sck)
+    } else {
+        system_tap::Capture::start(channels).map(SystemCapture::Tap)
+    }
 }
 
 impl Recorder {
@@ -117,7 +134,7 @@ impl Recorder {
         #[cfg(target_os = "macos")]
         {
             let (system, warning) = if with_system_audio {
-                match system_audio::Capture::start(Arc::clone(&channels)) {
+                match start_system(Arc::clone(&channels)) {
                     Ok(c) => (Some(c), None),
                     Err(e) => (None, Some(e)),
                 }
@@ -149,6 +166,8 @@ impl Recorder {
 
 #[cfg(target_os = "macos")]
 pub mod system_audio;
+#[cfg(target_os = "macos")]
+pub mod system_tap;
 
 /// A recording, owned by a thread of its own.
 ///
