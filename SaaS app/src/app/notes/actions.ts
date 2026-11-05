@@ -10,7 +10,7 @@ import { generateDocuments } from "@/lib/notes/generate";
 import { makeLlm, modelConfigured, warmModel } from "@/lib/notes/model";
 import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
-import { addVisit, deleteVisit, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
+import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
 // Audit entries hold ids and counts only, never patient names or note text.
 
@@ -126,4 +126,11 @@ export async function deleteVisitAction(id: string) {
   const r = await guard(() => deleteVisit(user, id));
   revalidatePath("/notes");
   return r.ok ? { ok: true as const } : r;
+}
+
+export async function deleteVisitsAction(ids: string[]) {
+  const user = await requireAccess("notes", "edit");
+  const r = await guard(() => deleteVisits(user, Array.isArray(ids) ? ids.filter((i) => typeof i === "string") : []));
+  revalidatePath("/notes");
+  return r.ok ? { ok: true as const, deleted: r.value.deleted.length } : r;
 }

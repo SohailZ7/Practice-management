@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
-import { addVisitAction, deleteVisitAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { addVisitAction, deleteVisitAction, deleteVisitsAction, generateForVisit, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import { DocumentEditor } from "./DocumentEditor";
 
 const shift = (iso: string, days: number) => {
@@ -22,6 +22,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
   const [pending, start] = useTransition();
   const [pasting, setPasting] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const selected = picked.filter((id) => visits.some((v) => v.id === id));
   const [note, setNote] = useState("");
   const [openDoc, setOpenDoc] = useState<{ id: string; label: string } | null>(null);
   const [busyVisit, setBusyVisit] = useState("");
@@ -51,16 +53,44 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
 
       {pasting && <PasteSchedule date={date} defaultProvider={defaultProvider} onDone={(m) => { setPasting(false); setNote(m); router.refresh(); }} />}
 
+      {canEdit && selected.length > 0 && (
+        <div className="row" style={{ marginBottom: ".5rem" }}>
+          <button
+            className="secondary"
+            disabled={pending}
+            onClick={() => {
+              const withData = visits.filter((v) => selected.includes(v.id) && (v.hasTranscript || v.documents.length > 0)).length;
+              const extra = withData ? ` The transcripts and generated documents of those visits are deleted too (${withData} have some).` : "";
+              if (!window.confirm(`Delete ${selected.length} visit${selected.length === 1 ? "" : "s"}?${extra} This cannot be undone.`)) return;
+              start(async () => {
+                const r = await deleteVisitsAction(selected);
+                setNote(r.ok ? `Deleted ${r.deleted} visit${r.deleted === 1 ? "" : "s"}.` : r.error);
+                setPicked([]);
+                router.refresh();
+              });
+            }}
+          >
+            Delete selected ({selected.length})
+          </button>
+          <button className="link" onClick={() => setPicked([])}>Clear</button>
+        </div>
+      )}
+
       {visits.length === 0 ? (
         <p className="muted">No visits loaded for this day. {canEdit && "Use “Paste a schedule” to load one."}</p>
       ) : (
         <table className="xl">
           <thead>
-            <tr><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th /></tr>
+            <tr>{canEdit && <th><input type="checkbox" aria-label="Select all visits" checked={selected.length === visits.length} onChange={(e) => setPicked(e.target.checked ? visits.map((v) => v.id) : [])} /></th>}<th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th /></tr>
           </thead>
           <tbody>
             {visits.map((v) => (
               <tr key={v.id}>
+                {canEdit && (
+                  <td>
+                    <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => setPicked(e.target.checked ? [...selected, v.id] : selected.filter((i) => i !== v.id))} />
+                  </td>
+                )}
                 <td title="Shown as initials">{v.initials}</td>
                 <td>
                   {canEdit ? (

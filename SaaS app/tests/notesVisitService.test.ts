@@ -2,14 +2,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { apptTimeOf, parseSchedule } from "../src/lib/notes/scheduleParse";
 
 const db = {
-  visit: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  visit: { findMany: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   billingPatient: { findFirst: vi.fn(), create: vi.fn() },
 };
 vi.mock("../src/lib/db", () => ({ db }));
 const audit = vi.fn();
 vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));
 
-const { addVisit, cleanApptTime, deleteVisit, updateVisit, VisitError } = await import("../src/lib/notes/visitService");
+const { addVisit, cleanApptTime, deleteVisit, deleteVisits, updateVisit, VisitError } = await import("../src/lib/notes/visitService");
 const actor = { id: "u1", email: "a@example.org" };
 
 beforeEach(() => vi.clearAllMocks());
@@ -68,5 +68,20 @@ describe("updateVisit and deleteVisit", () => {
     expect(audit.mock.calls[0][2]).toBe("visit v1 2026-11-05 documents=1");
     db.visit.findUnique.mockResolvedValueOnce(null);
     await expect(deleteVisit(actor, "x")).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("deleteVisits", () => {
+  it("deletes the ones found, reports the rest, audits counts only", async () => {
+    db.visit.findMany.mockResolvedValue([{ id: "a", _count: { documents: 2 } }, { id: "b", _count: { documents: 0 } }]);
+    const r = await deleteVisits(actor, ["a", "b", "c", "a"]);
+    expect(r).toEqual({ deleted: ["a", "b"], notFound: ["c"] });
+    expect(db.visit.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["a", "b"] } } });
+    expect(audit.mock.calls[0][2]).toBe("visits=2 notFound=1 documents=2");
+  });
+  it("does nothing for an empty list and refuses more than 200", async () => {
+    expect(await deleteVisits(actor, [])).toEqual({ deleted: [], notFound: [] });
+    await expect(deleteVisits(actor, Array.from({ length: 201 }, (_, i) => `i${i}`))).rejects.toMatchObject({ code: "too_many" });
+    expect(db.visit.deleteMany).not.toHaveBeenCalled();
   });
 });

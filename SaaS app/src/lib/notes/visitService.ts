@@ -8,7 +8,7 @@ import { validatePatient } from "../billing/validate";
 import { apptTimeOf, parseClient } from "./scheduleParse";
 
 export class VisitError extends Error {
-  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time", message: string) {
+  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many", message: string) {
     super(message);
   }
 }
@@ -89,4 +89,22 @@ export async function deleteVisit(actor: { email: string }, id: string) {
   if (!existing) throw new VisitError("not_found", "Visit not found");
   await db.visit.delete({ where: { id } });
   await audit(actor.email, "notes.visit.delete", `visit ${id} ${existing.visitDate} documents=${existing.documents.length}`);
+}
+
+export const MAX_BULK_DELETE = 200;
+
+/**
+ * Deletes several visits at once (transcripts and documents go with them). Ids that do not exist are reported, not
+ * errors. The audit entry holds counts only.
+ */
+export async function deleteVisits(actor: { email: string }, ids: string[]): Promise<{ deleted: string[]; notFound: string[] }> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return { deleted: [], notFound: [] };
+  if (unique.length > MAX_BULK_DELETE) throw new VisitError("too_many", `Delete at most ${MAX_BULK_DELETE} visits at a time.`);
+  const found = await db.visit.findMany({ where: { id: { in: unique } }, select: { id: true, _count: { select: { documents: true } } } });
+  const foundIds = found.map((v) => v.id);
+  if (foundIds.length) await db.visit.deleteMany({ where: { id: { in: foundIds } } });
+  const documents = found.reduce((n, v) => n + v._count.documents, 0);
+  await audit(actor.email, "notes.visit.bulkDelete", `visits=${foundIds.length} notFound=${unique.length - foundIds.length} documents=${documents}`);
+  return { deleted: foundIds, notFound: unique.filter((i) => !foundIds.includes(i)) };
 }
