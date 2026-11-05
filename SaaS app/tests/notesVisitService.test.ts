@@ -41,9 +41,11 @@ describe("cleanApptTime", () => {
     expect(cleanApptTime("")).toBe("");
     expect(cleanApptTime("2:00 pm")).toBe("2:00 PM");
     expect(cleanApptTime("9:00 - 11:30")).toBe("9:00-11:30");
-    expect(cleanApptTime("2 pm")).toBe("2 PM");
+    expect(cleanApptTime("2 pm")).toBe("2:00 PM");
     expect(() => cleanApptTime("after lunch")).toThrow(VisitError);
-    expect(cleanApptTime("14:00")).toBe("14:00");
+    expect(cleanApptTime("14:00")).toBe("2:00 PM");
+    expect(cleanApptTime("0:30")).toBe("12:30 AM");
+    expect(() => cleanApptTime("5")).toThrow(VisitError);
     expect(() => cleanApptTime("2:75")).toThrow(VisitError);
     expect(() => cleanApptTime("25:00")).toThrow(VisitError);
     expect(() => cleanApptTime("13:00 PM")).toThrow(VisitError);

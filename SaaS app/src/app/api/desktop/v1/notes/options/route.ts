@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic";
  * (POST/PATCH visits answers bad_type / bad_provider for anything else). Lists only: no patient data.
  */
 export const GET = handle(async (req) => {
-  await authenticate(req, { module: "notes", level: "edit" });
+  await authenticate(req, { module: "notes", level: "view" });
   return json(await loadVisitOptions());
 });

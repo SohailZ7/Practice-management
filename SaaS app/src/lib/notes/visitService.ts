@@ -26,17 +26,25 @@ const text = (v: unknown, max: number): string => (typeof v === "string" ? v.rep
 export function cleanApptTime(raw: unknown): string {
   const t = text(raw, 40);
   if (!t) return "";
-  if (/^\d{1,2}\s*([ap]\.?m\.?)$/i.test(t)) return t.replace(/\s+/g, " ").toUpperCase().replace(/\./g, "");
-  const m = /^(\d{1,2}:\d{2})(\s*[ap]\.?m\.?)?(?:\s*-\s*(\d{1,2}:\d{2})(\s*[ap]\.?m\.?)?)?$/i.exec(t);
-  if (!m) throw new VisitError("bad_time", "Enter the time like 2:00 PM or 9:00-11:30.");
-  for (const hm of [m[1], m[3]]) {
-    if (!hm) continue;
-    const [h, mi] = hm.split(":").map(Number);
-    const limit = m[2] || m[4] ? 12 : 23;
-    if (h > limit || (limit === 12 && h < 1) || mi > 59) throw new VisitError("bad_time", "Enter the time like 2:00 PM or 14:00 (minutes 00 to 59).");
-  }
-  const mer = (x?: string) => (x ? ` ${x.replace(/[\s.]/g, "").toUpperCase()}` : "");
-  return m[3] ? `${m[1]}${mer(m[2])}-${m[3]}${mer(m[4])}` : `${m[1]}${mer(m[2])}`;
+  const parts = t.split(/\s*-\s*/);
+  const bad = () => new VisitError("bad_time", "Enter the time like 2:00 PM or 14:00 (minutes 00 to 59).");
+  if (parts.length > 2) throw bad();
+  return parts.map((p) => oneTime(p) ?? (() => { throw bad(); })()).join("-");
+}
+
+/** Same rules as the recorder: 12-hour with AM/PM, 24-hour (14:00 becomes 2:00 PM), or H:MM as typed. A bare number is not a time. */
+function oneTime(raw: string): string | null {
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*([ap])\.?(m)?\.?$|^(\d{1,2}):(\d{2})$/i.exec(raw.trim());
+  if (!m) return null;
+  const h = Number(m[1] ?? m[5]);
+  const min = Number(m[2] ?? m[6] ?? 0);
+  const pad = String(min).padStart(2, "0");
+  if (min > 59) return null;
+  if (m[3]) return h >= 1 && h <= 12 ? `${h}:${pad} ${m[3].toUpperCase()}M` : null;
+  if (h > 23) return null;
+  if (h >= 13) return `${h - 12}:${pad} PM`;
+  if (h === 0) return `12:${pad} AM`;
+  return `${h}:${pad}`;
 }
 
 export { apptTimeOf };
