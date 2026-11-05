@@ -218,3 +218,35 @@ export function visitErrorMessage(e: unknown): string {
   }
   return e instanceof Error ? e.message : String(e);
 }
+
+/**
+ * Deletes several visits (and their transcripts and documents). Uses the bulk endpoint in chunks of 200; if the server
+ * does not have it yet (404) it deletes one by one. Returns how many were deleted.
+ */
+export async function deleteVisits(session: Session, ids: string[]): Promise<{ deleted: number; notFound: number }> {
+  let deleted = 0;
+  let notFound = 0;
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    try {
+      const r = await call<{ deleted: number; notFound: number }>(session, "/notes/visits/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids: chunk }),
+      });
+      deleted += r.deleted ?? 0;
+      notFound += r.notFound ?? 0;
+    } catch (e) {
+      if (!(e instanceof ApiFailure) || (e.status !== 404 && e.status !== 405)) throw e;
+      for (const id of chunk) {
+        try {
+          await deleteVisit(session, id);
+          deleted++;
+        } catch (err) {
+          if (err instanceof ApiFailure && err.status === 404) notFound++;
+          else throw err;
+        }
+      }
+    }
+  }
+  return { deleted, notFound };
+}

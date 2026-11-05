@@ -47,7 +47,7 @@ describe("initials", () => {
   });
 });
 
-import { createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
+import { deleteVisits, createVisit, updateVisit, deleteVisit, visitErrorMessage, fetchAuthConfig, cleanupFeedback, createFeedback, feedbackErrorMessage, fetchFeedback, updateFeedback, ApiFailure } from "../src/lib/api";
 
 describe("the feedback client", () => {
   const capture = (body: unknown, status = 200) => {
@@ -120,5 +120,25 @@ describe("visit add / edit / delete", () => {
     ]);
     expect(JSON.parse(String(seen[0][1]?.body))).toMatchObject({ date: "2026-11-05", patient: "Alpha Testcase" });
     expect(visitErrorMessage(new ApiFailure(400, "bad_time"))).toMatch(/not valid/);
+  });
+});
+
+describe("bulk delete", () => {
+  it("uses the bulk endpoint, and falls back to one-by-one on 404", async () => {
+    const s: Session = { baseUrl: "https://example.run.app", accessToken: "t" };
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => {
+      seen.push(`${i?.method} ${u.split("/v1")[1]}`);
+      return Promise.resolve(new Response(JSON.stringify({ deleted: 2, notFound: 1 }), { status: 200 }));
+    });
+    expect(await deleteVisits(s, ["a", "b", "c"])).toEqual({ deleted: 2, notFound: 1 });
+    expect(seen).toEqual(["POST /notes/visits/bulk-delete"]);
+    seen.length = 0;
+    vi.stubGlobal("fetch", (u: string, i?: RequestInit) => {
+      seen.push(`${i?.method} ${u.split("/v1")[1]}`);
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: u.includes("bulk") ? 404 : 200 }));
+    });
+    expect((await deleteVisits(s, ["a", "b"])).deleted).toBe(2);
+    expect(seen).toEqual(["POST /notes/visits/bulk-delete", "DELETE /notes/visits/a", "DELETE /notes/visits/b"]);
   });
 });

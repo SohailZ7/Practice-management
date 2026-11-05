@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Feedback } from "./Feedback";
-import { createVisit, deleteVisit, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { retryAll, uploadQueued } from "./lib/queue";
@@ -38,6 +38,17 @@ export function App() {
   const [provider, setProvider] = useState("");
   const [telehealth, setTelehealth] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Only keep ticks for rows that are still on screen (the day changed or rows were deleted).
+  useEffect(() => {
+    setSelected((cur) => {
+      const ids = new Set((visits ?? []).map((v) => v.id));
+      const next = new Set([...cur].filter((id) => ids.has(id)));
+      return next.size === cur.size ? cur : next;
+    });
+  }, [visits]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [retrying, setRetrying] = useState(false);
 
@@ -233,17 +244,49 @@ export function App() {
             ) : visits.length === 0 ? (
               <p className="small">No visits for this day. Use Add one visit or Paste schedule.</p>
             ) : (
+              <>
+              {selected.size > 0 && (
+                <div className="row" style={{ marginBottom: ".5rem" }}>
+                  {confirmBulk ? (
+                    <>
+                      <span className="small">
+                        Delete {selected.size} visit{selected.size === 1 ? "" : "s"}? Their transcripts and documents are removed too.
+                      </span>
+                      <button className="secondary" disabled={bulkBusy} onClick={async () => {
+                        setBulkBusy(true);
+                        try {
+                          const r = await deleteVisits(session, [...selected]);
+                          setMessage(`Deleted ${r.deleted} visit${r.deleted === 1 ? "" : "s"}.` + (r.notFound ? ` ${r.notFound} were already gone.` : ""));
+                          setSelected(new Set());
+                        } catch (e) {
+                          setMessage(visitErrorMessage(e));
+                        } finally {
+                          setConfirmBulk(false);
+                          setBulkBusy(false);
+                          void load();
+                        }
+                      }}>Yes, delete {selected.size}</button>
+                      <button className="secondary" onClick={() => setConfirmBulk(false)}>Keep</button>
+                    </>
+                  ) : (
+                    <button className="secondary" onClick={() => setConfirmBulk(true)}>Delete selected ({selected.size})</button>
+                  )}
+                </div>
+              )}
               <table className="board">
-                <thead><tr><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
+                <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {visits.map((v) => (
-                    <Row key={v.id} visit={v} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
+                    <Row key={v.id} visit={v}
+                      selected={selected.has(v.id)}
+                      onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} env={env}
                       onState={setRow} engine={engine!} session={session} telehealth={telehealth}
                       onSent={() => { void load(); void loadQueue(); }} />
                   ))}
                 </tbody>
               </table>
+              </>
             )}
             <p className="small">
               The recording stays on this Mac and is never saved. It is turned into text here, and only the text is sent
@@ -338,8 +381,8 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
-  visit: Visit; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
+  visit: Visit; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void; telehealth: boolean;
 }) {
@@ -400,6 +443,7 @@ function Row({ visit, state, ready, queued, env, onState, engine, session, onSen
 
   return (
     <tr>
+      <td><input type="checkbox" aria-label={`Select visit for ${visit.initials}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>
       <td title="Shown as initials">{visit.initials}</td>
       <td style={{ whiteSpace: "nowrap" }}>
         <input
