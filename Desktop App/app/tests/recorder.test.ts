@@ -233,6 +233,8 @@ describe("generate, notes, promote, tasks", () => {
     expect(noteErrorMessage(f(502, "generate_failed"))).toMatch(/failed/);
     expect(noteErrorMessage(f(404, "not_found"))).toMatch(/no longer exists/);
     expect(noteErrorMessage(f(409, "stale_version"))).toMatch(/newer version/);
+    expect(noteErrorMessage(f(400, "no_doc_types"))).toMatch(/at least one/);
+    expect(noteErrorMessage(f(400, "bad_doc_types"))).toMatch(/not available/);
     expect(noteErrorMessage(f(400, "no_changes"))).toMatch(/Nothing has changed/);
     expect(noteErrorMessage(f(400, "bad_values"))).toMatch(/not valid/);
     expect(promoteErrorMessage(f(409, "already_promoted"))).toMatch(/already/);

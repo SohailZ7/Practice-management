@@ -324,6 +324,8 @@ export function noteErrorMessage(e: unknown): string {
     if (e.code === "no_transcript") return "This visit has no transcript yet. Record it first.";
     if (e.code === "model_not_configured") return "The note-writing model is not set up on this server yet.";
     if (e.code === "generate_failed" || e.status === 502) return "The note-writing model failed. Try again in a minute.";
+    if (e.code === "no_doc_types") return "Choose at least one document to write.";
+    if (e.code === "bad_doc_types") return "One of the chosen documents is not available. Reopen the chooser and try again.";
     if (e.code === "stale_version") return "Someone saved a newer version while you were editing. Load the latest, then redo your changes.";
     if (e.code === "no_changes") return "Nothing has changed since this version, so there is nothing to save.";
     if (e.code === "bad_values") return "Some answers are not valid. Check the form and try again.";
