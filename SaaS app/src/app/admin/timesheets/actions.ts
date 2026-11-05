@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAdmin, type CurrentUser } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
+import { runImport, type ImportReport } from "@/lib/timesheets/importService";
+import type { DateFix } from "@/lib/timesheets/importer";
 import { addPayment, editPayment, PaymentError, removePayment } from "@/lib/timesheets/payments";
 import {
   chargeCents,
@@ -154,4 +156,19 @@ export async function deleteTimesheetPayment(form: FormData) {
   revalidatePath(BASE);
   revalidatePath("/ledger", "layout");
   flash(back(str(form, "employeeId"), str(form, "m")), "notice", "Payment deleted, and its Ledger entry removed.");
+}
+
+// ---- Import (upload a prepared JSON file; preview first, then confirm) ----
+
+export async function previewTimesheetImport(text: string, fixes: DateFix[]): Promise<ImportReport> {
+  const user = await gate();
+  return runImport(user, String(text), { apply: false, fixes });
+}
+
+export async function confirmTimesheetImport(text: string, fixes: DateFix[]): Promise<ImportReport> {
+  const user = await gate();
+  const report = await runImport(user, String(text), { apply: true, fixes });
+  revalidatePath(BASE);
+  revalidatePath("/ledger", "layout");
+  return report;
 }

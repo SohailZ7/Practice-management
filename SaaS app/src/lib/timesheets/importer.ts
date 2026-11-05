@@ -10,14 +10,38 @@ export type ImportFile = { employees: ImportEmployee[] };
 
 export type Discrepancy = { employee: string; date: string; start: string; end: string; field: "minutes" | "charge"; computed: number; sheet: number };
 
+/** A row with no date. It is listed for the admin to fix or skip, never dropped silently. */
+export type NeedsDate = { employee: string; index: number; start: string; end: string; rate: string };
+export type DateFix = { employee: string; index: number; date?: string; skip?: boolean };
+
 export type Plan = {
   employees: { name: string; entries: EntryInput[]; payments: PaymentInput[] }[];
   errors: string[];
   discrepancies: Discrepancy[];
+  needsDate: NeedsDate[];
 };
 
+/** Applies the admin's date fixes and skips. `index` is the row's position in that employee's entries. Returns the file and how many rows were skipped. */
+export function applyDateFixes(file: ImportFile, fixes: DateFix[]): { file: ImportFile; skipped: number } {
+  let skipped = 0;
+  const employees = (file.employees ?? []).map((emp) => {
+    const mine = fixes.filter((f) => f.employee === emp.name);
+    const entries: ImportEntry[] = [];
+    (emp.entries ?? []).forEach((r, i) => {
+      const fix = mine.find((f) => f.index === i);
+      if (fix?.skip) {
+        skipped++;
+        return;
+      }
+      entries.push(fix?.date ? { ...r, date: fix.date } : r);
+    });
+    return { ...emp, entries };
+  });
+  return { file: { ...file, employees }, skipped };
+}
+
 export function planImport(file: ImportFile): Plan {
-  const plan: Plan = { employees: [], errors: [], discrepancies: [] };
+  const plan: Plan = { employees: [], errors: [], discrepancies: [], needsDate: [] };
   for (const emp of file.employees ?? []) {
     const name = String(emp.name ?? "").trim();
     if (!name) {
@@ -30,6 +54,10 @@ export function planImport(file: ImportFile): Plan {
       const endMin = parseTime(String(r.end));
       const rateCents = typeof r.rate === "number" ? Math.round(r.rate * 100) : parseRate(String(r.rate));
       const where = `${name} entry ${i + 1}`;
+      if (!String(r.date ?? "").trim()) {
+        plan.needsDate.push({ employee: name, index: i, start: String(r.start), end: String(r.end), rate: String(r.rate) });
+        continue;
+      }
       if (startMin === null || endMin === null || rateCents === null) {
         plan.errors.push(`${where}: unreadable time or rate`);
         continue;

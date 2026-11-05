@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { balances, ledgerComment, paymentError } from "../src/lib/timesheets/calc";
-import { entryKey, paymentKey, planImport } from "../src/lib/timesheets/importer";
+import { applyDateFixes, entryKey, paymentKey, planImport } from "../src/lib/timesheets/importer";
 
 const row = (id: string, date: string, startMin: number, endMin: number, rateCents: number) => ({ id, date, startMin, endMin, rateCents });
 
@@ -67,13 +67,25 @@ describe("planImport", () => {
     const p = planImport(bad);
     expect(p.discrepancies.map((d) => [d.field, d.computed, d.sheet])).toEqual([["minutes", 39, 40], ["charge", 650, 700]]);
   });
-  it("rejects unreadable rows instead of guessing, e.g. a blank date or an overnight shift", () => {
+  it("rejects an overnight shift instead of guessing, and lists a blank date as needing one", () => {
     const p = planImport({ employees: [{ name: "Zaid", entries: [
       { date: "", start: "5:28 PM", end: "6:21 PM", rate: "23" },
       { date: "2026-10-03", start: "11:00 PM", end: "1:00 AM", rate: "23" },
     ] }] });
     expect(p.employees[0].entries).toEqual([]);
-    expect(p.errors).toHaveLength(2);
+    expect(p.errors).toHaveLength(1);
+    expect(p.needsDate).toEqual([{ employee: "Zaid", index: 0, start: "5:28 PM", end: "6:21 PM", rate: "23" }]);
+  });
+  it("applyDateFixes fills a date or skips the row, by position", () => {
+    const f = { employees: [{ name: "M", entries: [
+      { date: "2026-11-01", start: "1:00 PM", end: "2:00 PM", rate: "23" },
+      { date: "", start: "5:28 PM", end: "6:21 PM", rate: "23" },
+      { date: "", start: "7:00 PM", end: "7:30 PM", rate: "23" },
+    ] }] };
+    const r = applyDateFixes(f, [{ employee: "M", index: 1, date: "2026-11-04" }, { employee: "M", index: 2, skip: true }]);
+    expect(r.skipped).toBe(1);
+    expect(r.file.employees[0].entries.map((e) => e.date)).toEqual(["2026-11-01", "2026-11-04"]);
+    expect(planImport(r.file).needsDate).toEqual([]);
   });
   it("identity keys make a second run skip what is already there", () => {
     const e = { date: "2026-10-01", startMin: 1047, endMin: 1086 };

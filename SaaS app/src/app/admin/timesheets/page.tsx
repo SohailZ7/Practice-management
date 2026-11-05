@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { todayISO } from "@/lib/dates";
 import { Banner } from "@/components/Banner";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { TimesheetImport } from "@/components/TimesheetImport";
 import { ensureEmployees } from "@/lib/timesheets/queries";
 import {
   balances,
@@ -20,7 +21,7 @@ import {
   timesheetAccess,
   totals,
 } from "@/lib/timesheets/calc";
-import { addTimesheetEntry, addTimesheetPayment, deleteTimesheetEntry, deleteTimesheetPayment, setEmployeeRate, updateTimesheetEntry, updateTimesheetPayment } from "./actions";
+import { confirmTimesheetImport, previewTimesheetImport, addTimesheetEntry, addTimesheetPayment, deleteTimesheetEntry, deleteTimesheetPayment, setEmployeeRate, updateTimesheetEntry, updateTimesheetPayment } from "./actions";
 
 export default async function Page({ searchParams }: { searchParams: { e?: string; m?: string; error?: string; notice?: string } }) {
   const user = await requireAdmin();
@@ -46,6 +47,8 @@ export default async function Page({ searchParams }: { searchParams: { e?: strin
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <h2>Timesheets</h2>
       <p className="muted small">Admin only. Charge is minutes ÷ 60 × the entry&apos;s hourly rate, rounded to the cent. Each entry has its own rate; a new entry starts at the employee&apos;s default rate.</p>
+
+      <TimesheetImport actions={{ preview: previewTimesheetImport, confirm: confirmTimesheetImport }} />
 
       <div className="tabs" role="tablist" aria-label="Employee">
         {employees.map((e) => (
