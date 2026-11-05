@@ -280,26 +280,54 @@ export const fetchTranscript = (session: Session, visitId: string) =>
 
 // ---------------------------------------------------------------------------------------------- generate a note
 
-export type NoteDocument = { id: string; title: string; type?: string; createdAt: string };
-export type NoteContent = { id: string; title: string; content: string; createdAt?: string };
+export type DocType = { id: string; label: string; default: boolean };
+export type NoteDocument = { id: string; docType: string; title: string; latestVersion: number; updatedAt?: string };
+export type DocField = { name: string; label: string; type: "text" | "longtext" | "checkbox" | "select" | "date"; options?: string[] };
+export type DocVersion = { version: number; source: string; createdAt: string; authorName?: string };
+export type FieldValue = string | boolean;
+export type DocumentDetail = {
+  id: string; docType: string; title: string; fields: DocField[]; versions: DocVersion[];
+  current: { version: number; values: Record<string, FieldValue> };
+};
+export type GenerateResult = { documents: NoteDocument[]; errors: { docType: string; error: string }[] };
 
-/** Writes the draft note for a visit from its transcript. Can take about two minutes. */
-export const generateNote = (session: Session, visitId: string) =>
-  call<{ documentId: string; title: string; content: string }>(session, `/notes/visits/${encodeURIComponent(visitId)}/generate`, { method: "POST", body: "{}" });
+const vpath = (visitId: string) => `/notes/visits/${encodeURIComponent(visitId)}`;
+
+/** Document types offered for an appointment type; `default` ones are pre-checked. */
+export const fetchDocTypes = (session: Session, appointmentType: string) =>
+  call<{ docTypes: DocType[] }>(session, `/notes/doc-types?appointmentType=${encodeURIComponent(appointmentType)}`);
+
+/** Writes the chosen documents from the transcript (omit `docTypes` for the defaults). Can take about two minutes. */
+export async function generateDocuments(session: Session, visitId: string, docTypes?: string[]): Promise<GenerateResult> {
+  const r = await call<{ documents?: NoteDocument[]; errors?: { docType?: string; error?: string; code?: string }[] }>(
+    session, `${vpath(visitId)}/generate`, { method: "POST", body: JSON.stringify(docTypes ? { docTypes } : {}) });
+  return {
+    documents: r.documents ?? [],
+    errors: (r.errors ?? []).map((e) => ({ docType: e.docType ?? "", error: e.error ?? e.code ?? "generate_failed" })),
+  };
+}
 
 export const listDocuments = (session: Session, visitId: string) =>
-  call<{ documents: NoteDocument[] }>(session, `/notes/visits/${encodeURIComponent(visitId)}/documents`);
+  call<{ documents: NoteDocument[] }>(session, `${vpath(visitId)}/documents`);
 
-export const fetchDocument = (session: Session, visitId: string, docId: string) =>
-  call<NoteContent>(session, `/notes/visits/${encodeURIComponent(visitId)}/documents/${encodeURIComponent(docId)}`);
+export const fetchDocument = (session: Session, visitId: string, docId: string, version?: number) =>
+  call<DocumentDetail>(session, `${vpath(visitId)}/documents/${encodeURIComponent(docId)}${version ? `?version=${version}` : ""}`);
 
-/** Plain wording for the generate / read-note errors. */
+/** Saves the edited form as a NEW version (the earlier versions are never changed). */
+export const saveDocumentVersion = (session: Session, visitId: string, docId: string, baseVersion: number, values: Record<string, FieldValue>) =>
+  call<{ version: number; createdAt: string }>(session, `${vpath(visitId)}/documents/${encodeURIComponent(docId)}/versions`,
+    { method: "POST", body: JSON.stringify({ baseVersion, values }) });
+
+/** Plain wording for the generate / document errors. */
 export function noteErrorMessage(e: unknown): string {
   if (e instanceof ApiFailure) {
     if (e.code === "no_transcript") return "This visit has no transcript yet. Record it first.";
     if (e.code === "model_not_configured") return "The note-writing model is not set up on this server yet.";
     if (e.code === "generate_failed" || e.status === 502) return "The note-writing model failed. Try again in a minute.";
-    if (e.code === "not_found" || e.status === 404) return "That visit or note no longer exists. Refresh the list.";
+    if (e.code === "stale_version") return "Someone saved a newer version while you were editing. Load the latest, then redo your changes.";
+    if (e.code === "no_changes") return "Nothing has changed since this version, so there is nothing to save.";
+    if (e.code === "bad_values") return "Some answers are not valid. Check the form and try again.";
+    if (e.code === "not_found" || e.status === 404) return "That visit or document no longer exists. Refresh the list.";
   }
   return e instanceof Error ? e.message : String(e);
 }

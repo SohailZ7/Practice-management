@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
-import { NoteDialog } from "./NoteDialog";
+import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { Tasks } from "./Tasks";
 import { Search } from "./Search";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
@@ -443,7 +443,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewing, setViewing] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
+  const [chooser, setChooser] = useState(false);
   const gen = useSyncExternalStore(subscribe, () => generationFor(visit.id));
   const canGenerate = visit.hasTranscript || state.phase === "sent";
   // When a generation finishes, refresh the day so the note count updates.
@@ -522,9 +522,9 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
         {state.phase === "saved" && <span className="err">{state.reason}</span>}
-        {gen?.phase === "running" && <div>Writing the note… this can take up to 2 minutes. You can leave this screen.</div>}
+        {gen?.phase === "running" && <div>Writing the documents… this can take up to 2 minutes. You can leave this screen.</div>}
         {gen?.phase === "failed" && <div className="err">{gen.message}</div>}
-        {gen?.phase === "done" && <div>Note ready.</div>}
+        {gen?.phase === "done" && <div>{gen.documents.length ? "Documents ready." : ""}{gen.failedTypes.length > 0 && <span className="err"> Could not write: {gen.failedTypes.join(", ")}.</span>}</div>}
         {state.phase === "sent" && <>Transcript sent{state.note && <span className="err"> ({state.note})</span>}</>}
         {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
         {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
@@ -540,17 +540,15 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             onClose={() => setViewing(false)}
           />
         )}
-        {noteOpen && (
-          <NoteDialog visit={visit} date={date} session={session} focusDocId={gen?.phase === "done" ? gen.documentId : undefined}
-            onClose={() => { setNoteOpen(false); if (gen?.phase === "done") clearGeneration(visit.id); }} />
+        {chooser && (
+          <GenerateDialog visit={visit} session={session} onClose={() => setChooser(false)}
+            onStart={(types) => { clearGeneration(visit.id); void startGenerate(session, visit.id, types); }} />
         )}
-        {(visit.documentCount > 0 || gen?.phase === "done") && (
-          <button className="secondary" onClick={() => setNoteOpen(true)}>{gen?.phase === "done" ? "View note" : "Note"}</button>
-        )}
+        <DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} />
         <button className="secondary" disabled={!canGenerate || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
-          title={canGenerate ? "Write the draft note from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
-          onClick={() => void startGenerate(session, visit.id)}>
-          {gen?.phase === "running" ? "Generating…" : "Generate"}
+          title={canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
+          onClick={() => setChooser(true)}>
+          {gen?.phase === "running" ? "Generating…" : "Generate documents"}
         </button>
         {state.phase === "recording" ? (
           <>

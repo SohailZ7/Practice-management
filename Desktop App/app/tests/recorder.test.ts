@@ -47,7 +47,7 @@ describe("initials", () => {
   });
 });
 
-import { generateNote, listDocuments, fetchDocument, noteErrorMessage, promoteFeedback, promoteErrorMessage, fetchTasks, createTask, updateTask, taskErrorMessage, fetchTranscript } from "../src/lib/api";
+import { generateDocuments, fetchDocTypes, saveDocumentVersion, listDocuments, fetchDocument, noteErrorMessage, promoteFeedback, promoteErrorMessage, fetchTasks, createTask, updateTask, taskErrorMessage, fetchTranscript } from "../src/lib/api";
 import { searchVisits, searchErrorMessage, searchInputProblem } from "../src/lib/api";
 import { startGenerate, generationFor } from "../src/lib/generate";
 import { describeTranscript } from "../src/TranscriptDialog";
@@ -208,16 +208,20 @@ describe("generate, notes, promote, tasks", () => {
   it("calls the right endpoints", async () => {
     const seen = record({ documentId: "d1", title: "T", content: "C", documents: [], tasks: [], promoted: true, promotedAt: "x", transcript: "t" });
     await fetchTranscript(s, "v1");
-    await generateNote(s, "v1");
+    await fetchDocTypes(s, "Follow Up");
+    await generateDocuments(s, "v1", ["a", "b"]);
     await listDocuments(s, "v1");
     await fetchDocument(s, "v1", "d1");
+    await fetchDocument(s, "v1", "d1", 2);
+    await saveDocumentVersion(s, "v1", "d1", 2, { x: "y" });
     await promoteFeedback(s, "f1");
     await fetchTasks(s, "open");
     await createTask(s, "Call back", "2026-11-10");
     await updateTask(s, "t1", { status: "done" });
     expect(seen).toEqual([
-      "GET /notes/visits/v1/transcript", "POST /notes/visits/v1/generate", "GET /notes/visits/v1/documents",
-      "GET /notes/visits/v1/documents/d1", "POST /feedback/f1/promote", "GET /tasks?status=open", "POST /tasks", "PATCH /tasks/t1",
+      "GET /notes/visits/v1/transcript", "GET /notes/doc-types?appointmentType=Follow%20Up", "POST /notes/visits/v1/generate",
+      "GET /notes/visits/v1/documents", "GET /notes/visits/v1/documents/d1", "GET /notes/visits/v1/documents/d1?version=2",
+      "POST /notes/visits/v1/documents/d1/versions", "POST /feedback/f1/promote", "GET /tasks?status=open", "POST /tasks", "PATCH /tasks/t1",
     ]);
   });
 
@@ -227,6 +231,9 @@ describe("generate, notes, promote, tasks", () => {
     expect(noteErrorMessage(f(409, "model_not_configured"))).toMatch(/not set up/);
     expect(noteErrorMessage(f(502, "generate_failed"))).toMatch(/failed/);
     expect(noteErrorMessage(f(404, "not_found"))).toMatch(/no longer exists/);
+    expect(noteErrorMessage(f(409, "stale_version"))).toMatch(/newer version/);
+    expect(noteErrorMessage(f(400, "no_changes"))).toMatch(/Nothing has changed/);
+    expect(noteErrorMessage(f(400, "bad_values"))).toMatch(/not valid/);
     expect(promoteErrorMessage(f(409, "already_promoted"))).toMatch(/already/);
     expect(promoteErrorMessage(f(409, "is_test_item"))).toMatch(/test item/);
     expect(promoteErrorMessage(f(502, "promote_failed"))).toMatch(/did not accept/);
@@ -234,11 +241,16 @@ describe("generate, notes, promote, tasks", () => {
   });
 
   it("generation runs outside the screen and records the result", async () => {
-    record({ documentId: "d9", title: "Progress note", content: "x" });
-    const p = startGenerate(s, "vx");
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", (_u: string, i?: RequestInit) => {
+      bodies.push(String(i?.body));
+      return Promise.resolve(new Response(JSON.stringify({ documents: [{ id: "d9", docType: "progress", title: "Progress note", latestVersion: 1 }], errors: [{ docType: "psych_eval", error: "generate_failed" }] }), { status: 200 }));
+    });
+    const p = startGenerate(s, "vx", ["progress", "psych_eval"]);
     expect(generationFor("vx")?.phase).toBe("running");
     await p;
-    expect(generationFor("vx")).toMatchObject({ phase: "done", documentId: "d9" });
+    expect(generationFor("vx")).toMatchObject({ phase: "done", failedTypes: ["psych_eval"] });
+    expect(bodies[0]).toBe('{"docTypes":["progress","psych_eval"]}');
     record({ error: "model_not_configured" }, 409);
     await startGenerate(s, "vy");
     expect(generationFor("vy")).toMatchObject({ phase: "failed" });

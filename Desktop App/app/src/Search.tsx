@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NoteDialog } from "./NoteDialog";
+import { DocumentIcons } from "./DocumentDialogs";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { searchErrorMessage, searchInputProblem, searchVisits, SignedOutError, type Session, type Visit, type VisitHit } from "./lib/api";
 import type { Engine } from "./lib/engine";
@@ -17,7 +17,7 @@ export function Search({ engine, session, onSignedOut }: { engine: Engine; sessi
   const [hits, setHits] = useState<VisitHit[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState<{ hit: VisitHit; kind: "transcript" | "note" } | null>(null);
+  const [open, setOpen] = useState<VisitHit | null>(null);
 
   async function run() {
     const problem = searchInputProblem(initials, date);
@@ -51,19 +51,18 @@ export function Search({ engine, session, onSignedOut }: { engine: Engine; sessi
               <tr key={h.id}>
                 <td>{h.date}</td><td>{h.time}</td><td>{h.initials}</td><td>{h.program}</td><td>{h.type}</td><td>{h.provider}</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <button className="secondary" disabled={!h.hasTranscript} title={h.hasTranscript ? "Read the transcript" : "No transcript"} onClick={() => setOpen({ hit: h, kind: "transcript" })}>Transcript</button>
-                  <button className="secondary" disabled={!h.hasDocuments} title={h.hasDocuments ? "Read the note" : "No note"} onClick={() => setOpen({ hit: h, kind: "note" })}>Note</button>
+                  <button className="secondary" disabled={!h.hasTranscript} title={h.hasTranscript ? "Read the transcript" : "No transcript"} onClick={() => setOpen(h)}>Transcript</button>
+                  {h.hasDocuments && <DocumentIcons visit={asVisit(h)} session={session} refreshKey="" />}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      {open?.kind === "transcript" && (
-        <TranscriptDialog visit={asVisit(open.hit)} date={open.hit.date} status={{ phase: "idle" }} queueItem={undefined} queued={false}
+      {open && (
+        <TranscriptDialog visit={asVisit(open)} date={open.date} status={{ phase: "idle" }} queueItem={undefined} queued={false}
           engine={engine} session={session} onClose={() => setOpen(null)} />
       )}
-      {open?.kind === "note" && <NoteDialog visit={asVisit(open.hit)} date={open.hit.date} session={session} onClose={() => setOpen(null)} />}
     </div>
   );
 }
