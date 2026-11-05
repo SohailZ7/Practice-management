@@ -78,7 +78,7 @@ describe("DocumentForm", () => {
   });
   it("read-only disables controls", () => {
     const html = renderToStaticMarkup(createElement(DocumentForm, { fields, values: {}, readOnly: true, onChange: () => {} }));
-    expect(html).toContain("readOnly");
+    expect(html).toContain("readonly");
     expect(html).toContain("disabled");
   });
 });
