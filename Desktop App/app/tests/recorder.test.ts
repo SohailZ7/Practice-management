@@ -261,6 +261,8 @@ describe("visit search", () => {
     expect(searchInputProblem("", "")).toMatch(/initials, a date, or both/);
     expect(searchInputProblem("A1", "")).toMatch(/letters only/);
     expect(searchInputProblem("ab", "")).toBe("");
+    expect(searchInputProblem("A.B.", "")).toBe("");
+    expect(searchInputProblem("ABCD", "")).toMatch(/up to 3/);
     expect(searchInputProblem("", "2026-11-05")).toBe("");
   });
 });

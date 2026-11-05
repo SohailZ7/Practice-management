@@ -371,7 +371,8 @@ export function searchErrorMessage(e: unknown): string {
 export function searchInputProblem(initials: string, date: string): string {
   const i = initials.trim();
   if (!i && !date) return "Enter the patient's initials, a date, or both.";
-  if (i && !/^[A-Za-z]{1,5}$/.test(i)) return "Initials are letters only, like AB.";
+  if (i && !/^[A-Za-z][A-Za-z. ]*$/.test(i)) return "Initials are letters only, like AB.";
+  if (i && i.replace(/[^A-Za-z]/g, "").length > 3) return "Use up to 3 initials, like AB.";
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "That date is not valid.";
   return "";
 }

@@ -35,7 +35,7 @@ export function Search({ engine, session, onSignedOut }: { engine: Engine; sessi
     <div className="card" style={{ maxWidth: 860 }}>
       <h2 style={{ marginTop: 0 }}>Find a visit</h2>
       <form className="row" onSubmit={(e) => { e.preventDefault(); void run(); }}>
-        <input value={initials} onChange={(e) => setInitials(e.target.value)} placeholder="Initials (AB)" aria-label="Patient initials" size={12} maxLength={5} />
+        <input value={initials} onChange={(e) => setInitials(e.target.value)} placeholder="Initials (AB)" aria-label="Patient initials" size={12} maxLength={8} />
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
         <button disabled={busy}>{busy ? "Searching…" : "Search"}</button>
         <button type="button" className="secondary" onClick={() => { setInitials(""); setDate(""); setHits(null); setError(""); }}>Clear</button>
