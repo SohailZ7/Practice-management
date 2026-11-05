@@ -1,7 +1,7 @@
 [package]
 name = "practice-notes"
 version = "0.0.1"
-description = "Practice desktop app (spike)"
+description = "Practice Recorder: captures visit audio and transcribes it locally"
 edition = "2021"
 
 [lib]
@@ -15,8 +15,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# No TLS on purpose: the app only ever talks to Ollama on 127.0.0.1.
-ureq = { version = "2", default-features = false, features = ["json"] }
+# rustls (feature "tls") so the app can reach the practice app over https; localhost stays plain http.
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+keyring = { version = "3", features = ["apple-native"] }
+aes-gcm = "0.10"
+whisper-rs = { version = "0.16.0", features = ["metal"] }
 
 # Capturing the audio of a telehealth call needs a native API: macOS does not let a web page record what comes out
 # of the speakers. ScreenCaptureKit is what Meetily uses for the same reason.

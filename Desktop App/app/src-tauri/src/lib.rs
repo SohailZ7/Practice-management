@@ -1,22 +1,27 @@
-//! Native side of the recorder. It does the two things a web page cannot on macOS: capture audio (including, in
-//! time, the system audio of a telehealth call) and run the transcription engine locally.
+//! Native side of the recorder. It does the two things a web page cannot on macOS: capture audio (including the
+//! system audio of a telehealth call) and transcribe it locally, in this process, with whisper.cpp.
 //!
-//! PHI rules (desktop spec SEC-1): no patient name, transcript or note text is ever logged. Error messages name the kind
-//! of failure, never the content. Nothing here talks to anything beyond 127.0.0.1.
+//! PHI rules (desktop spec SEC-1): no patient name, transcript or note text is ever logged. Error messages name the
+//! kind of failure, never the content. No audio is ever written to disk. The only network traffic is to the practice
+//! app (https, or http to localhost) and Google's sign-in.
 //!
-//! The recorder holds nothing: it pulls the day's visits from the practice app, records, transcribes here, and pushes
-//! the text back. The audio is shredded after transcription and never leaves this Mac.
+//! The recorder holds nothing of its own: it pulls the day's visits from the practice app, records, transcribes here,
+//! saves the transcript in an encrypted on-disk queue, and pushes the text to the practice app (where a cloud model
+//! writes the note). The queue folder is shredded only after the server confirms the upload.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod capture;
 pub mod google;
+pub mod keystore;
+pub mod queue;
+pub mod transcribe;
 
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 // ----------------------------------------------------------------------------- paths and settings
 
@@ -37,56 +42,78 @@ fn settings_path() -> PathBuf {
     support_dir().join("settings.json")
 }
 
-/// Everything the Setup screen configures. The recorder holds no patient data of its own.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+/// The three servers the app can talk to. There is deliberately no free-text address.
+pub const ENVIRONMENTS: [(&str, &str); 3] = [
+    ("production", "https://practice-mgmt-802176721153.us-east4.run.app"),
+    ("staging", "https://practice-mgmt-321509350517.us-east4.run.app"),
+    ("localhost", "http://localhost:3000"),
+];
+
+pub fn env_url(env: &str) -> Result<&'static str, String> {
+    ENVIRONMENTS.iter().find(|(k, _)| *k == env).map(|(_, u)| *u).ok_or_else(|| "unknown environment".to_string())
+}
+
+/// What the Setup screen configures. Tokens are not here: they live in the Keychain, per environment.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Settings {
-    /// Where the practice app runs.
-    pub practice_url: String,
-    /// Token issued by the practice app. Treated like a password: never logged.
-    pub access_token: String,
-    /// Renews the access token when it expires. Also never logged.
-    pub refresh_token: String,
-    /// Whisper model file used for transcription.
-    pub whisper_model: String,
+    pub environment: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self {
-            practice_url: String::new(),
-            access_token: String::new(),
-            refresh_token: String::new(),
-            whisper_model: find_whisper_model(),
-        }
+        Self { environment: "production".into() }
     }
 }
 
-/// Looks for an already-downloaded Whisper model, so a fresh install usually needs no setup for transcription.
-/// The first existing file wins; otherwise the default location is offered for the user to download into.
-fn find_whisper_model() -> String {
-    let app = support_dir().join("models");
-    let lib = home().join("Library/Application Support");
-    let candidates = [
-        app.join("ggml-small.en.bin"),
-        lib.join("PracticeNotesSpike/models/ggml-small.en.bin"),
-        lib.join("PracticeNotes/models/ggml-small.en.bin"),
-        home().join("models/ggml-small.en.bin"),
-        PathBuf::from("/opt/homebrew/share/whisper.cpp/models/ggml-small.en.bin"),
-    ];
-    candidates
+/// Plaintext tokens an older version left in settings.json.
+struct Legacy {
+    env: String,
+    access: String,
+    refresh: String,
+}
+
+/// Reads a settings file's JSON, including the old shape (practice_url, access_token, refresh_token, whisper_model).
+/// Returns the settings, any legacy tokens to move into the Keychain, and whether the file needs rewriting.
+fn parse_settings(v: &serde_json::Value) -> (Settings, Option<Legacy>, bool) {
+    let text = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let url = text("practice_url");
+    let url_env = ENVIRONMENTS
         .iter()
-        .find(|p| p.exists())
-        .unwrap_or(&candidates[0])
-        .to_string_lossy()
-        .into()
+        .find(|(_, u)| !url.is_empty() && u.trim_end_matches('/') == url.trim_end_matches('/'))
+        .map(|(k, _)| k.to_string());
+    let environment = {
+        let e = text("environment");
+        if env_url(&e).is_ok() { e } else { url_env.clone().unwrap_or_else(|| "production".into()) }
+    };
+    let (access, refresh) = (text("access_token"), text("refresh_token"));
+    let legacy = match (&url_env, access.is_empty()) {
+        (Some(env), false) => Some(Legacy { env: env.clone(), access: access.clone(), refresh: refresh.clone() }),
+        _ => None,
+    };
+    let dirty = ["practice_url", "access_token", "refresh_token", "whisper_model"].iter().any(|k| v.get(*k).is_some());
+    (Settings { environment }, legacy, dirty)
 }
 
 pub fn load_settings() -> Settings {
-    fs::read_to_string(settings_path())
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let Some(v) = fs::read_to_string(settings_path()).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()) else {
+        return Settings::default();
+    };
+    let (settings, legacy, dirty) = parse_settings(&v);
+    if dirty {
+        // Move any plaintext token into the Keychain, then scrub the file. If the Keychain write fails the file is
+        // left alone so the sign-in is not lost, but the failure is silent: the user can sign in again.
+        let moved = match legacy {
+            Some(l) if keystore::load_tokens(&l.env).is_none() => {
+                keystore::store_tokens(&l.env, &keystore::Tokens { access: l.access, refresh: l.refresh }).is_ok()
+            }
+            _ => true,
+        };
+        if moved {
+            let _ = store_settings(&settings);
+        }
+    }
+    settings
 }
 
 fn store_settings(s: &Settings) -> Result<(), String> {
@@ -106,20 +133,15 @@ pub fn safe_component(name: &str) -> Result<&str, String> {
     if bad { Err("invalid name".into()) } else { Ok(name) }
 }
 
-// ----------------------------------------------------------------------------- engines
-
-fn env_or(key: &str, default: impl Into<String>) -> String {
-    std::env::var(key).unwrap_or_else(|_| default.into())
-}
-fn whisper_cli() -> String {
-    env_or("WHISPER_CLI", "/opt/homebrew/bin/whisper-cli")
-}
-fn ffmpeg() -> String {
-    env_or("FFMPEG", "/opt/homebrew/bin/ffmpeg")
+#[cfg(test)]
+fn unique(prefix: &str) -> String {
+    let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    format!("{prefix}-{}-{t}", std::process::id())
 }
 
 /// Overwrites a file with zeros, then removes it. Best effort: an SSD may keep old blocks, which is why the notes
 /// folder should sit on a FileVault disk (desktop spec SEC-4).
+#[allow(dead_code)]
 fn shred(path: &Path) {
     if let Ok(meta) = fs::metadata(path) {
         if let Ok(mut f) = fs::OpenOptions::new().write(true).open(path) {
@@ -136,97 +158,121 @@ fn shred(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
-fn temp_dir() -> Result<PathBuf, String> {
-    let dir = support_dir().join("tmp");
-    fs::create_dir_all(&dir).map_err(|_| "cannot create the temporary folder".to_string())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+// ----------------------------------------------------------------------------- the transcription model
+
+/// Where the Whisper model may be, best first: the bundled resource, the app's own folder, then the spike's folder
+/// used during development.
+fn model_candidates(resource: Option<PathBuf>) -> Vec<PathBuf> {
+    let lib = home().join("Library/Application Support");
+    let mut v = Vec::new();
+    if let Some(r) = resource {
+        v.push(r);
     }
-    Ok(dir)
+    v.push(support_dir().join("models/ggml-small.en.bin"));
+    v.push(lib.join("PracticeNotesSpike/models/ggml-small.en.bin"));
+    v
 }
 
-fn unique(prefix: &str) -> String {
-    let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    format!("{prefix}-{}-{t}", std::process::id())
-}
-
-/// Audio bytes to text. Both the audio and its converted copy are shredded afterwards; only the transcript survives.
-pub fn transcribe_bytes(audio: &[u8], ext: &str) -> Result<String, String> {
-    let ext = if ext.chars().all(|c| c.is_ascii_alphanumeric()) && !ext.is_empty() && ext.len() <= 5 { ext } else { "bin" };
-    let dir = temp_dir()?;
-    let base = unique("rec");
-    let input = dir.join(format!("{base}.{ext}"));
-    let wav = dir.join(format!("{base}.wav"));
-    fs::write(&input, audio).map_err(|_| "cannot write the audio to disk".to_string())?;
-
-    let model = load_settings().whisper_model;
-    let result = (|| -> Result<String, String> {
-        let st = Command::new(ffmpeg())
-            .args(["-y", "-loglevel", "error", "-i"]).arg(&input)
-            .args(["-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le"]).arg(&wav)
-            .status().map_err(|_| "ffmpeg is not installed".to_string())?;
-        if !st.success() { return Err("could not read the audio".into()); }
-        if !Path::new(&model).exists() { return Err("the transcription model is missing; set it in Setup".into()); }
-        let out = Command::new(whisper_cli())
-            .args(["-m", &model, "-nt", "-np", "-l", "en", "-f"]).arg(&wav)
-            .output().map_err(|_| "whisper.cpp is not installed".to_string())?;
-        if !out.status.success() { return Err("transcription failed".into()); }
-        Ok(String::from_utf8_lossy(&out.stdout).split_whitespace().collect::<Vec<_>>().join(" "))
-    })();
-
-    shred(&input);
-    shred(&wav);
-    result
+fn find_model(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let resource = app.path().resolve("models/ggml-small.en.bin", tauri::path::BaseDirectory::Resource).ok();
+    model_candidates(resource).into_iter().find(|p| p.exists())
 }
 
 // ----------------------------------------------------------------------------- status
 
 #[derive(Serialize)]
 pub struct EngineStatus {
-    ffmpeg: bool,
-    whisper_cli: bool,
     whisper_model: bool,
     settings: Settings,
+    /// Which environments have a stored sign-in.
+    signed_in: std::collections::BTreeMap<String, bool>,
 }
 
-pub fn engine_status() -> EngineStatus {
-    let s = load_settings();
-    EngineStatus {
-        ffmpeg: Path::new(&ffmpeg()).exists(),
-        whisper_cli: Path::new(&whisper_cli()).exists(),
-        whisper_model: Path::new(&s.whisper_model).exists(),
-        settings: s,
-    }
+fn signed_in_map() -> std::collections::BTreeMap<String, bool> {
+    ENVIRONMENTS.iter().map(|(k, _)| (k.to_string(), keystore::load_tokens(k).is_some())).collect()
 }
 
 // ----------------------------------------------------------------------------- Tauri commands
 
-fn raw(request: &tauri::ipc::Request) -> Result<Vec<u8>, String> {
-    match request.body() {
-        tauri::ipc::InvokeBody::Raw(b) => Ok(b.clone()),
-        _ => Err("expected raw bytes".into()),
-    }
-}
-fn header(request: &tauri::ipc::Request, name: &str) -> String {
-    request.headers().get(name).and_then(|v| v.to_str().ok()).unwrap_or("").to_string()
-}
-
 #[tauri::command]
-async fn engine_status_cmd() -> EngineStatus { engine_status() }
+async fn engine_status_cmd(app: tauri::AppHandle) -> EngineStatus {
+    EngineStatus { whisper_model: find_model(&app).is_some(), settings: load_settings(), signed_in: signed_in_map() }
+}
 
 #[tauri::command]
 async fn get_settings() -> Settings { load_settings() }
 
-#[tauri::command]
-async fn set_settings(settings: Settings) -> Result<Settings, String> {
-    store_settings(&settings)?;
-    Ok(settings)
-}
-
 /// The recording in progress, if there is one. Only one visit is recorded at a time.
 static RECORDER: std::sync::Mutex<Option<capture::Session>> = std::sync::Mutex::new(None);
+
+fn recording_running() -> bool {
+    RECORDER.lock().map(|s| s.is_some()).unwrap_or(true)
+}
+
+/// Switches environment. Refused while a recording is running.
+#[tauri::command]
+async fn set_environment(environment: String) -> Result<Settings, String> {
+    env_url(&environment)?;
+    if recording_running() {
+        return Err("Stop the recording before switching environment.".into());
+    }
+    let s = Settings { environment };
+    store_settings(&s)?;
+    Ok(s)
+}
+
+/// Signs in with Google against the named environment and stores the tokens in the Keychain.
+#[tauri::command]
+async fn sign_in_with_google(environment: String) -> Result<(), String> {
+    let url = env_url(&environment)?;
+    let tokens = tauri::async_runtime::spawn_blocking(move || google::sign_in(url))
+        .await
+        .map_err(|_| "sign-in failed".to_string())??;
+    keystore::store_tokens(&environment, &keystore::Tokens { access: tokens.access_token, refresh: tokens.refresh_token })
+}
+
+#[tauri::command]
+async fn sign_out(environment: String) -> Result<(), String> {
+    env_url(&environment)?;
+    keystore::clear_tokens(&environment);
+    Ok(())
+}
+
+/// The access token for an environment, if signed in there.
+#[tauri::command]
+async fn get_access_token(environment: String) -> Result<Option<String>, String> {
+    env_url(&environment)?;
+    Ok(keystore::load_tokens(&environment).map(|t| t.access))
+}
+
+static REFRESH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Called after a 401. `stale` is the access token that was rejected. Returns the new access token, or None when the
+/// refresh was refused (the stored sign-in is then removed and the UI shows the sign-in screen).
+#[tauri::command]
+async fn refresh_access_token(environment: String, stale: String) -> Result<Option<String>, String> {
+    let url = env_url(&environment)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _g = REFRESH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(current) = keystore::load_tokens(&environment) else { return Ok(None) };
+        // Another call already refreshed while this one waited.
+        if current.access != stale {
+            return Ok(Some(current.access));
+        }
+        match google::refresh(url, &current.refresh)? {
+            Some(t) => {
+                keystore::store_tokens(&environment, &keystore::Tokens { access: t.access_token.clone(), refresh: t.refresh_token })?;
+                Ok(Some(t.access_token))
+            }
+            None => {
+                keystore::clear_tokens(&environment);
+                Ok(None)
+            }
+        }
+    })
+    .await
+    .map_err(|_| "refresh failed".to_string())?
+}
 
 #[derive(Serialize)]
 pub struct StartResult {
@@ -235,18 +281,6 @@ pub struct StartResult {
 }
 
 /// Begins recording the microphone and, for a telehealth visit, the system audio.
-/// Signs in with Google and stores the tokens the practice app issues.
-#[tauri::command]
-async fn sign_in_with_google(practice_url: String) -> Result<Settings, String> {
-    let tokens = google::sign_in(&practice_url)?;
-    let mut s = load_settings();
-    s.practice_url = practice_url;
-    s.access_token = tokens.access_token;
-    s.refresh_token = tokens.refresh_token;
-    store_settings(&s)?;
-    Ok(s)
-}
-
 #[tauri::command]
 async fn start_recording(with_system_audio: bool) -> Result<StartResult, String> {
     let mut slot = RECORDER.lock().map_err(|_| "the recorder is busy".to_string())?;
@@ -267,9 +301,16 @@ pub struct StopResult {
     one_sided: bool,
 }
 
-/// Ends the recording, transcribes it here, and returns the text. The audio never leaves this Mac.
+fn now_unix() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Ends the recording, transcribes it here, and saves the transcript in the encrypted queue under the visit's id.
+/// The audio exists only in memory and is dropped when this returns.
 #[tauri::command]
-async fn stop_recording() -> Result<(String, StopResult), String> {
+async fn stop_recording(app: tauri::AppHandle, visit_id: String, environment: String) -> Result<StopResult, String> {
+    safe_component(&visit_id)?;
+    env_url(&environment)?;
     let recorder = RECORDER
         .lock()
         .map_err(|_| "the recorder is busy".to_string())?
@@ -279,14 +320,25 @@ async fn stop_recording() -> Result<(String, StopResult), String> {
     if !channels.has_sound() {
         return Err("the recording is silent; check the microphone and try again".into());
     }
-    let summary = StopResult {
-        seconds: channels.mic.len().max(channels.system.len()) as f32 / capture::SAMPLE_RATE as f32,
-        system_audio: !channels.system.is_empty(),
-        one_sided: channels.one_sided(),
+    let seconds = channels.mic.len().max(channels.system.len()) as f32 / capture::SAMPLE_RATE as f32;
+    let summary = StopResult { seconds, system_audio: !channels.system.is_empty(), one_sided: channels.one_sided() };
+    let model = find_model(&app).ok_or("the transcription model is missing")?;
+    let segments = tauri::async_runtime::spawn_blocking(move || transcribe::transcribe(&model, &channels.mic, &channels.system))
+        .await
+        .map_err(|_| "transcription failed".to_string())??;
+    if segments.is_empty() {
+        return Err("The recording produced no text.".into());
+    }
+    let meta = queue::Metadata {
+        version: "1.0".into(),
+        visit_id,
+        environment,
+        created_at: queue::rfc3339_utc(now_unix()),
+        duration_seconds: seconds as f64,
+        status: queue::Status::Pending,
     };
-    let wav = channels.to_stereo_wav()?;
-    let text = transcribe_bytes(&wav, "wav")?;
-    Ok((text, summary))
+    queue::save(&support_dir(), &keystore::queue_key()?, &meta, &segments)?;
+    Ok(summary)
 }
 
 /// Throws away a recording without transcribing it.
@@ -298,21 +350,56 @@ async fn cancel_recording() -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn transcribe(request: tauri::ipc::Request<'_>) -> Result<String, String> {
-    transcribe_bytes(&raw(&request)?, &header(&request, "x-ext"))
+// ----------------------------------------------------------------------------- the queue
+
+#[derive(Serialize)]
+pub struct QueueItem {
+    visit_id: String,
+    environment: String,
+    created_at: String,
+    duration_seconds: f64,
+    status: queue::Status,
 }
 
-/// Names the patient's most recent earlier note. The caller then reads it with read_visit_file; a Tauri command
-/// cannot return raw bytes inside a tuple, so the two steps stay separate.
-/// Drops the DRAFT marker from a file name once the provider has reviewed it (change request 6).
-/// Shows a file in Finder. Only paths inside the notes folder are allowed.
-/// Opens a file with its default application (Word for a .docx). Restricted to the notes folder.
+#[tauri::command]
+async fn queue_list() -> Result<Vec<QueueItem>, String> {
+    let key = keystore::queue_key()?;
+    Ok(queue::list(&support_dir(), &key)
+        .into_iter()
+        .map(|m| QueueItem {
+            visit_id: m.visit_id, environment: m.environment, created_at: m.created_at,
+            duration_seconds: m.duration_seconds, status: m.status,
+        })
+        .collect())
+}
+
+/// The text to upload for a queued visit.
+#[tauri::command]
+async fn queue_text(visit_id: String) -> Result<String, String> {
+    let segments = queue::read_segments(&support_dir(), &keystore::queue_key()?, &visit_id)?;
+    Ok(queue::assemble_text(&segments))
+}
+
+/// Called after the server confirmed the upload: marks the folder uploaded and shreds it.
+#[tauri::command]
+async fn queue_complete(visit_id: String) -> Result<(), String> {
+    let support = support_dir();
+    let _ = queue::mark_uploaded(&support, &keystore::queue_key()?, &visit_id);
+    queue::shred_folder(&support, &visit_id)
+}
+
+/// Deletes a queued transcript the provider chose not to send.
+#[tauri::command]
+async fn queue_discard(visit_id: String) -> Result<(), String> {
+    queue::shred_folder(&support_dir(), &visit_id)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, get_settings, set_settings, transcribe,
-            start_recording, stop_recording, cancel_recording, sign_in_with_google
+            engine_status_cmd, get_settings, set_environment, sign_in_with_google, sign_out, get_access_token,
+            refresh_access_token, start_recording, stop_recording, cancel_recording,
+            queue_list, queue_text, queue_complete, queue_discard
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");
@@ -322,16 +409,14 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    /// Each test gets its own app directory and notes folder, so none of them touch a real one.
-    /// The settings path comes from a process-wide environment variable, so these tests must not run at the same
-    /// time as each other; Rust runs tests in parallel threads by default, which otherwise mixes their folders up.
+    /// Each test gets its own app directory. The path comes from a process-wide environment variable, so these tests
+    /// must not run at the same time as each other.
     static ROOT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn with_temp_root<T>(f: impl FnOnce() -> T) -> T {
         let guard = ROOT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let root = std::env::temp_dir().join(unique("notes-test"));
         std::env::set_var("PRACTICE_APP_DIR", root.join("app").to_string_lossy().to_string());
-        store_settings(&Settings::default()).unwrap();
         let out = f();
         let _ = fs::remove_dir_all(&root);
         drop(guard);
@@ -348,17 +433,40 @@ mod tests {
     }
 
     #[test]
-    fn settings_round_trip_and_fall_back_to_defaults() {
+    fn settings_round_trip_and_default_to_production() {
         with_temp_root(|| {
-            let mut s = load_settings();
-            s.practice_url = "https://notes.example.test".into();
-            s.access_token = "secret".into();
-            store_settings(&s).unwrap();
-            let back = load_settings();
-            assert_eq!(back.practice_url, "https://notes.example.test");
-            assert_eq!(back.access_token, "secret");
-            assert!(!back.whisper_model.is_empty());
+            assert_eq!(load_settings().environment, "production");
+            store_settings(&Settings { environment: "staging".into() }).unwrap();
+            assert_eq!(load_settings().environment, "staging");
+            assert!(!fs::read_to_string(settings_path()).unwrap().contains("token"));
         })
+    }
+
+    #[test]
+    fn old_settings_files_are_read_and_their_tokens_found() {
+        let old = serde_json::json!({
+            "practice_url": "https://practice-mgmt-321509350517.us-east4.run.app/",
+            "access_token": "a", "refresh_token": "r", "whisper_model": "/x.bin"
+        });
+        let (s, legacy, dirty) = parse_settings(&old);
+        assert_eq!(s.environment, "staging");
+        assert!(dirty);
+        let l = legacy.unwrap();
+        assert_eq!((l.env.as_str(), l.access.as_str(), l.refresh.as_str()), ("staging", "a", "r"));
+        // A custom address maps to no environment: tokens are dropped, the default is production.
+        let (s, legacy, dirty) = parse_settings(&serde_json::json!({ "practice_url": "https://other.example", "access_token": "a" }));
+        assert_eq!(s.environment, "production");
+        assert!(legacy.is_none() && dirty);
+        let (_, _, dirty) = parse_settings(&serde_json::json!({ "environment": "localhost" }));
+        assert!(!dirty);
+    }
+
+    #[test]
+    fn built_in_environments_use_allowed_addresses() {
+        for (k, u) in ENVIRONMENTS {
+            assert!(google::check_base_url(u).is_ok(), "{k}");
+        }
+        assert!(env_url("elsewhere").is_err());
     }
 
     #[test]
@@ -367,14 +475,5 @@ mod tests {
         fs::write(&p, vec![7u8; 100_000]).unwrap();
         shred(&p);
         assert!(!p.exists());
-    }
-
-    /// Real engines, synthetic speech. Run with: cargo test -- --ignored
-    #[test]
-    #[ignore]
-    fn real_transcription_and_model() {
-        let wav = std::env::var("SPIKE_AUDIO").expect("set SPIKE_AUDIO to a synthetic audio file");
-        let text = transcribe_bytes(&fs::read(wav).unwrap(), "aiff").unwrap();
-        assert!(text.to_lowercase().contains("sleep"), "transcript was: {text}");
     }
 }

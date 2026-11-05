@@ -2,6 +2,7 @@
 //
 // It pulls the day's visits and pushes back a transcript. The audio never leaves this Mac, and the recorder keeps
 // no patient record of its own: visits arrive as initials and are forgotten when the day changes.
+import { assertSafeBaseUrl } from "./environments";
 
 export type Visit = {
   id: string;
@@ -13,7 +14,23 @@ export type Visit = {
   documentCount: number;
 };
 
-export type Session = { baseUrl: string; accessToken: string };
+export type Session = {
+  baseUrl: string;
+  accessToken: string;
+  /**
+   * Called once after a 401. Returns a new access token, or null when the sign-in could not be renewed. When it is
+   * missing a 401 simply means signed out.
+   */
+  refresh?: (staleToken: string) => Promise<string | null>;
+};
+
+/** The sign-in is gone and could not be renewed: the UI shows the sign-in screen. */
+export class SignedOutError extends Error {
+  constructor() {
+    super("Signed out. Sign in again in Setup.");
+    this.name = "SignedOutError";
+  }
+}
 
 export type AuthConfig = { googleSignIn: boolean };
 
@@ -22,13 +39,15 @@ export type AuthConfig = { googleSignIn: boolean };
  * shows as an explanation rather than a button that does nothing.
  */
 export async function fetchAuthConfig(baseUrl: string): Promise<AuthConfig> {
+  assertSafeBaseUrl(baseUrl);
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/desktop/v1/auth/config`);
   if (!res.ok) throw new Error(`The practice app returned ${res.status}.`);
-  return (await res.json()) as AuthConfig;
+  const c = (await res.json()) as AuthConfig;
+  return { googleSignIn: c.googleSignIn === true };
 }
 
-async function call<T>(session: Session, path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${session.baseUrl.replace(/\/$/, "")}/api/desktop/v1${path}`, {
+async function send(session: Session, path: string, init: RequestInit): Promise<Response> {
+  return fetch(`${session.baseUrl.replace(/\/$/, "")}/api/desktop/v1${path}`, {
     ...init,
     headers: {
       ...(init.headers ?? {}),
@@ -36,7 +55,18 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
       ...(init.body ? { "content-type": "application/json" } : {}),
     },
   });
-  if (res.status === 401) throw new Error("Signed out. Sign in again in Setup.");
+}
+
+async function call<T>(session: Session, path: string, init: RequestInit = {}): Promise<T> {
+  assertSafeBaseUrl(session.baseUrl);
+  let res = await send(session, path, init);
+  if (res.status === 401 && session.refresh) {
+    const next = await session.refresh(session.accessToken);
+    if (!next) throw new SignedOutError();
+    session.accessToken = next;
+    res = await send(session, path, init);
+  }
+  if (res.status === 401) throw new SignedOutError();
   if (res.status === 403) throw new Error("This account does not have access to Notes.");
   if (!res.ok) throw new Error(`The practice app returned ${res.status}.`);
   return (await res.json()) as T;

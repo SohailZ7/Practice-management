@@ -20,7 +20,7 @@ This needs an OAuth client, which is a one-off job in Google Cloud.
 1. Open the [Google Cloud console](https://console.cloud.google.com/apis/credentials) for the project this app runs in.
 2. **Create credentials** then **OAuth client ID**, and choose the type **Desktop app**. Name it something like
    "Practice Recorder".
-3. Copy the client ID and client secret it gives you.
+3. Copy the client ID and client secret it gives you. The secret stays on the server and is never sent to the recorder.
 4. Put both in this app's `.env`:
    ```
    GOOGLE_DESKTOP_CLIENT_ID=...apps.googleusercontent.com

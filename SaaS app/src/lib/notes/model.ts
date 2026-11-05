@@ -24,7 +24,7 @@ export function modelConfig(env: NodeJS.ProcessEnv = process.env): ModelConfig {
     return {
       provider: "vertex",
       project: vertexProject,
-      location: env.NOTES_VERTEX_LOCATION || "global",
+      location: env.NOTES_VERTEX_LOCATION || "us",
       model: env.NOTES_MODEL || "gemini-3.5-flash",
       token: env.NOTES_VERTEX_TOKEN, // local testing only; on Cloud Run the service account is used
     };
@@ -57,7 +57,11 @@ async function serviceAccountToken(): Promise<string> {
 async function vertexChat(cfg: Extract<ModelConfig, { provider: "vertex" }>, system: string, prompt: string): Promise<string> {
   const token = cfg.token || (await serviceAccountToken());
   // Current Gemini models are served from the "global" endpoint; regional ones use a location prefix.
-  const host = cfg.location === "global" ? "aiplatform.googleapis.com" : `${cfg.location}-aiplatform.googleapis.com`;
+  // Multi-regions ("us", "eu") use the .rep host; single regions use a location prefix.
+  const host =
+    cfg.location === "global" ? "aiplatform.googleapis.com"
+    : cfg.location === "us" || cfg.location === "eu" ? `aiplatform.${cfg.location}.rep.googleapis.com`
+    : `${cfg.location}-aiplatform.googleapis.com`;
   const url =
     `https://${host}/v1/projects/${cfg.project}/locations/${cfg.location}` +
     `/publishers/google/models/${cfg.model}:generateContent`;

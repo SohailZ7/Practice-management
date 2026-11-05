@@ -1,5 +1,7 @@
 # Desktop App: Requirements v1
 
+> **Superseded (2026-11-04).** Statements about Ollama and a fully local language model no longer apply. **Current design (2026-11-04):** speech-to-text runs locally in the app via `whisper-rs`, with the model bundled in the DMG (no ffmpeg, no whisper-cli, no Homebrew, no first-run download). Audio is never saved (memory only). The transcript is saved as an encrypted Meetily-style per-visit folder (`transcripts.json` + `metadata.json`) and deleted after the server confirms the upload. Note writing runs in the cloud on Vertex AI (Gemini) under the Google BAA, not Ollama and not self-hosted. Google-only sign-in. One build with a Production/Staging/Localhost dropdown. Tokens in the macOS Keychain. Apple Silicon only. See `docs/final-architecture.md`. The text below is kept as history.
+
 Status: Draft (current version)
 Date: 2026-10-18
 Owner: Sohail

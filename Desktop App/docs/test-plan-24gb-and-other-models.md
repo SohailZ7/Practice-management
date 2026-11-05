@@ -1,5 +1,7 @@
 # Test plan: a real 24 GB Mac, other model families, and the 32B second run
 
+> **Superseded (2026-11-04).** This plan tested local models via Ollama and is no longer needed. **Current design (2026-11-04):** speech-to-text runs locally in the app via `whisper-rs`, with the model bundled in the DMG (no ffmpeg, no whisper-cli, no Homebrew, no first-run download). Audio is never saved (memory only). The transcript is saved as an encrypted Meetily-style per-visit folder (`transcripts.json` + `metadata.json`) and deleted after the server confirms the upload. Note writing runs in the cloud on Vertex AI (Gemini) under the Google BAA, not Ollama and not self-hosted. Google-only sign-in. One build with a Production/Staging/Localhost dropdown. Tokens in the macOS Keychain. Apple Silicon only. See `docs/final-architecture.md`. The text below is kept as history.
+
 Why: the spike's result (a 14B model with both safety passes reaches 95% of critical checks) comes from one Mac (M5 Pro, 64 GB) and
 one model family (Qwen2.5). Before the requirements rely on "14B on 24 GB", we need three more facts. Everything uses the 12 invented
 visits in `app/tests/eval/`. **No real patient data is used or needed.**

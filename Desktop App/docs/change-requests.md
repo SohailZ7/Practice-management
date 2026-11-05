@@ -1,5 +1,7 @@
 # Desktop App: change requests log
 
+> **Superseded (2026-11-04).** Items 11 and 18 mention Ollama, ffmpeg and a first-run model download; those are overridden. **Current design (2026-11-04):** speech-to-text runs locally in the app via `whisper-rs`, with the model bundled in the DMG (no ffmpeg, no whisper-cli, no Homebrew, no first-run download). Audio is never saved (memory only). The transcript is saved as an encrypted Meetily-style per-visit folder (`transcripts.json` + `metadata.json`) and deleted after the server confirms the upload. Note writing runs in the cloud on Vertex AI (Gemini) under the Google BAA, not Ollama and not self-hosted. Google-only sign-in. One build with a Production/Staging/Localhost dropdown. Tokens in the macOS Keychain. Apple Silicon only. See `docs/final-architecture.md`. The text below is kept as history.
+
 A running list of changes the owner asks for while going through the app. **Nothing here is built until the owner says "build it".**
 When that happens these become the next `specs/requirements-vN.md` (full copy plus a "Changes since" section) and are built in small, tested steps.
 

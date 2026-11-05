@@ -14,7 +14,7 @@ describe("modelConfig", () => {
   });
   it("prefers Vertex when a project is set", () => {
     const cfg = modelConfig({ NODE_ENV: "production", NOTES_VERTEX_PROJECT: "p" } as NodeJS.ProcessEnv);
-    expect(cfg).toMatchObject({ provider: "vertex", project: "p", location: "global", model: "gemini-3.5-flash" });
+    expect(cfg).toMatchObject({ provider: "vertex", project: "p", location: "us", model: "gemini-3.5-flash" });
   });
 });
 
@@ -36,6 +36,8 @@ describe("makeLlm", () => {
     expect(url).toContain("gemini-2.5-flash:generateContent");
     await makeLlm({ provider: "vertex", project: "proj", location: "global", model: "m", token: "tok" })({ system: "s", prompt: "p" });
     expect(fetchMock.mock.calls[1][0]).toContain("https://aiplatform.googleapis.com/v1/projects/proj/locations/global");
+    await makeLlm({ provider: "vertex", project: "proj", location: "us", model: "m", token: "tok" })({ system: "s", prompt: "p" });
+    expect(fetchMock.mock.calls[2][0]).toContain("https://aiplatform.us.rep.googleapis.com/v1/projects/proj/locations/us/");
     expect((init as RequestInit).headers).toMatchObject({ authorization: "Bearer tok" });
   });
   it("reports an HTTP failure without leaking the body", async () => {

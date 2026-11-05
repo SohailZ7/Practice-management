@@ -20,8 +20,6 @@ pub struct AuthConfig {
     pub google_sign_in: bool,
     #[serde(rename = "clientId")]
     pub client_id: String,
-    #[serde(rename = "clientSecret")]
-    pub client_secret: String,
 }
 
 /// The tokens the practice app issues once it recognises the person.
@@ -48,7 +46,7 @@ fn base64_url(bytes: &[u8]) -> String {
 }
 
 /// Random bytes from the system, used for the PKCE verifier and the state value.
-fn random_bytes(n: usize) -> Result<Vec<u8>, String> {
+pub fn random_bytes(n: usize) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let mut buf = vec![0u8; n];
     std::fs::File::open("/dev/urandom")
@@ -167,8 +165,41 @@ fn wait_for_code(listener: TcpListener, expected_state: &str) -> Result<String, 
     code.ok_or_else(|| "Google did not return a sign-in code".to_string())
 }
 
+/// Only https is allowed, except plain http to this Mac (localhost or 127.0.0.1) for development.
+pub fn check_base_url(url: &str) -> Result<(), String> {
+    let bad = || Err("The practice app address must use https (http is only allowed for localhost).".to_string());
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return bad();
+    }
+    if let Some(rest) = url.strip_prefix("https://") {
+        return if rest.is_empty() || rest.starts_with('/') || rest.starts_with(':') { bad() } else { Ok(()) };
+    }
+    if let Some(rest) = url.strip_prefix("http://") {
+        let host = rest.split(|c| c == ':' || c == '/').next().unwrap_or("");
+        return if host == "localhost" || host == "127.0.0.1" { Ok(()) } else { bad() };
+    }
+    bad()
+}
+
+/// Swaps a refresh token for a new pair. The server rotates the refresh token, so the old one is dead afterwards.
+/// `Ok(None)` means the server refused it (signed out for good); `Err` means it could not be reached.
+pub fn refresh(practice_url: &str, refresh_token: &str) -> Result<Option<PracticeTokens>, String> {
+    check_base_url(practice_url)?;
+    let base = practice_url.trim_end_matches('/');
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(30)).build();
+    match agent
+        .post(&format!("{base}/api/desktop/v1/auth/refresh"))
+        .send_json(ureq::json!({ "refreshToken": refresh_token }))
+    {
+        Ok(r) => r.into_json().map(Some).map_err(|_| "the practice app gave an unreadable reply".to_string()),
+        Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => Ok(None),
+        Err(_) => Err("The practice app could not be reached.".into()),
+    }
+}
+
 /// Runs the whole sign-in and returns the practice app's tokens.
 pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
+    check_base_url(practice_url)?;
     let base = practice_url.trim_end_matches('/');
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(30)).build();
 
@@ -179,7 +210,7 @@ pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
         .into_json()
         .map_err(|_| "the practice app gave an unreadable reply".to_string())?;
     if !config.google_sign_in {
-        return Err("This practice app has no Google sign-in set up. Use a pairing token from its Settings instead.".into());
+        return Err("Google sign-in is not set up on this server yet.".into());
     }
 
     let verifier = base64_url(&random_bytes(48)?);
@@ -210,29 +241,17 @@ pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
 
     let code = wait_for_code(listener, &state)?;
 
-    #[derive(Deserialize)]
-    struct GoogleTokens {
-        id_token: String,
-    }
-    let google: GoogleTokens = agent
-        .post("https://oauth2.googleapis.com/token")
-        .set("content-type", "application/x-www-form-urlencoded")
-        .send_string(&form_encode(&[
-            ("code", &code),
-            ("client_id", &config.client_id),
-            ("client_secret", &config.client_secret),
-            ("redirect_uri", &redirect),
-            ("grant_type", "authorization_code"),
-            ("code_verifier", &verifier),
-        ]))
-        .map_err(|_| "Google would not complete the sign-in".to_string())?
-        .into_json()
-        .map_err(|_| "Google gave an unreadable reply".to_string())?;
-
+    // The practice app swaps the code for an ID token (it holds the client secret), checks its allowlist and
+    // issues the tokens in one call.
     let label = hostname();
     agent
-        .post(&format!("{base}/api/desktop/v1/auth/token"))
-        .send_json(ureq::json!({ "idToken": google.id_token, "deviceLabel": label }))
+        .post(&format!("{base}/api/desktop/v1/auth/google-exchange"))
+        .send_json(ureq::json!({
+            "code": code,
+            "code_verifier": verifier,
+            "redirect_uri": redirect,
+            "deviceLabel": label,
+        }))
         .map_err(|e| match e {
             ureq::Error::Status(403, _) => "That Google account is not allowed to use this practice app.".to_string(),
             ureq::Error::Status(401, _) => "The practice app did not accept that sign-in.".to_string(),
@@ -257,6 +276,12 @@ fn hostname() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auth_config_has_no_client_secret_field() {
+        let c: AuthConfig = serde_json::from_str(r#"{"googleSignIn":true,"clientId":"x"}"#).unwrap();
+        assert!(c.google_sign_in && c.client_id == "x");
+    }
 
     #[test]
     fn sha256_matches_known_values() {
@@ -287,6 +312,17 @@ mod tests {
         assert_ne!(a, b);
         assert!(a.len() >= 43, "PKCE verifiers must be at least 43 characters");
         assert_ne!(base64_url(&sha256(&a)), a);
+    }
+
+    #[test]
+    fn only_https_or_local_http_addresses_are_accepted() {
+        for ok in ["https://a.run.app", "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost"] {
+            assert!(check_base_url(ok).is_ok(), "{ok}");
+        }
+        for bad in ["http://example.com", "http://localhost.evil.com", "http://localhost@evil.com", "ftp://x", "", "https://",
+                    "notes.example.org", "http://localhost:3000 /x"] {
+            assert!(check_base_url(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

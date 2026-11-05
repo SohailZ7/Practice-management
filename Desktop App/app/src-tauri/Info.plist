@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Practice Recorder records the visit on this Mac so it can be turned into a draft note. The recording is deleted after it is turned into text.</string>
+  <string>Practice Recorder records the visit on this Mac so it can be turned into a draft note. The recording is never saved; it is turned into text in memory.</string>
   <key>NSAudioCaptureUsageDescription</key>
   <string>Practice Recorder captures the audio of a telehealth call so the patient's side of the visit is recorded as well as yours.</string>
   <key>NSScreenCaptureUsageDescription</key>

@@ -1,5 +1,7 @@
 # Local model comparison (spike, 2026-10-19, second round)
 
+> **Superseded (2026-11-04).** This compares local Ollama models; the shipped app uses Gemini on Vertex AI instead. **Current design (2026-11-04):** speech-to-text runs locally in the app via `whisper-rs`, with the model bundled in the DMG (no ffmpeg, no whisper-cli, no Homebrew, no first-run download). Audio is never saved (memory only). The transcript is saved as an encrypted Meetily-style per-visit folder (`transcripts.json` + `metadata.json`) and deleted after the server confirms the upload. Note writing runs in the cloud on Vertex AI (Gemini) under the Google BAA, not Ollama and not self-hosted. Google-only sign-in. One build with a Production/Staging/Localhost dropdown. Tokens in the macOS Keychain. Apple Silicon only. See `docs/final-architecture.md`. The text below is kept as history.
+
 Question: which local model should write the note drafts, and what goes wrong?
 
 ## Method

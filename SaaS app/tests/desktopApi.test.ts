@@ -78,6 +78,7 @@ describe("rate limits for the Desktop API (API-1)", () => {
   it("limits sign-in more tightly than other calls", () => {
     expect(ruleFor("POST", "/api/desktop/v1/auth/token", false)?.name).toBe("desktop-auth");
     expect(ruleFor("POST", "/api/desktop/v1/auth/refresh", false)?.limit).toBe(20);
+    expect(ruleFor("POST", "/api/desktop/v1/auth/google-exchange", false)?.name).toBe("desktop-auth");
     expect(ruleFor("GET", "/api/desktop/v1/schedule", false)?.name).toBe("desktop");
   });
 });
@@ -101,5 +102,16 @@ describe("pairing tokens (connecting a recorder)", () => {
     const days = (sessionExpiry(now).getTime() - now) / 86_400_000;
     expect(days).toBeGreaterThan(7);
     expect(days).toBeLessThan(400);
+  });
+});
+
+describe("auth/config never serves the client secret", () => {
+  it("returns only googleSignIn and clientId", async () => {
+    process.env.GOOGLE_DESKTOP_CLIENT_ID = "id.apps.googleusercontent.com";
+    process.env.GOOGLE_DESKTOP_CLIENT_SECRET = "super-secret-value";
+    const { GET } = await import("../src/app/api/desktop/v1/auth/config/route");
+    const text = await (await GET(new Request("http://x/api/desktop/v1/auth/config"))).text();
+    expect(text).not.toContain("super-secret-value");
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["clientId", "googleSignIn"]);
   });
 });
