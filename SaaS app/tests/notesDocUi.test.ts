@@ -103,3 +103,21 @@ describe("docsApi client", () => {
     expect(docsApi.pdfUrl("v", "d")).toBe("/api/notes/visits/v/documents/d/pdf");
   });
 });
+
+import { DocApiError as BackendDocApiError } from "../src/lib/notes/docsClient";
+import { generateErrorMessage as genMsg, saveErrorOutcome as saveOutcome } from "../src/lib/notes/docUi";
+
+describe("backend error codes as built", () => {
+  it("words the new generate errors", () => {
+    expect(genMsg(new BackendDocApiError(400, "bad_doc_types"))).toMatch(/not recognised/);
+    expect(genMsg(new BackendDocApiError(400, "no_doc_types"))).toMatch(/at least one/);
+    expect(genMsg(new BackendDocApiError(409, "no_transcript"))).toMatch(/no transcript/);
+    expect(genMsg(new BackendDocApiError(502, "generate_failed"))).toMatch(/did not finish/);
+  });
+  it("names the fields a bad_values save rejected", () => {
+    const e = new BackendDocApiError(400, "bad_values", { error: "bad_values", fields: ["dob"] });
+    expect(saveOutcome(e, [{ name: "dob", label: "Date of birth", type: "date" }])).toEqual({
+      kind: "error", message: "Some values are not valid for this form: Date of birth. Fix them and try again.",
+    });
+  });
+});

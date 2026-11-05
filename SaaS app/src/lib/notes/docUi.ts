@@ -6,6 +6,8 @@ const GENERATE_MESSAGES: Record<string, string> = {
   not_found: "This visit could not be found. It may have been deleted. Refresh the page.",
   no_transcript: "This visit has no transcript yet. Finish the recording first.",
   model_not_configured: "No note-writing model is set up yet. Ask the administrator to configure one.",
+  bad_doc_types: "One of the chosen document types is not recognised. Refresh the page and choose again.",
+  no_doc_types: "Choose at least one document to write.",
   generate_failed: "The note-writing model did not finish. Nothing was lost. Try again in a minute.",
 };
 
@@ -64,11 +66,15 @@ export function versionLabel(v: VersionInfo, original: number | null, latest: nu
 
 export type SaveOutcome = { kind: "saved"; version: number } | { kind: "stale" } | { kind: "no_changes" } | { kind: "error"; message: string };
 
-export function saveErrorOutcome(e: unknown): SaveOutcome {
+export function saveErrorOutcome(e: unknown, fields: FieldDef[] = []): SaveOutcome {
   if (e instanceof DocApiError) {
     if (e.code === "stale_version") return { kind: "stale" };
     if (e.code === "no_changes") return { kind: "no_changes" };
-    if (e.code === "bad_values") return { kind: "error", message: "Some values are not valid for this form. Check the highlighted fields and try again." };
+    if (e.code === "bad_values") {
+      const names = Array.isArray(e.body?.fields) ? (e.body.fields as unknown[]).filter((n): n is string => typeof n === "string") : [];
+      const labels = names.map((n) => fields.find((f) => f.name === n)?.label ?? n);
+      return { kind: "error", message: `Some values are not valid for this form${labels.length ? `: ${labels.join(", ")}` : ""}. Fix them and try again.` };
+    }
     if (e.status === 404) return { kind: "error", message: "This document no longer exists. Close this window and refresh." };
     if (e.status === 403 || e.status === 401) return { kind: "error", message: "You do not have permission to save this document." };
   }

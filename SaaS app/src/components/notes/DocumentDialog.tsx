@@ -79,11 +79,11 @@ export function DocumentDialog({ visitId, docId, title, canEdit, onClose, api = 
       setViewing(r.version);
       setStale(false);
       setPdfKey((k) => k + 1);
-      setDoc((d) => d && { ...d, current: { version: r.version, values }, versions: [...d.versions, { version: r.version, source: "user", createdAt: r.createdAt }] });
+      setDoc((d) => d && { ...d, current: { version: r.version, values }, versions: [...d.versions, { version: r.version, source: "edit", createdAt: r.createdAt }] });
       setMsg({ kind: "info", text: `Saved as version ${r.version}.` });
       return true;
     } catch (e) {
-      const o = saveErrorOutcome(e);
+      const o = saveErrorOutcome(e, fields);
       if (o.kind === "stale") setStale(true);
       else if (o.kind === "no_changes") setMsg({ kind: "info", text: "Nothing has changed since the last saved version." });
       else if (o.kind === "error") setMsg({ kind: "error", text: o.message });
