@@ -9,7 +9,7 @@ NAME="BBC Practice Recorder Dev"
 unset APPLE_SIGNING_IDENTITY
 npm run tauri build -- --bundles app
 SRC="src-tauri/target/release/bundle/macos/Practice Recorder.app"
-OUT="src-tauri/target/release/bundle/signed"
+OUT="$HOME/PracticeRecorder-signed"   # outside the iCloud-synced Documents folder, which keeps re-adding attributes
 rm -rf "$OUT"; mkdir -p "$OUT"
 ditto --norsrc --noextattr --noqtn "$SRC" "$OUT/Practice Recorder.app"
 xattr -cr "$OUT/Practice Recorder.app"
