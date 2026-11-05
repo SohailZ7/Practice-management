@@ -230,8 +230,14 @@ pub fn refresh(practice_url: &str, refresh_token: &str) -> Result<Option<Practic
     }
 }
 
-/// Runs the whole sign-in and returns the practice app's tokens.
-pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
+/// What the Google exchange returns: tokens, or (with two-factor on) a short-lived step token for the code screens.
+pub enum SignInReply {
+    Tokens(PracticeTokens),
+    Mfa { mode: String, token: String },
+}
+
+/// Runs the whole sign-in and returns the practice app's tokens, or the two-factor step still to do.
+pub fn sign_in(practice_url: &str) -> Result<SignInReply, String> {
     check_base_url(practice_url)?;
     let base = practice_url.trim_end_matches('/');
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(30)).build();
@@ -277,7 +283,7 @@ pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
     // The practice app swaps the code for an ID token (it holds the client secret), checks its allowlist and
     // issues the tokens in one call.
     let label = hostname();
-    agent
+    let reply: serde_json::Value = agent
         .post(&format!("{base}/api/desktop/v1/auth/google-exchange"))
         .send_json(ureq::json!({
             "code": code,
@@ -291,7 +297,17 @@ pub fn sign_in(practice_url: &str) -> Result<PracticeTokens, String> {
             _ => "The practice app could not be reached.".to_string(),
         })?
         .into_json()
-        .map_err(|_| "the practice app gave an unreadable reply".to_string())
+        .map_err(|_| "the practice app gave an unreadable reply".to_string())?;
+    parse_exchange(reply)
+}
+
+/// Reads the exchange reply: `{mfa, mfaToken}` or the normal token response.
+pub fn parse_exchange(reply: serde_json::Value) -> Result<SignInReply, String> {
+    if let Some(mode) = reply.get("mfa").and_then(|v| v.as_str()) {
+        let token = reply.get("mfaToken").and_then(|v| v.as_str()).ok_or("the practice app gave an unreadable reply")?;
+        return Ok(SignInReply::Mfa { mode: mode.to_string(), token: token.to_string() });
+    }
+    serde_json::from_value(reply).map(SignInReply::Tokens).map_err(|_| "the practice app gave an unreadable reply".to_string())
 }
 
 fn hostname() -> String {
@@ -314,6 +330,16 @@ mod tests {
     fn auth_config_has_no_client_secret_field() {
         let c: AuthConfig = serde_json::from_str(r#"{"googleSignIn":true,"clientId":"x"}"#).unwrap();
         assert!(c.google_sign_in && c.client_id == "x");
+    }
+
+    #[test]
+    fn exchange_reply_is_tokens_or_an_mfa_step() {
+        let m = parse_exchange(serde_json::json!({"mfa":"enroll","mfaToken":"t"})).unwrap();
+        assert!(matches!(m, SignInReply::Mfa { ref mode, ref token } if mode == "enroll" && token == "t"));
+        let t = parse_exchange(serde_json::json!({"accessToken":"a","refreshToken":"r"})).unwrap();
+        assert!(matches!(t, SignInReply::Tokens(_)));
+        assert!(parse_exchange(serde_json::json!({"mfa":"verify"})).is_err());
+        assert!(parse_exchange(serde_json::json!({"nope":1})).is_err());
     }
 
     #[test]

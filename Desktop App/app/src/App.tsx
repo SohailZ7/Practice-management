@@ -4,6 +4,7 @@ import { TranscriptDialog } from "./TranscriptDialog";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { Tasks } from "./Tasks";
 import { Search } from "./Search";
+import { Mfa } from "./Mfa";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
@@ -601,6 +602,8 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
 }) {
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState("");
+  // Two-factor step in progress (token in memory only).
+  const [mfa, setMfa] = useState<{ mode: "enroll" | "verify"; token: string } | null>(null);
   // null while unknown, so the button is never offered before the server has been asked.
   const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
   // A failed check is shown as what it is (with Retry), never as "not set up".
@@ -612,6 +615,7 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
     setGoogleAvailable(null);
     setConfigError("");
     setError("");
+    setMfa(null);
     let alive = true;
     fetchAuthConfig(url)
       .then((c) => alive && setGoogleAvailable(c.googleSignIn))
@@ -658,7 +662,12 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
         </p>
       )}
 
-      <div className="row" style={{ marginBottom: ".8rem" }}>
+      {mfa && (
+        <Mfa engine={engine} env={env} mode={mfa.mode} token={mfa.token}
+          onDone={() => { setMfa(null); void onChanged(); }}
+          onRestart={(m) => { setMfa(null); setError(m); }} />
+      )}
+      <div className="row" style={{ marginBottom: ".8rem", display: mfa ? "none" : undefined }}>
         {googleAvailable !== false && (
           <button
             disabled={signingIn || googleAvailable !== true}
@@ -666,8 +675,9 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
               setSigningIn(true);
               setError("");
               try {
-                await engine.signInWithGoogle(env);
-                await onChanged();
+                const out = await engine.signInWithGoogle(env);
+                if (out.mfa && out.mfaToken) setMfa({ mode: out.mfa, token: out.mfaToken });
+                else await onChanged();
               } catch (e) {
                 setError(e instanceof Error ? e.message : String(e));
               } finally {

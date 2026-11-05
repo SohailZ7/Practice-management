@@ -48,6 +48,7 @@ describe("initials", () => {
 });
 
 import { generateDocuments, fetchDocTypes, saveDocumentVersion, listDocuments, fetchDocument, noteErrorMessage, promoteFeedback, promoteErrorMessage, fetchTasks, createTask, updateTask, taskErrorMessage, fetchTranscript } from "../src/lib/api";
+import { cleanCode, isSixDigits, interpret, retryWording } from "../src/lib/mfa";
 import { searchVisits, searchErrorMessage, searchInputProblem } from "../src/lib/api";
 import { startGenerate, generationFor } from "../src/lib/generate";
 import { describeTranscript } from "../src/TranscriptDialog";
@@ -276,5 +277,25 @@ describe("visit search", () => {
     expect(searchInputProblem("A.B.", "")).toBe("");
     expect(searchInputProblem("ABCD", "")).toMatch(/up to 3/);
     expect(searchInputProblem("", "2026-11-05")).toBe("");
+  });
+});
+
+describe("two-factor helpers", () => {
+  it("cleans pasted codes", () => {
+    expect(cleanCode("123 456")).toBe("123456");
+    expect(cleanCode("12-34-56 78")).toBe("123456");
+    expect(isSixDigits("123456")).toBe(true);
+    expect(isSixDigits("12345")).toBe(false);
+  });
+  it("maps each server answer to a plain result", () => {
+    expect(interpret(200, '{"recoveryCodes":["a"]}')).toMatchObject({ ok: true });
+    expect(interpret(400, '{"error":"bad_code"}')).toMatchObject({ ok: false, kind: "error", message: expect.stringMatching(/not right/) });
+    expect(interpret(400, '{"error":"bad_code"}', true)).toMatchObject({ message: expect.stringMatching(/recovery code/) });
+    expect(interpret(401, '{"error":"invalid_or_expired_mfa_token"}')).toMatchObject({ kind: "expired" });
+    expect(interpret(409, '{"error":"already_enrolled"}')).toMatchObject({ kind: "restart" });
+    expect(interpret(409, '{"error":"not_enrolled"}')).toMatchObject({ kind: "restart" });
+    expect(interpret(429, '{"error":"too_many_attempts","retryAfterSeconds":600}')).toMatchObject({ message: expect.stringMatching(/10 minutes/) });
+    expect(interpret(429, "{}")).toMatchObject({ message: expect.stringMatching(/few minutes/) });
+    expect(retryWording({ retryAt: new Date(Date.now() + 5 * 60000).toISOString() })).toMatch(/5 minutes|6 minutes/);
   });
 });

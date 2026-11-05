@@ -225,14 +225,90 @@ async fn set_environment(environment: String) -> Result<Settings, String> {
     Ok(s)
 }
 
-/// Signs in with Google against the named environment and stores the tokens in the Keychain.
+/// What the front end learns from the first sign-in step. Tokens never leave Rust.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignInOutcome {
+    /// "enroll" or "verify" when a two-factor step is still to do; None when signed in.
+    mfa: Option<String>,
+    mfa_token: Option<String>,
+}
+
+/// Tokens waiting for the person to confirm they saved their recovery codes. Memory only.
+static PENDING_TOKENS: std::sync::Mutex<Option<(String, keystore::Tokens)>> = std::sync::Mutex::new(None);
+
+/// Signs in with Google against the named environment. With two-factor on, returns the step to do next; otherwise
+/// the tokens are stored in the Keychain.
 #[tauri::command]
-async fn sign_in_with_google(environment: String) -> Result<(), String> {
+async fn sign_in_with_google(environment: String) -> Result<SignInOutcome, String> {
     let url = env_url(&environment)?;
-    let tokens = tauri::async_runtime::spawn_blocking(move || google::sign_in(url))
+    let reply = tauri::async_runtime::spawn_blocking(move || google::sign_in(url))
         .await
         .map_err(|_| "sign-in failed".to_string())??;
-    keystore::store_tokens(&environment, &keystore::Tokens { access: tokens.access_token, refresh: tokens.refresh_token })
+    match reply {
+        google::SignInReply::Mfa { mode, token } => Ok(SignInOutcome { mfa: Some(mode), mfa_token: Some(token) }),
+        google::SignInReply::Tokens(t) => {
+            keystore::store_tokens(&environment, &keystore::Tokens { access: t.access_token, refresh: t.refresh_token })?;
+            Ok(SignInOutcome { mfa: None, mfa_token: None })
+        }
+    }
+}
+
+/// The two-factor steps. Returns (status, body); any tokens in the reply are kept in Rust (and removed from the body).
+/// `hold` keeps them in memory until `mfa_finish` (used after enrollment, so recovery codes are seen first).
+#[tauri::command]
+async fn mfa_step(environment: String, step: String, body: String) -> Result<(u16, String), String> {
+    let url = env_url(&environment)?;
+    let (path, hold) = match step.as_str() {
+        "enroll_start" => ("/api/desktop/v1/auth/mfa/enroll/start", false),
+        "enroll_confirm" => ("/api/desktop/v1/auth/mfa/enroll/confirm", true),
+        "verify" => ("/api/desktop/v1/auth/mfa/verify", false),
+        _ => return Err("Unknown step.".into()),
+    };
+    let (status, text) = tauri::async_runtime::spawn_blocking(move || google::api_request(url, "POST", path, None, Some(&body)))
+        .await
+        .map_err(|_| "request failed".to_string())??;
+    Ok((status, take_tokens(&environment, status, text, hold)?))
+}
+
+/// Pulls accessToken/refreshToken out of a successful reply and stores (or holds) them.
+fn take_tokens(environment: &str, status: u16, text: String, hold: bool) -> Result<String, String> {
+    if status != 200 && status != 201 {
+        return Ok(text);
+    }
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&text) else { return Ok(text) };
+    let (Some(a), Some(r)) = (
+        v.get("accessToken").and_then(|x| x.as_str()).map(String::from),
+        v.get("refreshToken").and_then(|x| x.as_str()).map(String::from),
+    ) else { return Ok(text) };
+    let tokens = keystore::Tokens { access: a, refresh: r };
+    if hold {
+        *PENDING_TOKENS.lock().unwrap_or_else(|e| e.into_inner()) = Some((environment.to_string(), tokens));
+    } else {
+        keystore::store_tokens(environment, &tokens)?;
+    }
+    if let Some(o) = v.as_object_mut() {
+        o.remove("accessToken");
+        o.remove("refreshToken");
+    }
+    Ok(v.to_string())
+}
+
+/// Completes sign-in after the recovery codes were saved: moves the held tokens into the Keychain.
+#[tauri::command]
+async fn mfa_finish(environment: String) -> Result<(), String> {
+    env_url(&environment)?;
+    let held = PENDING_TOKENS.lock().unwrap_or_else(|e| e.into_inner()).take();
+    match held {
+        Some((env, t)) if env == environment => keystore::store_tokens(&environment, &t),
+        _ => Err("Sign-in expired. Sign in again.".into()),
+    }
+}
+
+/// Abandons a two-factor flow: forgets any held tokens.
+#[tauri::command]
+fn mfa_cancel() {
+    *PENDING_TOKENS.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 #[tauri::command]
@@ -511,7 +587,7 @@ async fn queue_discard(visit_id: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, get_settings, set_environment, sign_in_with_google, sign_out, get_access_token,
+            engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy
         ])
@@ -589,5 +665,28 @@ mod tests {
         fs::write(&p, vec![7u8; 100_000]).unwrap();
         shred(&p);
         assert!(!p.exists());
+    }
+}
+
+#[cfg(test)]
+mod mfa_tests {
+    use super::*;
+
+    #[test]
+    fn replies_without_tokens_pass_through_and_failures_are_untouched() {
+        let body = r#"{"secret":"S","otpauthUri":"otpauth://x"}"#.to_string();
+        assert_eq!(take_tokens("staging", 200, body.clone(), false).unwrap(), body);
+        let err = r#"{"error":"bad_code"}"#.to_string();
+        assert_eq!(take_tokens("staging", 400, err.clone(), true).unwrap(), err);
+    }
+
+    #[test]
+    fn held_tokens_are_removed_from_the_reply_but_recovery_codes_stay() {
+        let body = r#"{"accessToken":"a","refreshToken":"r","recoveryCodes":["c1","c2"]}"#.to_string();
+        let out = take_tokens("staging", 200, body, true).unwrap();
+        assert!(!out.contains("accessToken") && !out.contains("refreshToken") && out.contains("c1"));
+        assert!(PENDING_TOKENS.lock().unwrap().is_some());
+        mfa_cancel();
+        assert!(PENDING_TOKENS.lock().unwrap().is_none());
     }
 }

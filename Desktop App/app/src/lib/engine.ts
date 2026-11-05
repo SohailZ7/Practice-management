@@ -23,12 +23,21 @@ export type QueueItem = {
   status: "pending" | "uploaded";
 };
 
+/** `mfa` is set when a two-factor step is still to do; `mfaToken` is its single-use step token (memory only). */
+export type SignInOutcome = { mfa: "enroll" | "verify" | null; mfaToken: string | null };
+export type MfaStep = "enroll_start" | "enroll_confirm" | "verify";
+
 export interface Engine {
   readonly kind: "native" | "fake";
   status(): Promise<EngineStatus>;
   setEnvironment(environment: EnvironmentId): Promise<Settings>;
   /** Opens the system browser to sign in with Google; the tokens go to the Keychain. */
-  signInWithGoogle(environment: EnvironmentId): Promise<void>;
+  signInWithGoogle(environment: EnvironmentId): Promise<SignInOutcome>;
+  /** One two-factor step (tokens stay in the Rust side). Returns the HTTP status and the reply body. */
+  mfaStep(environment: EnvironmentId, step: MfaStep, body: object): Promise<{ status: number; body: string }>;
+  /** After the recovery codes were saved: completes the sign-in. */
+  mfaFinish(environment: EnvironmentId): Promise<void>;
+  mfaCancel(): Promise<void>;
   signOut(environment: EnvironmentId): Promise<void>;
   accessToken(environment: EnvironmentId): Promise<string | null>;
   /** Renews the sign-in after a 401. Null when the server refused the refresh token. */
@@ -61,7 +70,13 @@ async function nativeEngine(): Promise<Engine> {
     kind: "native",
     status: () => invoke<EngineStatus>("engine_status_cmd"),
     setEnvironment: (environment) => invoke<Settings>("set_environment", { environment }),
-    signInWithGoogle: (environment) => invoke<void>("sign_in_with_google", { environment }),
+    signInWithGoogle: (environment) => invoke<SignInOutcome>("sign_in_with_google", { environment }),
+    mfaStep: async (environment, step, body) => {
+      const [status, text] = await invoke<[number, string]>("mfa_step", { environment, step, body: JSON.stringify(body) });
+      return { status, body: text };
+    },
+    mfaFinish: (environment) => invoke<void>("mfa_finish", { environment }),
+    mfaCancel: () => invoke<void>("mfa_cancel"),
     signOut: (environment) => invoke<void>("sign_out", { environment }),
     accessToken: (environment) => invoke<string | null>("get_access_token", { environment }),
     refreshAccessToken: (environment, stale) => invoke<string | null>("refresh_access_token", { environment, stale }),
@@ -96,6 +111,9 @@ function fakeEngine(): Engine {
     }),
     setEnvironment: async (e) => ((environment = e), { environment }),
     signInWithGoogle: async () => { throw new Error("Signing in only works in the real app."); },
+    mfaStep: async () => { throw new Error("Signing in only works in the real app."); },
+    mfaFinish: async () => { throw new Error("Signing in only works in the real app."); },
+    mfaCancel: async () => {},
     signOut: async (e) => { delete tokens[e]; },
     accessToken: async (e) => tokens[e] ?? null,
     refreshAccessToken: async () => null,
