@@ -24,6 +24,7 @@ model User {
   desktopSessions DesktopSession[]
   apiTokens       ApiToken[]
   feedback        FeedbackItem[]
+  diagnostics     DesktopDiagnostic[]
 }
 
 // module: schedule | tasks | employees   level: none | view | edit
@@ -551,4 +552,19 @@ model TimesheetPayment {
   ledgerEntry   LedgerEntry?      @relation(fields: [ledgerEntryId], references: [id], onDelete: SetNull)
 
   @@index([employeeId, date])
+}
+
+// Mac recorder diagnostics: event + error code only (no free text). Pruned after 90 days (src/lib/desktop/diagnostics.ts).
+model DesktopDiagnostic {
+  id         String   @id @default(cuid())
+  userId     String?
+  appVersion String
+  os         String
+  event      String
+  code       String
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }
