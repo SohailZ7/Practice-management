@@ -407,7 +407,13 @@ fn now_unix() -> u64 {
 /// Ends the recording, transcribes it here, and saves the transcript in the encrypted queue under the visit's id.
 /// The audio exists only in memory and is dropped when this returns.
 #[tauri::command]
-async fn stop_recording(app: tauri::AppHandle, visit_id: String, environment: String) -> Result<StopResult, String> {
+async fn stop_recording(
+    app: tauri::AppHandle,
+    visit_id: String,
+    environment: String,
+    previous: Option<String>,
+    separator: Option<String>,
+) -> Result<StopResult, String> {
     safe_component(&visit_id)?;
     env_url(&environment)?;
     let recorder = RECORDER
@@ -436,7 +442,12 @@ async fn stop_recording(app: tauri::AppHandle, visit_id: String, environment: St
         duration_seconds: seconds as f64,
         status: queue::Status::Pending,
     };
-    queue::save(&support_dir(), &keystore::queue_key()?, &meta, &segments)?;
+    // Adding to an earlier transcript: the earlier text (held by the app until now) goes in front, with a time line.
+    let preface = match previous.as_deref().map(str::trim_end).filter(|p| !p.is_empty()) {
+        Some(p) => format!("{p}{}", separator.unwrap_or_else(|| "\n\n".into())),
+        None => String::new(),
+    };
+    queue::save(&support_dir(), &keystore::queue_key()?, &meta, &segments, &preface)?;
     Ok(summary)
 }
 
@@ -500,8 +511,22 @@ async fn queue_list() -> Result<Vec<QueueItem>, String> {
 /// The text to upload for a queued visit.
 #[tauri::command]
 async fn queue_text(visit_id: String) -> Result<String, String> {
-    let segments = queue::read_segments(&support_dir(), &keystore::queue_key()?, &visit_id)?;
-    Ok(queue::assemble_text(&segments))
+    queue::read_text(&support_dir(), &keystore::queue_key()?, &visit_id)
+}
+
+/// Puts a visit's saved transcript back to exactly `text` (used to undo an addition the provider decided against).
+#[tauri::command]
+async fn queue_set_text(visit_id: String, environment: String, text: String) -> Result<(), String> {
+    env_url(&environment)?;
+    let meta = queue::Metadata {
+        version: "1.0".into(),
+        visit_id,
+        environment,
+        created_at: queue::rfc3339_utc(now_unix()),
+        duration_seconds: 0.0,
+        status: queue::Status::Pending,
+    };
+    queue::save(&support_dir(), &keystore::queue_key()?, &meta, &[], &text)
 }
 
 /// Called after the server confirmed the upload: marks the folder uploaded and shreds it.
@@ -560,8 +585,7 @@ async fn save_transcript_copy(visit_id: String, label: String) -> Result<bool, S
     if !dir.is_dir() {
         return Err("The folder for transcript copies is missing. Choose it again in Setup.".into());
     }
-    let segments = queue::read_segments(&support_dir(), &keystore::queue_key()?, &visit_id)?;
-    let text = queue::assemble_text(&segments);
+    let text = queue::read_text(&support_dir(), &keystore::queue_key()?, &visit_id)?;
     let stem = clean_file_stem(&label);
     let mut path = dir.join(format!("{stem}.txt"));
     let mut n = 2;
@@ -589,7 +613,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy
+            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");

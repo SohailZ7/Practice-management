@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 NAME="BBC Practice Recorder Dev"
 unset APPLE_SIGNING_IDENTITY
+# One output only: any older unsigned/signed copies inside target/ are removed so a stale 0.0.1 cannot be launched by mistake.
+rm -rf src-tauri/target/release/bundle/macos src-tauri/target/release/bundle/signed
 npm run tauri build -- --bundles app
 SRC="src-tauri/target/release/bundle/macos/Practice Recorder.app"
 OUT="$HOME/PracticeRecorder-signed"   # outside the iCloud-synced Documents folder, which keeps re-adding attributes
@@ -18,3 +20,5 @@ if security find-identity -p codesigning | grep -q "$NAME"; then ID="$NAME"; els
 codesign --force --deep --sign "$ID" "$OUT/Practice Recorder.app"
 codesign -dv "$OUT/Practice Recorder.app" 2>&1 | grep -E "Authority|Signature|Identifier"
 codesign --verify --deep --strict "$OUT/Practice Recorder.app" && echo "signature OK: $OUT/Practice Recorder.app"
+rm -rf "$SRC"   # the unsigned build is not kept; the only app is $OUT
+echo "Built: $(defaults read "$OUT/Practice Recorder.app/Contents/Info" CFBundleShortVersionString) at $OUT/Practice Recorder.app"

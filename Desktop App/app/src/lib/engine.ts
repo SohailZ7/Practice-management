@@ -45,12 +45,15 @@ export interface Engine {
   /** Records the microphone and, for a telehealth visit, the system audio. */
   startRecording(withSystemAudio: boolean): Promise<{ warning: string | null }>;
   /** Stops, transcribes on this Mac, and saves the transcript in the encrypted queue under the visit id. */
-  stopRecording(visitId: string, environment: EnvironmentId): Promise<StopResult>;
+  /** `previous` is earlier text for the same visit to keep in front of this recording, after `separator`. */
+  stopRecording(visitId: string, environment: EnvironmentId, previous?: string, separator?: string): Promise<StopResult>;
   cancelRecording(): Promise<void>;
   /** Stops a microphone-only dictation and returns the transcript. Nothing is saved on disk. */
   stopDictation(): Promise<string>;
   queueList(): Promise<QueueItem[]>;
   queueText(visitId: string): Promise<string>;
+  /** Puts the saved transcript back to exactly this text (undoes an addition). */
+  queueSetText(visitId: string, environment: EnvironmentId, text: string): Promise<void>;
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
   queueComplete(visitId: string): Promise<void>;
   queueDiscard(visitId: string): Promise<void>;
@@ -81,11 +84,13 @@ async function nativeEngine(): Promise<Engine> {
     accessToken: (environment) => invoke<string | null>("get_access_token", { environment }),
     refreshAccessToken: (environment, stale) => invoke<string | null>("refresh_access_token", { environment, stale }),
     startRecording: (withSystemAudio) => invoke<{ warning: string | null }>("start_recording", { withSystemAudio }),
-    stopRecording: (visitId, environment) => invoke<StopResult>("stop_recording", { visitId, environment }),
+    stopRecording: (visitId, environment, previous, separator) =>
+      invoke<StopResult>("stop_recording", { visitId, environment, previous: previous ?? null, separator: separator ?? null }),
     cancelRecording: () => invoke<void>("cancel_recording"),
     stopDictation: () => invoke<string>("stop_dictation"),
     queueList: () => invoke<QueueItem[]>("queue_list"),
     queueText: (visitId) => invoke<string>("queue_text", { visitId }),
+    queueSetText: (visitId, environment, text) => invoke<void>("queue_set_text", { visitId, environment, text }),
     queueComplete: (visitId) => invoke<void>("queue_complete", { visitId }),
     chooseTranscriptDir: () => invoke<string | null>("choose_transcript_dir"),
     setTranscriptCopyDir: (dir) => invoke<Settings>("set_transcript_copy_dir", { dir }),
@@ -118,7 +123,7 @@ function fakeEngine(): Engine {
     accessToken: async (e) => tokens[e] ?? null,
     refreshAccessToken: async () => null,
     startRecording: async () => ({ warning: "Fake engines: nothing is being recorded." }),
-    stopRecording: async (visitId, env) => {
+    stopRecording: async (visitId, env, previous, separator) => {
       queue.set(visitId, { visit_id: visitId, environment: env, created_at: new Date().toISOString(), duration_seconds: 12, status: "pending" });
       return { seconds: 12, system_audio: true, one_sided: false };
     },
@@ -126,6 +131,7 @@ function fakeEngine(): Engine {
     stopDictation: async () => FAKE_TRANSCRIPT,
     queueList: async () => [...queue.values()],
     queueText: async () => FAKE_TRANSCRIPT,
+    queueSetText: async () => {},
     queueComplete: async (id) => { queue.delete(id); },
     queueDiscard: async (id) => { queue.delete(id); },
     chooseTranscriptDir: async () => null,

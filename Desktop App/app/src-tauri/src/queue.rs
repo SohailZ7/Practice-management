@@ -34,6 +34,9 @@ pub struct TranscriptFile {
     pub version: String,
     pub total_segments: usize,
     pub segments: Vec<Segment>,
+    /// Text recorded earlier for the same visit (and the separator line), kept in front of the new segments.
+    #[serde(default)]
+    pub preface: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -114,7 +117,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Saves (or replaces) a visit's folder.
-pub fn save(support: &Path, key: &[u8; 32], meta: &Metadata, segments: &[Segment]) -> Result<(), String> {
+pub fn save(support: &Path, key: &[u8; 32], meta: &Metadata, segments: &[Segment], preface: &str) -> Result<(), String> {
     let dir = visit_dir(support, &meta.visit_id)?;
     fs::create_dir_all(&dir).map_err(|_| "could not create the queue folder".to_string())?;
     #[cfg(unix)]
@@ -122,7 +125,7 @@ pub fn save(support: &Path, key: &[u8; 32], meta: &Metadata, segments: &[Segment
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
     }
-    let tf = TranscriptFile { version: "1.0".into(), total_segments: segments.len(), segments: segments.to_vec() };
+    let tf = TranscriptFile { version: "1.0".into(), total_segments: segments.len(), segments: segments.to_vec(), preface: preface.to_string() };
     let t = serde_json::to_vec_pretty(&tf).map_err(|_| "could not prepare the transcript".to_string())?;
     let m = serde_json::to_vec_pretty(meta).map_err(|_| "could not prepare the transcript".to_string())?;
     write_private(&dir.join("transcripts.json"), &encrypt(key, &t)?)?;
@@ -134,6 +137,15 @@ pub fn read_metadata(support: &Path, key: &[u8; 32], visit_id: &str) -> Result<M
     let dir = visit_dir(support, visit_id)?;
     let data = fs::read(dir.join("metadata.json")).map_err(|_| "no saved transcript for that visit".to_string())?;
     serde_json::from_slice(&decrypt(key, &data)?).map_err(|_| "the saved transcript is unreadable".to_string())
+}
+
+/// The whole saved transcript: any earlier text followed by the newly transcribed segments.
+pub fn read_text(support: &Path, key: &[u8; 32], visit_id: &str) -> Result<String, String> {
+    let dir = visit_dir(support, visit_id)?;
+    let data = fs::read(dir.join("transcripts.json")).map_err(|_| "no saved transcript for that visit".to_string())?;
+    let tf: TranscriptFile =
+        serde_json::from_slice(&decrypt(key, &data)?).map_err(|_| "the saved transcript is unreadable".to_string())?;
+    Ok(format!("{}{}", tf.preface, assemble_text(&tf.segments)))
 }
 
 pub fn read_segments(support: &Path, key: &[u8; 32], visit_id: &str) -> Result<Vec<Segment>, String> {
@@ -276,6 +288,21 @@ mod tests {
     }
 
     #[test]
+    fn an_added_recording_keeps_the_earlier_text_in_front() {
+        let dir = tmp();
+        let key = [4u8; 32];
+        let meta = Metadata {
+            version: "1.0".into(), visit_id: "v2".into(), environment: "staging".into(),
+            created_at: rfc3339_utc(0), duration_seconds: 1.0, status: Status::Pending,
+        };
+        save(&dir, &key, &meta, &[seg("a", "second part", "mic", 0.0)], "first part\n\n--- added ---\n\n").unwrap();
+        assert_eq!(read_text(&dir, &key, "v2").unwrap(), "first part\n\n--- added ---\n\nsecond part");
+        save(&dir, &key, &meta, &[], "only earlier text").unwrap();
+        assert_eq!(read_text(&dir, &key, "v2").unwrap(), "only earlier text");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_visit_folder_saves_lists_and_is_shredded() {
         let dir = tmp();
         let key = [3u8; 32];
@@ -283,7 +310,7 @@ mod tests {
             version: "1.0".into(), visit_id: "v1".into(), environment: "staging".into(),
             created_at: rfc3339_utc(0), duration_seconds: 12.5, status: Status::Pending,
         };
-        save(&dir, &key, &meta, &[seg("a", "secret words", "mic", 0.0)]).unwrap();
+        save(&dir, &key, &meta, &[seg("a", "secret words", "mic", 0.0)], "").unwrap();
         let raw = fs::read(dir.join("queue/v1/transcripts.json")).unwrap();
         assert!(!String::from_utf8_lossy(&raw).contains("secret"));
         let items = list(&dir, &key);
@@ -294,7 +321,7 @@ mod tests {
         assert_eq!(read_metadata(&dir, &key, "v1").unwrap().status, Status::Uploaded);
         shred_folder(&dir, "v1").unwrap();
         assert!(!dir.join("queue/v1").exists());
-        assert!(save(&dir, &key, &Metadata { visit_id: "../x".into(), ..meta }, &[]).is_err());
+        assert!(save(&dir, &key, &Metadata { visit_id: "../x".into(), ..meta }, &[], "").is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 

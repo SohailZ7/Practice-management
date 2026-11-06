@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { addedSeparator } from "./lib/append";
 import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
@@ -9,7 +10,7 @@ import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/
 import { Feedback } from "./Feedback";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
-import { fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { retryAll, setCopyLabel, uploadQueued } from "./lib/queue";
@@ -449,8 +450,12 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewing, setViewing] = useState(false);
   const [chooser, setChooser] = useState(false);
+  const [askAppend, setAskAppend] = useState(false);
+  // Earlier text of this visit, held in memory while the new recording runs; `fromQueue` says where it came from.
+  const earlier = useRef<{ text: string; fromQueue: boolean } | null>(null);
   const gen = useSyncExternalStore(subscribe, () => generationFor(visit.id));
   const canGenerate = visit.hasTranscript || state.phase === "sent";
+  const hasExisting = canGenerate || queued || !!queueItem;
   // When a generation finishes, refresh the day so the note count updates.
   useEffect(() => { if (gen?.phase === "done") onSent(); }, [gen?.phase]);
   const since = state.phase === "recording" ? state.since : 0;
@@ -461,6 +466,21 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
     return () => clearInterval(t);
   }, [since]);
 
+  /** Record on a visit that already has a transcript: read the earlier text first, so adding never loses it. */
+  async function startAdding() {
+    setAskAppend(false);
+    setBusy(true);
+    try {
+      const fromQueue = !!queueItem;
+      const text = fromQueue ? await engine.queueText(visit.id) : (await fetchTranscript(session, visit.id)).transcript;
+      earlier.current = text.trim() ? { text, fromQueue } : null;
+    } catch {
+      setBusy(false);
+      return onState(visit.id, { phase: "failed", message: "Could not read the existing transcript, so nothing was recorded. Try again." });
+    }
+    await start();
+  }
+
   async function start() {
     setBusy(true);
     try {
@@ -468,6 +488,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       setSecs(0);
       onState(visit.id, { phase: "recording", since: Date.now(), warning: warning ?? undefined });
     } catch (e) {
+      earlier.current = null;
       onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
@@ -479,7 +500,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
     try {
       onState(visit.id, { phase: "working", detail: "transcribing on this Mac" });
       // The transcript is saved (encrypted) on this Mac before anything is sent.
-      const summary = await engine.stopRecording(visit.id, env);
+      const prev = earlier.current;
+      const summary = await engine.stopRecording(visit.id, env, prev?.text, prev ? addedSeparator(new Date()) : undefined);
       // A telehealth call that only heard one person would produce a note missing half the visit.
       if (summary.one_sided && telehealth) {
         const go = window.confirm(
@@ -487,7 +509,10 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             "Send it anyway?",
         );
         if (!go) {
-          await engine.queueDiscard(visit.id);
+          // Undo: text that only lived in the queue is put back as it was; text on the cloud was never touched.
+          if (prev?.fromQueue) await engine.queueSetText(visit.id, env, prev.text);
+          else await engine.queueDiscard(visit.id);
+          earlier.current = null;
           return onState(visit.id, { phase: "idle" });
         }
       }
@@ -500,6 +525,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
     } catch (e) {
       onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
     } finally {
+      earlier.current = null;
       setBusy(false);
     }
   }
@@ -561,6 +587,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             <button onClick={stop} disabled={busy}>Stop</button>
             <button className="secondary" disabled={busy} onClick={async () => {
               await engine.cancelRecording();
+              earlier.current = null;
               onState(visit.id, { phase: "idle" });
             }}>Discard</button>
           </>
@@ -568,9 +595,22 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
           <span className="small">Working…</span>
         ) : (
           <>
-          <button className="record" disabled={!ready || busy} onClick={start}>
-            {visit.hasTranscript || state.phase === "sent" ? "Record again" : "Record"}
+          <button className="record" disabled={!ready || busy} onClick={() => (hasExisting ? setAskAppend(true) : start())}>
+            Record
           </button>
+          {askAppend && (
+            <div role="dialog" aria-modal="true" aria-label="Add to the transcript"
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+              <div className="card" style={{ width: "min(460px, 92vw)" }}>
+                <h3 style={{ marginTop: 0 }}>This visit already has a transcript</h3>
+                <p>Append the new recording to it? The earlier text is kept, and the new text is added after a time line.</p>
+                <div style={{ display: "flex", gap: ".5rem", justifyContent: "flex-end" }}>
+                  <button className="secondary" onClick={() => setAskAppend(false)}>No</button>
+                  <button onClick={startAdding}>Yes, append</button>
+                </div>
+              </div>
+            </div>
+          )}
           </>
         )}
         {state.phase !== "recording" && state.phase !== "working" && (
