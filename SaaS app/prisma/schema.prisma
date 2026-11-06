@@ -322,6 +322,9 @@ model DesktopSession {
   lastUsedAt  DateTime  @default(now())
   expiresAt   DateTime
   revokedAt   DateTime?
+  // Version of the Mac app on this device, as it last reported (update check or diagnostics).
+  appVersion  String?
+  appSeenAt   DateTime?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])

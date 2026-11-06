@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * and a signed link that expires in minutes (the bucket itself stays private).
  */
 export const GET = handle(async (req) => {
-  const { user } = await authenticate(req);
+  const { user, session } = await authenticate(req);
   const parts = new URL(req.url).pathname.split("/");
   const version = parts[parts.length - 1];
   const target = parts[parts.length - 2];
@@ -18,6 +18,7 @@ export const GET = handle(async (req) => {
   if (!isVersion(version)) throw new ApiError(400, "bad_version");
   // Remember which version this person's recorder is on (drives the web update banner).
   await db.user.update({ where: { id: user.id }, data: { desktopVersion: version, desktopSeenAt: new Date() } });
+  await db.desktopSession.update({ where: { id: session.id }, data: { appVersion: version, appSeenAt: new Date() } });
   let manifest;
   try {
     manifest = await latestManifest();

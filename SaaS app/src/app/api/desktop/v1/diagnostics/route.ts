@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /** Recorder diagnostics: version, environment and a short list of event kinds and codes. The user comes from the token. */
 export const POST = handle(async (req) => {
-  const { user } = await authenticate(req);
+  const { user, session } = await authenticate(req);
   const text = await req.text();
   if (text.length > DIAG_MAX_BYTES) throw new ApiError(413, "too_large");
   let raw: unknown;
@@ -21,6 +21,7 @@ export const POST = handle(async (req) => {
   if ((await db.desktopDiagnostic.count({ where: { userId: user.id, receivedAt: { gt: new Date(Date.now() - 3600_000) } } })) >= DIAG_MAX_PER_HOUR) throw new ApiError(429, "rate_limited");
   await db.desktopDiagnostic.create({ data: { userId: user.id, appVersion: d.appVersion, commit: d.commit, os: d.os, arch: d.arch, environment: d.environment, manual: d.manual, events: d.events } });
   await db.user.update({ where: { id: user.id }, data: { desktopVersion: d.appVersion, desktopSeenAt: new Date() } });
+  await db.desktopSession.update({ where: { id: session.id }, data: { appVersion: d.appVersion, appSeenAt: new Date() } });
   await db.desktopDiagnostic.deleteMany({ where: { receivedAt: { lt: new Date(Date.now() - DIAG_RETENTION_DAYS * 86400_000) } } });
   return json({ ok: true });
 });
