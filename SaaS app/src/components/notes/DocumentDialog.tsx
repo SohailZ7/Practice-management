@@ -159,7 +159,7 @@ export function DocumentDialog({ visitId, docId, title, canEdit, onClose, api = 
         <>
           <button className="secondary" onClick={() => setPdf((p) => !p)} disabled={!doc}>{pdf ? "Hide PDF" : "PDF preview"}</button>
           <a className="btn secondary" href={api.pdfUrl(visitId, docId, viewing || undefined)} target="_blank" rel="noreferrer">Download PDF</a>
-          {canEdit && <button disabled={!dirty || busy} onClick={() => void save(latest)}>{busy ? "Saving…" : "Save new version"}</button>}
+          {canEdit && <button disabled={!dirty || busy} onClick={() => void save(latest)}>{busy ? "Saving…" : "Save as new version"}</button>}
         </>
       }
     >
