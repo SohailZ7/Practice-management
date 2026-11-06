@@ -4,6 +4,7 @@
 
 import { db } from "../db";
 import { makeDedupeKey } from "../import/outpatientBoard";
+import { flagsForStatus } from "./visitStatus";
 
 /** Pure mapping, for tests. A program means a track row (the track name is its label); no program means a psych-eval row at the appointment time. */
 export function scheduleFieldsFor(v: { program: string; apptTime: string; appointmentType: string }) {
@@ -27,6 +28,7 @@ export async function syncScheduleForVisit(visitId: string): Promise<"created" |
     providerName: provider?.name ?? v.providerName,
     patientId: v.patientId,
     visitId: v.id,
+    ...flagsForStatus(v.status),
     dedupeKey: makeDedupeKey({ date: v.visitDate, section: f.section, timeLabel: f.timeLabel, providerName: v.providerName, clientInfo }),
   };
   const existing = await db.scheduleEntry.findFirst({ where: { visitId: v.id }, select: { id: true } });

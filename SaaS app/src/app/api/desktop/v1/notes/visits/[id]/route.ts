@@ -8,13 +8,13 @@ const wrap = (e: unknown): never => {
   throw e;
 };
 
-/** Edits a visit's time, program, appointment type or provider. Only those keys are read. */
+/** Edits a visit's time, program, appointment type, provider or status (scheduled | seen | note_signed | no_show | cancelled). Only those keys are read. */
 export const PATCH = (req: Request, { params }: { params: { id: string } }) =>
   handle(async () => {
     const { user } = await authenticate(req, { module: "notes", level: "edit" });
     const body = await readJson(req);
     const patch: VisitPatch = {};
-    for (const k of ["apptTime", "program", "appointmentType", "providerName"] as const) {
+    for (const k of ["apptTime", "program", "appointmentType", "providerName", "status"] as const) {
       if (body[k] === undefined) continue;
       if (typeof body[k] !== "string") throw new ApiError(400, "bad_request");
       patch[k] = body[k] as string;

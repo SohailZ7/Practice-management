@@ -1,19 +1,8 @@
-import { requireAccess } from "@/lib/session";
-import { canAccess } from "@/lib/access";
-import { isISODate, todayISO } from "@/lib/dates";
-import { visitsForDate } from "@/lib/notes/queries";
-import { NotesBoard } from "@/components/notes/NotesBoard";
+import { redirect } from "next/navigation";
+import { isISODate } from "@/lib/dates";
 
-export default async function NotesPage({ searchParams }: { searchParams: { date?: string } }) {
-  const user = await requireAccess("notes", "view");
-  const date = searchParams.date && isISODate(searchParams.date) ? searchParams.date : todayISO();
-  const visits = await visitsForDate(date);
-  return (
-    <NotesBoard
-      date={date}
-      visits={visits}
-      canEdit={canAccess(user, "notes", "edit")}
-      defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""}
-    />
-  );
+// Notes and Schedule are one tab now. Old /notes links land on the Schedule day view for the same date.
+export default function NotesPage({ searchParams }: { searchParams: { date?: string } }) {
+  const date = searchParams.date && isISODate(searchParams.date) ? `&date=${searchParams.date}` : "";
+  redirect(`/schedule?view=day${date}`);
 }

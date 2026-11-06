@@ -238,6 +238,8 @@ model Visit {
   program         String          @default("")
   apptTime        String          @default("")
   providerName    String          @default("")
+  // What happened to the visit: scheduled | seen | no_show | cancelled | note_signed (see src/lib/notes/visitStatus.ts).
+  status          String          @default("scheduled")
   transcript      String          @default("")
   transcriptAt    DateTime?
   createdByEmail  String

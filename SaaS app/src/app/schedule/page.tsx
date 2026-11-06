@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireAccess } from "@/lib/session";
+import { requireAccess, requireUser } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { NotesBoard } from "@/components/notes/NotesBoard";
+import { visitsForDate } from "@/lib/notes/queries";
 import { audit } from "@/lib/audit";
 import { canAccess } from "@/lib/access";
 import {
@@ -24,11 +27,18 @@ type View = "day" | "week" | "month";
 type Search = { date?: string; view?: string; provider?: string };
 
 export default async function SchedulePage({ searchParams }: { searchParams: Search }) {
-  const user = await requireAccess("schedule", "view");
+  // One Schedule tab: open to anyone with Schedule or Notes access. Visits follow Notes access, entries follow Schedule access.
+  const me = await requireUser();
+  if (!canAccess(me, "schedule", "view") && !canAccess(me, "notes", "view")) redirect("/denied");
+  const user = me;
+  const hasSchedule = canAccess(user, "schedule", "view");
+  const hasNotes = canAccess(user, "notes", "view");
   const canEdit = canAccess(user, "schedule", "edit");
   const today = todayISO();
   const date = searchParams.date && isISODate(searchParams.date) ? searchParams.date : today;
-  const view: View = searchParams.view === "day" || searchParams.view === "month" ? searchParams.view : "week";
+  const view: View = hasSchedule && (searchParams.view === "week" || searchParams.view === "month") ? searchParams.view : "day";
+  // Day view with Notes access lists the visits; schedule rows that belong to a visit are those visits, so only the rest show below.
+  const visitsDay = view === "day" && hasNotes;
   const providerFilter = searchParams.provider ?? "";
 
   // Date range shown by the current view.
@@ -45,13 +55,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
 
   const where: Prisma.ScheduleEntryWhereInput = { date: { gte: from, lte: to } };
   if (providerFilter) where.providerId = providerFilter;
+  if (visitsDay) where.visitId = null;
 
   const [providers, tracks, types, rows] = await Promise.all([
     db.provider.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.trackDef.findMany({ orderBy: { sortOrder: "asc" } }),
     db.entryType.findMany({ orderBy: { name: "asc" } }),
-    db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
+    hasSchedule ? db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }) : Promise.resolve([]),
   ]);
+  const providerName = providers.find((p) => p.id === providerFilter)?.name;
+  const visits = visitsDay ? (await visitsForDate(date)).filter((v) => !providerFilter || !providerName || v.providerName === providerName) : [];
   const entries = await entryDTOs(rows);
   // One entry per page load: view, date range, provider filter id and a count. Never client names.
   const providerId = !providerFilter ? "all" : providers.some((p) => p.id === providerFilter) ? providerFilter : "unknown";
@@ -84,9 +97,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
       <div className="row" style={{ marginBottom: ".75rem" }}>
         <h1 style={{ margin: 0 }}>Schedule</h1>
         <span className="grow" />
-        <Link href="/schedule/providers">Providers</Link>
-        {canEdit && <Link href="/schedule/import">Import</Link>}
-        {canEdit && <Link href="/schedule/settings">Tracks &amp; types</Link>}
+        {hasSchedule && <Link href="/schedule/providers">Providers</Link>}
+        {hasSchedule && canEdit && <Link href="/schedule/import">Import</Link>}
+        {hasSchedule && canEdit && <Link href="/schedule/settings">Tracks &amp; types</Link>}
       </div>
 
       <div className="row" style={{ marginBottom: "1rem" }}>
@@ -125,7 +138,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
         </form>
       </div>
 
-      {view === "month" ? (
+      {visitsDay && (
+        <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded />
+      )}
+
+      {visitsDay && entries.length > 0 && <h2 style={{ marginTop: "1.5rem" }}>Other schedule entries (not linked to a visit)</h2>}
+
+      {visitsDay && entries.length === 0 ? null : view === "month" ? (
         <MonthGrid date={date} entries={entries} today={today} dayHref={(d) => href(d, "day")} />
       ) : (
         <ScheduleGrid

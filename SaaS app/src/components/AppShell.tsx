@@ -107,11 +107,10 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
 
   // Every module is listed. One the person cannot open stays visible (dimmed) and shows "no access" when clicked.
   const items: { id: string; href: string; label: string; icon: IconName; locked?: boolean }[] = [];
-  items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar", locked: levels.schedule === "none" });
+  items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar", locked: levels.schedule === "none" && levels.notes === "none" });
   items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks", locked: levels.tasks === "none" });
   items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" });
   items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing", locked: levels.billing === "none" });
-  items.push({ id: "/notes", href: "/notes", label: "Notes", icon: "tasks", locked: levels.notes === "none" });
   items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" });
   // Feedback is open to every signed-in user.
   items.push({ id: "/feedback", href: "/feedback", label: "Feedback", icon: "flag" });

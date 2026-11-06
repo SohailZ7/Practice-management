@@ -34,6 +34,7 @@ export const GET = handle(async (req) => {
       apptTime: v.apptTime,
       appointmentType: v.appointmentType,
       providerName: v.providerName,
+      status: v.status,
       hasTranscript: v.transcript.trim().length > 0,
       documentCount: v.documents.length,
     })),
@@ -53,6 +54,7 @@ export const POST = handle(async (req) => {
       program: str("program"),
       appointmentType: str("appointmentType"),
       providerName: str("providerName"),
+      status: str("status"),
     });
     return json({ id: v.id, apptTime: v.apptTime, program: v.program, appointmentType: v.appointmentType }, 201);
   } catch (e) {

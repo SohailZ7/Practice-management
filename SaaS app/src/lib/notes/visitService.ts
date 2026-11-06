@@ -7,16 +7,17 @@ import { isISODate } from "../dates";
 import { validatePatient } from "../billing/validate";
 import { apptTimeOf, parseClient } from "./scheduleParse";
 import { loadVisitOptions, matchOption } from "./options";
+import { isVisitStatus, type VisitStatus } from "./visitStatus";
 import { removeScheduleForVisits, syncScheduleForVisit } from "./visitSchedule";
 
 export class VisitError extends Error {
-  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many" | "bad_type" | "bad_provider", message: string) {
+  constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many" | "bad_type" | "bad_provider" | "bad_status", message: string) {
     super(message);
   }
 }
 
 export type VisitFields = { apptTime: string; program: string; appointmentType: string; providerName: string };
-export type VisitPatch = Partial<VisitFields>;
+export type VisitPatch = Partial<VisitFields> & { status?: string };
 
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
@@ -51,8 +52,12 @@ function oneTime(raw: string): string | null {
 export { apptTimeOf };
 
 /** Type and provider must be one of the listed options (blank is allowed); they are stored with the listed spelling. */
-async function cleanFields(input: VisitPatch): Promise<VisitPatch> {
-  const out: VisitPatch = {};
+async function cleanFields(input: VisitPatch): Promise<VisitPatch & { status?: VisitStatus }> {
+  const out: VisitPatch & { status?: VisitStatus } = {};
+  if (input.status !== undefined) {
+    if (!isVisitStatus(input.status)) throw new VisitError("bad_status", "Choose a status from the list.");
+    out.status = input.status;
+  }
   const strict = async () => (input.appointmentType?.trim() || input.providerName?.trim() ? loadVisitOptions() : null);
   const opts = await strict();
   if (input.apptTime !== undefined) out.apptTime = cleanApptTime(input.apptTime);
@@ -96,6 +101,7 @@ export async function addVisit(
       program: fields.program ?? "",
       appointmentType: fields.appointmentType ?? "",
       providerName: fields.providerName ?? "",
+      status: fields.status ?? "scheduled",
       createdByEmail: actor.email,
     },
   });

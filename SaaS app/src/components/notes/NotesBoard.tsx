@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { documentsFor } from "@/lib/notes/documents";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
 import type { VisitOptions } from "@/lib/notes/options";
@@ -12,6 +11,7 @@ import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
 import { GenerateDialog } from "./GenerateDialog";
 import { Modal } from "../Modal";
+import { VisitsTable } from "./VisitsTable";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -21,8 +21,8 @@ const shift = (iso: string, days: number) => {
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
-  date: string; visits: VisitRow[]; canEdit: boolean; defaultProvider: string;
+export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = false }: {
+  date: string; visits: VisitRow[]; canEdit: boolean; defaultProvider: string; embedded?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -41,25 +41,26 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
     return [...server.map((s) => fresh[v.id]?.find((f) => f.id === s.id) ?? s), ...extra];
   };
   const [reading, setReading] = useState<string | null>(null);
+  const [pasteFor, setPasteFor] = useState<VisitRow | null>(null);
 
-  const go = (d: string) => router.push(`/notes?date=${d}`);
+  const go = (d: string) => router.push(`/schedule?view=day&date=${d}`);
 
   return (
     <>
       <div className="row" style={{ marginBottom: ".75rem" }}>
-        <h1 style={{ margin: 0 }}>Notes</h1>
+        {!embedded && <h1 style={{ margin: 0 }}>Schedule</h1>}
         <span className="grow" />
         {canEdit && <button className="secondary" onClick={() => setAdding((v) => !v)}>{adding ? "Cancel" : "Add a visit"}</button>}
         {canEdit && <button className="secondary" onClick={() => setPasting((v) => !v)}>{pasting ? "Cancel" : "Paste a schedule"}</button>}
       </div>
 
-      <div className="row" style={{ marginBottom: "1rem" }}>
+      {!embedded && <div className="row" style={{ marginBottom: "1rem" }}>
         <button className="secondary" aria-label="Previous day" onClick={() => go(shift(date, -1))}>←</button>
         <button className="secondary" onClick={() => go(new Date().toISOString().slice(0, 10))}>Today</button>
         <button className="secondary" aria-label="Next day" onClick={() => go(shift(date, 1))}>→</button>
         <strong style={{ margin: "0 .5rem" }}>{longDate(date)}</strong>
         <input type="date" value={date} aria-label="Pick a date" onChange={(e) => e.target.value && go(e.target.value)} />
-      </div>
+      </div>}
 
       {note && <div className="card" role="status">{note} <button className="link" onClick={() => setNote("")}>Dismiss</button></div>}
 
@@ -91,91 +92,39 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
       )}
 
       {visits.length === 0 ? (
-        <p className="muted">No visits loaded for this day. {canEdit && "Use “Paste a schedule” to load one."}</p>
+        <p className="muted">No visits for this day. {canEdit && "Use “Add a visit” or “Paste a schedule” to add some."}</p>
       ) : (
-        <table className="xl">
-          <thead>
-            <tr>{canEdit && <th><input type="checkbox" aria-label="Select all visits" checked={selected.length === visits.length} onChange={(e) => setPicked(e.target.checked ? visits.map((v) => v.id) : [])} /></th>}<th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th /></tr>
-          </thead>
-          <tbody>
-            {visits.map((v) => (
-              <tr key={v.id}>
-                {canEdit && (
-                  <td>
-                    <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => setPicked(e.target.checked ? [...selected, v.id] : selected.filter((i) => i !== v.id))} />
-                  </td>
-                )}
-                <td title="Shown as initials">
-                  {v.initials}{" "}
-                  <button
-                    className="link"
-                    title={v.hasTranscript ? "View the transcript (read-only)" : "No transcript yet"}
-                    aria-label={`View transcript for ${v.initials}`}
-                    disabled={!v.hasTranscript}
-                    onClick={() => setReading(v.id)}
-                  >
-                    📄
-                  </button>
-                </td>
-                <td>
-                  {canEdit ? (
-                    <EditableTime visitId={v.id} value={v.apptTime} onError={setNote} onSaved={() => router.refresh()} />
-                  ) : (
-                    v.apptTime
-                  )}
-                </td>
-                <td>{v.program}</td>
-                <td>{v.appointmentType}</td>
-                <td>
-                  {docsOf(v).length === 0 ? (
-                    <span className="muted small">{documentsFor(v.appointmentType).map((d) => d.label).join(", ") || "none"}</span>
-                  ) : (
-                    <span className="row" style={{ flexWrap: "wrap", gap: ".3rem" }}>
-                      {docsOf(v).map((d) => {
-                        const tip = `${d.title}${d.latestVersion ? ` · version ${d.latestVersion}` : ""}`;
-                        return (
-                          <button key={d.id} className="secondary doc-icon" title={tip} aria-label={`Open ${tip}`} onClick={() => setOpenDoc({ visitId: v.id, id: d.id, label: d.title })}>
-                            {typeIcon(d.docType)}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  )}
-                </td>
-                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  {canEdit && (
-                    <>
-                      <button
-                        className="secondary"
-                        disabled={pending}
-                        onClick={() => {
-                          const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
-                          if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
-                          start(async () => {
-                            const r = await deleteVisitAction(v.id);
-                            setNote(r.ok ? "Visit deleted." : r.error);
-                            router.refresh();
-                          });
-                        }}
-                      >
-                        Delete
-                      </button>{" "}
-                      <TranscriptButton visitId={v.id} hasTranscript={v.hasTranscript} onSaved={() => router.refresh()} />
-                      <button
-                        disabled={!v.hasTranscript || pending}
-                        title={v.hasTranscript ? "Choose and write this visit's documents" : "Available once the recording is complete"}
-                        onClick={() => { void warmUp(); setGenerating(v); }}
-                      >
-                        Generate documents
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VisitsTable
+          visits={visits}
+          docsOf={docsOf}
+          canEdit={canEdit}
+          selected={selected}
+          pending={pending}
+          onSelect={(id, on) => setPicked(on ? [...selected, id] : selected.filter((i) => i !== id))}
+          onSelectAll={(on) => setPicked(on ? visits.map((v) => v.id) : [])}
+          onStatus={(v, status) => start(async () => {
+            const r = await updateVisitAction(v.id, { status });
+            if (!r.ok) setNote(r.error);
+            router.refresh();
+          })}
+          onOpenDoc={(v, d) => setOpenDoc({ visitId: v.id, id: d.id, label: d.title })}
+          onGenerate={(v) => { void warmUp(); setGenerating(v); }}
+          onTranscript={(v) => setReading(v.id)}
+          onPasteTranscript={(v) => setPasteFor(v)}
+          onDelete={(v) => {
+            const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
+            if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
+            start(async () => {
+              const r = await deleteVisitAction(v.id);
+              setNote(r.ok ? "Visit deleted." : r.error);
+              router.refresh();
+            });
+          }}
+          renderTime={(v) => (canEdit ? <EditableTime visitId={v.id} value={v.apptTime} onError={setNote} onSaved={() => router.refresh()} /> : v.apptTime)}
+        />
       )}
+
+      {pasteFor && <TranscriptPaste visitId={pasteFor.id} onClose={() => setPasteFor(null)} onSaved={() => { setPasteFor(null); router.refresh(); }} />}
 
       {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
 
@@ -204,29 +153,27 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider }: {
   );
 }
 
-function TranscriptButton({ visitId, hasTranscript, onSaved }: { visitId: string; hasTranscript: boolean; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
+function TranscriptPaste({ visitId, onClose, onSaved }: { visitId: string; onClose: () => void; onSaved: () => void }) {
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
-  if (!open) {
-    return (
-      <button className="secondary" onClick={() => setOpen(true)} style={{ marginRight: ".4rem" }}>
-        {hasTranscript ? "Transcript ✓" : "Add transcript"}
-      </button>
-    );
-  }
   return (
-    <div className="card" style={{ textAlign: "left", marginTop: ".4rem" }}>
+    <Modal
+      title="Add a transcript"
+      onClose={onClose}
+      busy={saving}
+      footer={
+        <>
+          <button disabled={!text.trim() || saving} onClick={async () => {
+            setSaving(true);
+            try { await saveTranscript(visitId, text); onSaved(); } finally { setSaving(false); }
+          }}>{saving ? "Saving…" : "Save transcript"}</button>
+          <button className="secondary" onClick={onClose} disabled={saving}>Cancel</button>
+        </>
+      }
+    >
       <p className="small muted">Paste the transcript. The recorder normally sends this; this box is for testing and for a visit typed up by hand.</p>
-      <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} aria-label="Transcript" style={{ width: "100%" }} />
-      <div className="row">
-        <button disabled={!text.trim() || saving} onClick={async () => {
-          setSaving(true);
-          try { await saveTranscript(visitId, text); setOpen(false); onSaved(); } finally { setSaving(false); }
-        }}>Save transcript</button>
-        <button className="secondary" onClick={() => setOpen(false)}>Cancel</button>
-      </div>
-    </div>
+      <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} aria-label="Transcript" style={{ width: "100%", boxSizing: "border-box" }} />
+    </Modal>
   );
 }
 
@@ -263,7 +210,6 @@ function EditableTime({ visitId, value, onSaved, onError }: { visitId: string; v
       value={v}
       aria-label="Appointment time"
       placeholder="2:00 PM"
-      style={{ width: "8.5rem" }}
       onChange={(e) => setV(e.target.value)}
       onBlur={async () => {
         if (v.trim() === value) return;

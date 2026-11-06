@@ -23,7 +23,7 @@ export async function loadPastedSchedule(date: string, pasted: string, provider:
   if (!isISODate(date)) throw new Error("Invalid date");
   const r = await loadScheduleForDate(date, pasted, provider, user);
   await audit(user.email, "notes.schedule.paste", `${date} rows=${r.kept} visits=${r.created}`);
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return { created: r.created, summary: { kept: r.kept, skippedNoClient: r.skippedNoClient, skippedOtherProvider: r.skippedOtherProvider }, otherProviders: r.otherProviders };
 }
 
@@ -32,7 +32,7 @@ export async function saveTranscript(visitId: string, transcript: string) {
   const user = await requireAccess("notes", "edit");
   await db.visit.update({ where: { id: visitId }, data: { transcript: transcript.slice(0, MAX_TRANSCRIPT), transcriptAt: new Date() } });
   await audit(user.email, "notes.transcript.save", `visit ${visitId} chars=${transcript.length}`);
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
 }
 
 /** Writes every document this visit's appointment type calls for. Existing documents are left alone. */
@@ -64,7 +64,7 @@ export async function generateForVisit(visitId: string) {
     });
   }
   await audit(user.email, "notes.generate", `visit ${visitId} documents=${made.length}`);
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return { created: made.length, skipped: docs.length - made.length, error: undefined as string | undefined };
 }
 
@@ -80,7 +80,7 @@ export async function saveDocument(documentId: string, markdown: string) {
     db.visitDocument.update({ where: { id: documentId }, data: { markdown, draft: isDraft(markdown) } }),
   ]);
   await audit(user.email, "notes.document.save", `document ${documentId} draft=${isDraft(markdown)}`);
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return { saved: true, draft: isDraft(markdown) };
 }
 
@@ -111,28 +111,28 @@ async function guard<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | 
 export async function addVisitAction(input: { date: string; patient: string } & VisitPatch) {
   const user = await requireAccess("notes", "edit");
   const r = await guard(() => addVisit(user, input));
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const } : r;
 }
 
 export async function updateVisitAction(id: string, patch: VisitPatch) {
   const user = await requireAccess("notes", "edit");
   const r = await guard(() => updateVisit(user, id, patch));
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const } : r;
 }
 
 export async function deleteVisitAction(id: string) {
   const user = await requireAccess("notes", "edit");
   const r = await guard(() => deleteVisit(user, id));
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const } : r;
 }
 
 export async function deleteVisitsAction(ids: string[]) {
   const user = await requireAccess("notes", "edit");
   const r = await guard(() => deleteVisits(user, Array.isArray(ids) ? ids.filter((i) => typeof i === "string") : []));
-  revalidatePath("/notes");
+  revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const, deleted: r.value.deleted.length } : r;
 }
 
