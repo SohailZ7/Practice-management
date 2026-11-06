@@ -181,6 +181,28 @@ pub fn check_base_url(url: &str) -> Result<(), String> {
     bad()
 }
 
+/// The request path must be inside the desktop API and must not climb out of it. Says exactly which rule failed and on
+/// which route (ids removed, so nothing identifying is shown or logged).
+pub fn check_api_path(path: &str) -> Result<(), String> {
+    let (bare, _query) = path.split_once('?').unwrap_or((path, ""));
+    let masked = bare.split('/').map(|seg| if !seg.is_empty() && (seg.len() >= 12 || seg.chars().any(|c| c.is_ascii_digit())) { ":id" } else { seg })
+        .collect::<Vec<_>>().join("/");
+    let fail = |why: &str| Err(format!(
+        "The app built a request it will not send ({why}; route {masked}). Quit and reopen the app, update it if a new version is offered, and use Send diagnostics in Setup if it happens again."));
+    if !bare.starts_with("/api/desktop/v1/") {
+        return fail("the address is outside the practice app's desktop API");
+    }
+    if path.chars().any(|c| c.is_control() || c == '\\') {
+        return fail("it contains a control or backslash character");
+    }
+    // Only a whole ".." or "." path segment climbs out; a dot inside a longer name (or the query) is harmless.
+    let decoded = bare.replace("%2e", ".").replace("%2E", ".");
+    if decoded.split('/').any(|seg| seg == ".." || seg == ".") {
+        return fail("it contains a '..' path segment");
+    }
+    Ok(())
+}
+
 /// One call to the practice app's desktop API, made here instead of in the webview: the webview is a different origin
 /// from the server, and the server sends no CORS headers. Any HTTP status comes back as data; `Err` means the server
 /// could not be reached at all.
@@ -188,9 +210,7 @@ pub fn api_request(
     base_url: &str, method: &str, path: &str, token: Option<&str>, body: Option<&str>,
 ) -> Result<(u16, String), String> {
     check_base_url(base_url)?;
-    if !path.starts_with("/api/desktop/v1/") || path.contains("..") || path.contains('\\') {
-        return Err("Not a practice app address.".into());
-    }
+    check_api_path(path)?;
     if !matches!(method, "GET" | "POST" | "PATCH" | "DELETE") {
         return Err("Unsupported request.".into());
     }
@@ -219,9 +239,7 @@ pub fn api_request(
 pub fn download(base_url: &str, path: &str, token: &str) -> Result<(u16, Vec<u8>), String> {
     use std::io::Read;
     check_base_url(base_url)?;
-    if !path.starts_with("/api/desktop/v1/") || path.contains("..") || path.contains('\\') {
-        return Err("Not a practice app address.".into());
-    }
+    check_api_path(path)?;
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(120)).build();
     let req = agent.get(&format!("{}{}", base_url.trim_end_matches('/'), path)).set("authorization", &format!("Bearer {token}"));
     match req.call() {
@@ -404,6 +422,31 @@ mod tests {
                     "notes.example.org", "http://localhost:3000 /x"] {
             assert!(check_base_url(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn api_paths_for_every_route_the_app_uses_are_accepted() {
+        for ok in [
+            "/api/desktop/v1/notes/visits?date=2026-11-05",
+            "/api/desktop/v1/notes/visits/cmw4cnfbr000910xivu3gaj6f/documents/cmw4cpmgr000o10xidn2n34bq",
+            "/api/desktop/v1/notes/visits/cmw4cnfbr000910xivu3gaj6f/documents/cmw4cpmgr000o10xidn2n34bq/versions",
+            "/api/desktop/v1/notes/visits/cmw4cnfbr000910xivu3gaj6f/documents/cmw4cpmgr000o10xidn2n34bq?version=3",
+            "/api/desktop/v1/notes/visits/ab..cd/documents/x...y/versions",
+            "/api/desktop/v1/notes/visits/cmw4cnfbr000910xivu3gaj6f/documents/cmw4cpmgr000o10xidn2n34bq/pdf",
+            "/api/desktop/v1/notes/search?q=Smith..Jones&date=2026-11-05",
+            "/api/desktop/v1/diagnostics",
+        ] {
+            assert!(check_api_path(ok).is_ok(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn api_paths_that_escape_are_refused_with_the_reason_and_no_ids() {
+        for bad in ["/other/path", "/api/desktop/v1/../admin", "/api/desktop/v1/notes/%2e%2e/x", "/api/desktop/v1/a\\b", "/api/desktop/v1/x\ny"] {
+            assert!(check_api_path(bad).is_err(), "{bad}");
+        }
+        let e = check_api_path("/api/desktop/v1/notes/visits/cmw4cnfbr000910xivu3gaj6f/../x").unwrap_err();
+        assert!(e.contains("'..' path segment") && e.contains(":id") && !e.contains("cmw4cnfbr"), "{e}");
     }
 
     #[test]
