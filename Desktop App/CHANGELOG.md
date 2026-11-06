@@ -10,3 +10,4 @@ v1.0.7 | 2026-11-05 | built on 5f09820 | Request-address check no longer rejects
 v1.0.8 | 2026-11-05 | built on f8276fc | Speaker labels: timestamped Provider/Patient blocks, local two-voice separation on one mic with a which-speaker-is-the-patient prompt, rename speakers, time buckets
 v1.0.9 | 2026-11-05 | built on 80aea4d | Download PDF built the web route instead of the desktop API route; fixed, plus a test that every API path the app builds stays inside /api/desktop/v1
 v1.0.10 | 2026-11-05 | built on 8abbbfa | Build number and environment always visible: footer, Setup badge, window title
+v1.0.11 | 2026-11-05 | built on bc47ad0 | Same look as the web app: shared design tokens, left navigation, light default with Light/Dark/System in Setup

@@ -22,6 +22,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import { SpeakerDialog } from "./SpeakerDialog";
 import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
+import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
 import { retryAll, sessionFor, setCopyLabel, uploadQueued } from "./lib/queue";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
@@ -198,9 +199,12 @@ export function App() {
           {labelFor(env).toUpperCase()} {env === "localhost" ? "(this Mac)" : "(test server)"}: not the production practice app
         </div>
       )}
-      <header className="top">
-        <img src={logo} alt="" width={26} height={26} style={{ borderRadius: 6 }} />
-        <h1>Brain and Behavior Center <span style={{ fontWeight: 400, opacity: 0.75 }}>· Practice Recorder</span></h1>
+      <div className="shell">
+      <aside className="side">
+        <div className="brand">
+          <img src={logo} alt="" className="logo" />
+          <span className="label">Brain and Behavior Center<small>Practice Recorder</small></span>
+        </div>
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
@@ -210,7 +214,8 @@ export function App() {
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
           </nav>
         )}
-      </header>
+      </aside>
+      <div className="content-wrap"><div className="content"><div className="content-inner">
       <main>
         <UpdateBanner session={session} busy={busy} />
         {message && <div className="banner" role="status">{message} <button className="link" onClick={() => setMessage("")}>Dismiss</button></div>}
@@ -359,6 +364,8 @@ export function App() {
           </>
         )}
       </main>
+      </div></div></div>
+      </div>
       <footer className={`buildbar ${env}`} role="status" data-testid="buildbar">
         <strong>{labelFor(env).toUpperCase()}</strong> <span>v{__APP_VERSION__} ({__APP_COMMIT__})</span>
       </footer>
@@ -727,6 +734,7 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
     return () => { alive = false; };
   }, [url, attempt]);
 
+  const [theme, setThemeState] = useState<Theme>(loadTheme);
   return (
     <div className="card" style={{ maxWidth: 760 }}>
       {!signedIn && <div style={{ display: "flex", alignItems: "center", gap: ".8rem", marginBottom: ".6rem" }}>
@@ -749,6 +757,16 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
           {locked ? "Locked while a recording is running. " : ""}Each environment has its own sign-in.
         </span>
       </label>
+
+      <fieldset className="theme-options" aria-label="Appearance">
+        <legend className="small"><strong>Appearance</strong></legend>
+        {THEMES.map((t) => (
+          <label key={t} className="theme-option">
+            <input type="radio" name="theme" checked={theme === t} onChange={() => { setThemeState(t); saveTheme(t); }} />
+            {t === "light" ? "Light" : t === "dark" ? "Dark" : "System"}
+          </label>
+        ))}
+      </fieldset>
 
       {signedIn ? (
         <>
