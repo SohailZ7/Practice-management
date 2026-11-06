@@ -227,3 +227,18 @@ describe("backfill planning", () => {
     expect(plan.dedupeKey).toBe(makeDedupeKey(encrypted && { ...legacyRow }, newC.digest));
   });
 });
+
+describe("an undecryptable Task note does not break the board", () => {
+  const mine = cipherFor("k1");
+  const foreign = cipherFor("k1"); // same key id, different key (e.g. a row copied from another database)
+  it("reads a task note encrypted with another key as empty, and keeps the rest of the row", () => {
+    const row = { id: "t1", title: "Call back", notes: foreign.encrypt("secret", "Task.notes") };
+    const out = decryptRow(mine, "Task", row) as typeof row;
+    expect(out.notes).toBe("");
+    expect(out.title).toBe("Call back");
+  });
+  it("still decrypts a good note and still throws for other encrypted columns", () => {
+    expect((decryptRow(mine, "Task", { notes: mine.encrypt("ok", "Task.notes") }) as { notes: string }).notes).toBe("ok");
+    expect(() => decryptRow(mine, "Visit", { transcript: foreign.encrypt("x", "Visit.transcript") })).toThrow(PhiCryptoError);
+  });
+});

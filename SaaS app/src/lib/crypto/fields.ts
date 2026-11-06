@@ -1,6 +1,7 @@
 // Which columns are encrypted, and how to apply the cipher to Prisma data and results. Pure given a cipher.
 
-import { isEncrypted, type PhiCipher } from "./phi";
+import { isEncrypted, PhiCryptoError, type PhiCipher } from "./phi";
+import { logError } from "../safeLog";
 
 /** A cipher, or a function that returns it, so reads of plaintext rows work even when no key is configured. */
 export type CipherSource = PhiCipher | (() => PhiCipher);
@@ -17,6 +18,12 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   VisitDocument: ["markdown", "attention"],
   VisitDocumentVersion: ["markdown"],
 };
+
+/**
+ * Columns where one undecryptable value must not take down the whole page (a free-text note on a board of many tasks).
+ * Such a value reads as empty and the failure is logged (class only, no text); every other encrypted column still throws.
+ */
+export const TOLERANT_FIELDS: Record<string, readonly string[]> = { Task: ["notes"] };
 
 /** Relations that lead to another encrypted model, so values inside `include` results are decrypted too. */
 export const RELATIONS: Record<string, Record<string, string>> = {
@@ -55,7 +62,14 @@ export function decryptRow(cipher: CipherSource, model: string, row: unknown): u
   if (!hasWork) return row;
   const out: Row = { ...row };
   for (const f of ENCRYPTED_FIELDS[model] ?? []) {
-    if (isEncrypted(out[f])) out[f] = use(cipher).decrypt(out[f] as string, context(model, f));
+    if (!isEncrypted(out[f])) continue;
+    try {
+      out[f] = use(cipher).decrypt(out[f] as string, context(model, f));
+    } catch (err) {
+      if (!(err instanceof PhiCryptoError) || !TOLERANT_FIELDS[model]?.includes(f)) throw err;
+      logError(`decrypt ${context(model, f)}`, err);
+      out[f] = "";
+    }
   }
   for (const [rel, relModel] of Object.entries(RELATIONS[model] ?? {})) {
     const v = out[rel];
