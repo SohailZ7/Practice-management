@@ -55,10 +55,6 @@ export function App() {
   const [bulkBusy, setBulkBusy] = useState(false);
   // Only keep ticks for rows that are still on screen (the day changed or rows were deleted).
   useEffect(() => {
-    // Window title carries the build so a stale install is obvious.
-    import("@tauri-apps/api/window").then((m) => m.getCurrentWindow().setTitle(`Brain and Behavior Center v${__APP_VERSION__} (${__APP_COMMIT__})`)).catch(() => {});
-  }, []);
-  useEffect(() => {
     setSelected((cur) => {
       const ids = new Set((visits ?? []).map((v) => v.id));
       const next = new Set([...cur].filter((id) => ids.has(id)));
@@ -70,6 +66,10 @@ export function App() {
 
   const env: EnvironmentId = status && isEnvironment(status.settings.environment) ? status.settings.environment : "production";
   const signedIn = !!status?.signed_in[env];
+  useEffect(() => {
+    // Window title carries the environment and build so a stale install or the wrong server is obvious.
+    import("@tauri-apps/api/window").then((m) => m.getCurrentWindow().setTitle(`Brain and Behavior Center - ${labelFor(env).toUpperCase()} - v${__APP_VERSION__} (${__APP_COMMIT__})`)).catch(() => {});
+  }, [env]);
   const recording = Object.values(rows).some((r) => r.phase === "recording");
   const busy = Object.values(rows).some((r) => r.phase === "recording" || r.phase === "working");
 
@@ -359,6 +359,9 @@ export function App() {
           </>
         )}
       </main>
+      <footer className={`buildbar ${env}`} role="status" data-testid="buildbar">
+        <strong>{labelFor(env).toUpperCase()}</strong> <span>v{__APP_VERSION__} ({__APP_COMMIT__})</span>
+      </footer>
     </>
   );
 }
@@ -731,7 +734,11 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
         <div><strong style={{ fontSize: "1.15rem" }}>Brain and Behavior Center</strong><div className="small">Practice Recorder</div></div>
       </div>}
       <h2 style={{ marginTop: 0 }}>{signedIn ? "Setup" : "Sign in"}</h2>
-      <div className="small" style={{ marginTop: -8, marginBottom: 8 }}>v{__APP_VERSION__} ({__APP_COMMIT__})</div>
+      <div className={`buildbadge ${env}`} data-testid="buildbadge">
+        <span className="env">{labelFor(env).toUpperCase()}</span>
+        <span className="ver">Build {__APP_VERSION__}</span>
+        <span className="small">({__APP_COMMIT__}) · {urlFor(env).replace(/^https?:\/\//, "")}</span>
+      </div>
 
       <label className="field">
         <span>Environment</span>

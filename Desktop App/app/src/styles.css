@@ -136,3 +136,14 @@ button.danger { background: #a02323; color: #fff; }
 .tx-who.unsure { color: var(--muted); font-style: italic; }
 .tx-text { overflow-wrap: anywhere; }
 .tx-scroll { max-height: 52vh; overflow-y: auto; padding-right: .4rem; }
+
+/* Always-visible build + environment (footer) and the larger badge on Setup. Colours are fixed, readable in dark mode. */
+body { padding-bottom: 30px; }
+.buildbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; padding: 5px 18px; font-size: 12px; text-align: center; color: #fff; background: #2f6b3a; letter-spacing: .04em; }
+.buildbar.staging { background: #a15c00; }
+.buildbar.localhost { background: #6b2fa0; }
+.buildbadge { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: -4px 0 12px; }
+.buildbadge .env { padding: 3px 10px; border-radius: 6px; font-weight: 700; letter-spacing: .06em; color: #fff; background: #2f6b3a; }
+.buildbadge.staging .env { background: #a15c00; }
+.buildbadge.localhost .env { background: #6b2fa0; }
+.buildbadge .ver { font-size: 1.15rem; font-weight: 700; }
