@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { docsApi as defaultApi, type DocsApi, type DocumentDetail, type FieldValues } from "@/lib/notes/docsClient";
 import { completeValues, isDirty, modelOriginal, saveErrorOutcome, versionLabel } from "@/lib/notes/docUi";
 import { DocumentForm } from "./DocumentForm";
+import { Modal } from "../Modal";
 
 /**
  * Pop-up for one generated document: the form, a version selector, Save (a new version each time), an unsaved-changes
@@ -113,11 +114,36 @@ export function DocumentDialog({ visitId, docId, title, canEdit, onClose, api = 
     await load(version);
   }
 
+  const noticeBlock = (
+    <>
+      {loadError && <p role="alert" className="small docdlg-bad">{loadError}</p>}
+      {msg && <p role={msg.kind === "error" ? "alert" : "status"} className={`small${msg.kind === "error" ? " docdlg-bad" : ""}`}>{msg.text}</p>}
+      {stale && (
+        <div className="docdlg-note" role="alert">
+          Someone saved a newer version while you were editing.{" "}
+          <button className="link" onClick={() => void load()}>Reload latest (discards my edits)</button>{" "}
+          <button className="link" onClick={() => void saveOnTop()} disabled={busy}>Save mine as a new version on top</button>
+        </div>
+      )}
+      {closing && (
+        <div className="docdlg-note" role="alertdialog" aria-label="Unsaved changes">
+          You have unsaved changes.{" "}
+          <button disabled={busy} onClick={async () => { if (await save(latest)) onClose(); else setClosing(false); }}>Save and close</button>{" "}
+          <button className="secondary" onClick={onClose}>Discard</button>{" "}
+          <button className="secondary" onClick={() => setClosing(false)}>Keep editing</button>
+        </div>
+      )}
+    </>
+  );
+  const hasNotices = !!(loadError || msg || stale || closing);
+
   return (
-    <div className="modal-back" onClick={requestClose}>
-      <div className="modal docdlg" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <div className="row">
-          <h2 style={{ margin: 0 }}>{title}</h2>
+    <Modal
+      title={title}
+      size="lg"
+      onClose={requestClose}
+      headerExtra={
+        <>
           {doc && (
             <select aria-label="Version" value={viewing} onChange={(e) => void pick(Number(e.target.value))}>
               {[...doc.versions].sort((a, b) => b.version - a.version).map((v) => (
@@ -125,56 +151,37 @@ export function DocumentDialog({ visitId, docId, title, canEdit, onClose, api = 
               ))}
             </select>
           )}
-          <span className="grow" />
           {dirty && <span className="small muted" role="status">Unsaved changes</span>}
+        </>
+      }
+      notices={hasNotices ? noticeBlock : undefined}
+      footer={
+        <>
           <button className="secondary" onClick={() => setPdf((p) => !p)} disabled={!doc}>{pdf ? "Hide PDF" : "PDF preview"}</button>
-          <button className="secondary" onClick={requestClose}>Close</button>
-        </div>
-
-        {loadError && <p role="alert" className="small docdlg-bad">{loadError}</p>}
-        {!doc && !loadError && <p className="muted">Loading…</p>}
-        {doc && viewing !== latest && (
-          <div className="docdlg-note" role="status">
-            Viewing version {viewing}{viewing === original ? " (the model original)" : ""}, read-only.{" "}
-            <button className="link" onClick={() => void load()}>Back to latest</button>
-            {canEdit && (
-              <>{" "}<button className="link" onClick={() => { const v = values; void load().then((d) => d && setValues(v)); }}>Edit from this version</button></>
-            )}
-          </div>
-        )}
-        {msg && <p role={msg.kind === "error" ? "alert" : "status"} className={`small${msg.kind === "error" ? " docdlg-bad" : ""}`}>{msg.text}</p>}
-        {stale && (
-          <div className="docdlg-note" role="alert">
-            Someone saved a newer version while you were editing.{" "}
-            <button className="link" onClick={() => void load()}>Reload latest (discards my edits)</button>{" "}
-            <button className="link" onClick={() => void saveOnTop()} disabled={busy}>Save mine as a new version on top</button>
-          </div>
-        )}
-
-        <div className={`docdlg-body${pdf ? " with-pdf" : ""}`}>
-          {doc && <DocumentForm fields={fields} values={values} readOnly={readOnly} onChange={(n, v) => setValues((cur) => ({ ...cur, [n]: v }))} />}
-          {pdf && doc && (
-            <div>
-              <p className="small muted">Preview of the last saved version{dirty ? " (your unsaved edits are not shown)" : ""}.</p>
-              <iframe key={`${pdfKey}-${viewing}`} title="PDF preview" src={api.pdfUrl(visitId, docId, viewing)} className="docdlg-pdf" />
-            </div>
+          <a className="btn secondary" href={api.pdfUrl(visitId, docId, viewing || undefined)} target="_blank" rel="noreferrer">Download PDF</a>
+          {canEdit && <button disabled={!dirty || busy} onClick={() => void save(latest)}>{busy ? "Saving…" : "Save new version"}</button>}
+        </>
+      }
+    >
+      {!doc && !loadError && <p className="muted">Loading…</p>}
+      {doc && viewing !== latest && (
+        <div className="docdlg-note" role="status">
+          Viewing version {viewing}{viewing === original ? " (the model original)" : ""}, read-only.{" "}
+          <button className="link" onClick={() => void load()}>Back to latest</button>
+          {canEdit && (
+            <>{" "}<button className="link" onClick={() => { const v = values; void load().then((d) => d && setValues(v)); }}>Edit from this version</button></>
           )}
         </div>
-
-        {closing && (
-          <div className="docdlg-note" role="alertdialog" aria-label="Unsaved changes">
-            You have unsaved changes.{" "}
-            <button disabled={busy} onClick={async () => { if (await save(latest)) onClose(); else setClosing(false); }}>Save and close</button>{" "}
-            <button className="secondary" onClick={onClose}>Discard</button>{" "}
-            <button className="secondary" onClick={() => setClosing(false)}>Keep editing</button>
+      )}
+      <div className={`docdlg-body${pdf ? " with-pdf" : ""}`}>
+        {doc && <DocumentForm fields={fields} values={values} readOnly={readOnly} onChange={(n, v) => setValues((cur) => ({ ...cur, [n]: v }))} />}
+        {pdf && doc && (
+          <div>
+            <p className="small muted">Preview of the last saved version{dirty ? " (your unsaved edits are not shown)" : ""}.</p>
+            <iframe key={`${pdfKey}-${viewing}`} title="PDF preview" src={api.pdfUrl(visitId, docId, viewing)} className="docdlg-pdf" />
           </div>
         )}
-
-        <div className="row">
-          {canEdit && <button disabled={!dirty || busy} onClick={() => void save(latest)}>{busy ? "Saving…" : "Save new version"}</button>}
-          <a className="btn secondary" href={api.pdfUrl(visitId, docId, viewing || undefined)} target="_blank" rel="noreferrer">Download PDF</a>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

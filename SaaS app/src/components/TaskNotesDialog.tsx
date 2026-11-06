@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
+import { Modal } from "./Modal";
 import { MAX_NOTES } from "@/lib/taskTypes";
 import { PHI_WARNING } from "@/lib/phiGuard";
 
@@ -31,42 +31,29 @@ export function TaskNotesDialog({
     onClose();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  return createPortal(
-    <div className="notes-overlay" onMouseDown={close}>
-      <div className="notes-dialog" role="dialog" aria-modal="true" aria-label={`Notes for ${title}`} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="notes-header">
-          <span className="notes-title">{title}</span>
-          <button className="notes-close" onClick={close} title="Close (Esc)" aria-label="Close notes">
-            ×
-          </button>
-        </div>
-        {!readOnly && <div className="phi-hint small muted">{PHI_WARNING}</div>}
-        <textarea
-          className="notes-textarea"
-          autoFocus
-          readOnly={readOnly}
-          maxLength={MAX_NOTES}
-          placeholder={readOnly ? "No notes." : "Paste or type notes…"}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          aria-label="Notes"
-        />
-        <div className="notes-footer">
+  return (
+    <Modal
+      title={title}
+      size="md"
+      onClose={close}
+      notices={!readOnly ? <div className="phi-hint small muted">{PHI_WARNING}</div> : undefined}
+      footer={
+        <>
           {readOnly && <span className="muted small">Read-only</span>}
-          <button className="notes-done" onClick={close}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+          <button className="notes-done" onClick={close}>Done</button>
+        </>
+      }
+    >
+      <textarea
+        className="notes-textarea"
+        autoFocus
+        readOnly={readOnly}
+        maxLength={MAX_NOTES}
+        placeholder={readOnly ? "No notes." : "Paste or type notes…"}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        aria-label="Notes"
+      />
+    </Modal>
   );
 }

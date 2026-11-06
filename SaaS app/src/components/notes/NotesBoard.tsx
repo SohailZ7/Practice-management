@@ -11,6 +11,7 @@ import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
 import { GenerateDialog } from "./GenerateDialog";
+import { Modal } from "../Modal";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -344,21 +345,26 @@ function TranscriptView({ visitId, onClose }: { visitId: string; onClose: () => 
     void getVisitTranscript(visitId).then((r) => setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }));
   }, [visitId]);
   return (
-    <div role="dialog" aria-label="Transcript" className="card" style={{ position: "fixed", inset: "8% 10%", overflow: "auto", zIndex: 50, background: "var(--card, Canvas)" }}>
-      <div className="row">
-        <h2 style={{ margin: 0 }}>Transcript</h2>
-        <span className="grow" />
-        <button className="secondary" disabled={!state || "error" in state} onClick={async () => {
-          if (state && "text" in state) {
-            try { await navigator.clipboard.writeText(state.text); setCopied(true); } catch { setCopied(false); }
-          }
-        }}>{copied ? "Copied" : "Copy"}</button>
-        <button className="secondary" onClick={onClose}>Close</button>
-      </div>
-      {state && "text" in state && <p className="small muted">Uploaded to the cloud · {new Date(state.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. Read-only.</p>}
+    <Modal
+      title="Transcript"
+      onClose={onClose}
+      notices={
+        (state && "error" in state ? <p role="alert" className="docdlg-bad">{state.error}</p> : undefined)
+      }
+      footer={
+        <>
+          <button className="secondary" disabled={!state || "error" in state} onClick={async () => {
+            if (state && "text" in state) {
+              try { await navigator.clipboard.writeText(state.text); setCopied(true); } catch { setCopied(false); }
+            }
+          }}>{copied ? "Copied" : "Copy"}</button>
+          <button className="secondary" onClick={onClose}>Close</button>
+        </>
+      }
+    >
+      {state && "text" in state && <p className="small muted" style={{ margin: 0 }}>Uploaded to the cloud · {new Date(state.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. Read-only.</p>}
       {!state && <p className="muted">Loading…</p>}
-      {state && "error" in state && <p role="alert">{state.error}</p>}
-      {state && "text" in state && <pre style={{ whiteSpace: "pre-wrap", userSelect: "text" }}>{state.text || "No transcript stored for this visit."}</pre>}
-    </div>
+      {state && "text" in state && <pre style={{ whiteSpace: "pre-wrap", userSelect: "text", margin: 0 }}>{state.text || "No transcript stored for this visit."}</pre>}
+    </Modal>
   );
 }
