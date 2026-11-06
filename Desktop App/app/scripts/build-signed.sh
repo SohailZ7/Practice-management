@@ -12,7 +12,7 @@ rm -rf src-tauri/target/release/bundle/macos src-tauri/target/release/bundle/sig
 npm run tauri build -- --bundles app
 SRC="src-tauri/target/release/bundle/macos/Practice Recorder.app"
 OUT="$HOME/PracticeRecorder-signed"   # outside the iCloud-synced Documents folder, which keeps re-adding attributes
-rm -rf "$OUT"; mkdir -p "$OUT"
+mkdir -p "$OUT"; find "$OUT" -mindepth 1 -maxdepth 1 ! -name versions -exec rm -rf {} +   # keeps the versions/ archive of released DMGs
 ditto --norsrc --noextattr --noqtn "$SRC" "$OUT/Practice Recorder.app"
 xattr -cr "$OUT/Practice Recorder.app"
 if security find-identity -p codesigning | grep -q "$NAME"; then ID="$NAME"; else

@@ -16,6 +16,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod capture;
 pub mod google;
+mod updater;
+mod diarize;
 pub mod keystore;
 pub mod queue;
 pub mod transcribe;
@@ -197,6 +199,14 @@ fn signed_in_map() -> std::collections::BTreeMap<String, bool> {
 }
 
 // ----------------------------------------------------------------------------- Tauri commands
+
+/// OS version and CPU for the diagnostics report. Nothing about the person or the machine's name.
+#[tauri::command]
+fn diag_context() -> serde_json::Value {
+    let ver = std::process::Command::new("sw_vers").arg("-productVersion").output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+    serde_json::json!({ "os": format!("macOS {ver}"), "arch": std::env::consts::ARCH })
+}
 
 #[tauri::command]
 async fn engine_status_cmd(app: tauri::AppHandle) -> EngineStatus {
@@ -398,6 +408,18 @@ pub struct StopResult {
     system_audio: bool,
     /// Only one side of a telehealth call was heard: a note written from this would be missing the other voice.
     one_sided: bool,
+    /// Voices found on a single microphone (1 or 2); 2 when both sides of a call were captured on their own channels.
+    voices: usize,
+    /// True when the provider still has to say which of "Speaker 1" / "Speaker 2" is the patient.
+    needs_speaker_choice: bool,
+    /// The first words each unconfirmed speaker said, only to help the provider choose (never stored or logged).
+    speakers: Vec<SpeakerSample>,
+}
+
+#[derive(Serialize)]
+pub struct SpeakerSample {
+    label: String,
+    sample: String,
 }
 
 fn now_unix() -> u64 {
@@ -426,14 +448,38 @@ async fn stop_recording(
         return Err("the recording is silent; check the microphone and try again".into());
     }
     let seconds = channels.mic.len().max(channels.system.len()) as f32 / capture::SAMPLE_RATE as f32;
-    let summary = StopResult { seconds, system_audio: !channels.system.is_empty(), one_sided: channels.one_sided() };
+    let summary = StopResult { seconds, system_audio: !channels.system.is_empty(), one_sided: channels.one_sided(), voices: 0, needs_speaker_choice: false, speakers: Vec::new() };
     let model = find_model(&app).ok_or("the transcription model is missing")?;
-    let segments = tauri::async_runtime::spawn_blocking(move || transcribe::transcribe(&model, &channels.mic, &channels.system))
-        .await
-        .map_err(|_| "transcription failed".to_string())??;
+    // Two channels (a video call: the mic is the provider, the call audio is the patient) are labelled by channel. One
+    // microphone (in person, or on speaker) is separated into two voices here on the Mac; those labels are unconfirmed.
+    let (segments, voices) = tauri::async_runtime::spawn_blocking(move || {
+        let mut segs = transcribe::transcribe(&model, &channels.mic, &channels.system)?;
+        let loud = |v: &Vec<i16>| v.iter().any(|s| s.unsigned_abs() > 300);
+        let voices = if loud(&channels.system) {
+            for s in segs.iter_mut() {
+                s.speaker = (if s.channel == "mic" { "Provider" } else { "Patient" }).into();
+            }
+            2
+        } else {
+            diarize::diarize(&channels.mic, &mut segs)
+        };
+        Ok::<_, String>((segs, voices))
+    })
+    .await
+    .map_err(|_| "transcription failed".to_string())??;
     if segments.is_empty() {
         return Err("The recording produced no text.".into());
     }
+    let needs_choice = segments.iter().any(|s| s.speaker == "Speaker 1" || s.speaker == "Speaker 2");
+    let speakers: Vec<SpeakerSample> = if needs_choice {
+        ["Speaker 1", "Speaker 2"].iter().map(|l| SpeakerSample {
+            label: (*l).to_string(),
+            sample: segments.iter().find(|s| s.speaker == *l).map(|s| s.text.split_whitespace().take(14).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
+        }).collect()
+    } else {
+        Vec::new()
+    };
+    let summary = StopResult { voices, needs_speaker_choice: needs_choice, speakers, ..summary };
     let meta = queue::Metadata {
         version: "1.0".into(),
         visit_id,
@@ -527,6 +573,16 @@ async fn queue_set_text(visit_id: String, environment: String, text: String) -> 
         status: queue::Status::Pending,
     };
     queue::save(&support_dir(), &keystore::queue_key()?, &meta, &[], &text)
+}
+
+/// The provider said who is who: renames "Speaker 1" / "Speaker 2" in this visit's saved transcript before it is sent.
+#[tauri::command]
+async fn queue_relabel(visit_id: String, mapping: std::collections::HashMap<String, String>) -> Result<(), String> {
+    let allowed = |l: &str| matches!(l, "Provider" | "Patient" | "Speaker 1" | "Speaker 2");
+    if mapping.iter().any(|(a, b)| !allowed(a) || !allowed(b)) {
+        return Err("Unknown speaker label.".into());
+    }
+    queue::relabel(&support_dir(), &keystore::queue_key()?, &visit_id, &mapping)
 }
 
 /// Called after the server confirmed the upload: marks the folder uploaded and shreds it.
@@ -647,10 +703,12 @@ async fn queue_discard(visit_id: String) -> Result<(), String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf
+            queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf,
+            updater::check_update, updater::install_update, diag_context
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");

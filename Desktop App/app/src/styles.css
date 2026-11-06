@@ -125,3 +125,14 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--navy-2); }
 .doc-icons { display: inline-flex; gap: 3px; flex-wrap: nowrap; max-width: 1.2in; }
 .doc-icon { padding: 5px 6px; line-height: 0; }
 button.danger { background: #a02323; color: #fff; }
+
+.speaker-choice { border: 1px solid var(--line, #d8dde3); border-radius: 8px; padding: .6rem .8rem; margin: .5rem 0; display: flex; flex-direction: column; gap: .35rem; align-items: flex-start; }
+.speaker-sample { font-style: italic; overflow-wrap: anywhere; }
+.tx-bucket { font-size: .8rem; font-weight: 600; color: var(--muted); margin: .9rem 0 .3rem; border-bottom: 1px solid var(--line); padding-bottom: .15rem; }
+.tx-block { display: grid; grid-template-columns: 3.4rem 6.2rem 1fr; gap: .5rem; padding: .25rem 0 .25rem .5rem; align-items: baseline; border-left: 3px solid var(--line); }
+.tx-block.provider { border-left-color: #4a7fd0; } .tx-block.patient { border-left-color: #d0884a; }
+.tx-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .8rem; }
+.tx-who { font-weight: 600; font-size: .85rem; }
+.tx-who.unsure { color: var(--muted); font-style: italic; }
+.tx-text { overflow-wrap: anywhere; }
+.tx-scroll { max-height: 52vh; overflow-y: auto; padding-right: .4rem; }

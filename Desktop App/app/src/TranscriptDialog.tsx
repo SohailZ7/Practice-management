@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ApiFailure, fetchTranscript, type Session, type Visit } from "./lib/api";
+import { ApiFailure, fetchTranscript, pushTranscript, type Session, type Visit } from "./lib/api";
+import { bucketize, hasUnconfirmed, parseTranscript, relabelText, speakersIn } from "./lib/transcriptView";
 import type { Engine, QueueItem } from "./lib/engine";
 import { Modal } from "./Modal";
 
@@ -39,6 +40,11 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
   const [source, setSource] = useState("");
   const [problem, setProblem] = useState("");
   const [copied, setCopied] = useState(false);
+  // Renaming speakers happens inside this same window (never a second pop-up on top of it).
+  const [renaming, setRenaming] = useState(false);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameMsg, setRenameMsg] = useState("");
   const info = describeTranscript({ phase: status.phase, queued, hasTranscript: visit.hasTranscript, reason: status.reason });
 
   useEffect(() => {
@@ -70,9 +76,35 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
     return () => { alive = false; setText(null); }; // nothing is kept after the window closes
   }, [visit.id, queueItem?.visit_id, status.phase, queued]);
 
+  const blocks = text ? parseTranscript(text) : [];
+  const speakers = speakersIn(blocks);
+  const canRename = !!text && speakers.length > 0 && status.phase !== "recording" && status.phase !== "working";
+
+  async function saveNames() {
+    if (!text) return;
+    const map: Record<string, string> = {};
+    for (const sp of speakers) if (names[sp] && names[sp] !== sp) map[sp] = names[sp];
+    if (Object.keys(map).length === 0) { setRenaming(false); return; }
+    setRenameBusy(true); setRenameMsg("");
+    try {
+      const next = relabelText(text, map);
+      if (queueItem) await engine.queueSetText(queueItem.visit_id, queueItem.environment, next);
+      else await pushTranscript(session, visit.id, next);
+      setText(next); setRenaming(false);
+    } catch (e) {
+      setRenameMsg(e instanceof Error ? e.message : "Could not save the new names. Nothing was changed.");
+    } finally { setRenameBusy(false); }
+  }
+
   return (
-    <Modal title="Transcript" onClose={onClose} width={720}
-      footer={<>
+    <Modal title={renaming ? "Rename speakers" : "Transcript"} onClose={onClose} width={720}
+      footer={renaming ? (<>
+        <button className="secondary" disabled={renameBusy} onClick={() => { setRenaming(false); setRenameMsg(""); }}>Back</button>
+        <button disabled={renameBusy} onClick={() => void saveNames()}>{renameBusy ? "Saving…" : "Save names"}</button>
+      </>) : <>
+        {canRename && (
+          <button className="secondary" onClick={() => { setNames(Object.fromEntries(speakers.map((sp) => [sp, sp]))); setRenameMsg(""); setRenaming(true); }}>Rename speakers</button>
+        )}
         {text && (
           <button className="secondary" onClick={async () => {
             try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
@@ -87,10 +119,44 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
       <p className={info.state === "failed" ? "small err" : "small"} role="status"><strong>Status:</strong> {info.text}</p>
       {problem && <p className="small err">{problem}</p>}
       {text === "" && <p className="small">The practice app has no transcript stored for this visit.</p>}
-      {text !== null && text !== "" && (
+      {text !== null && text !== "" && renaming && (
         <>
-          <p className="small">Showing the copy from: {source}</p>
-          <textarea readOnly rows={14} value={text} aria-label="Transcript text" style={{ width: "100%" }} />
+          <p className="small" style={{ marginTop: 0 }}>
+            Choose who each speaker is. {visit.documentCount > 0 ? "Documents were already written from the earlier names; they are not changed. " : "Do this before writing the documents. "}
+          </p>
+          {speakers.map((sp) => (
+            <label key={sp} className="field">
+              <span>{sp}{/^Speaker \d+$/.test(sp) ? " (unconfirmed)" : ""} is</span>
+              <select value={names[sp] ?? sp} onChange={(e) => setNames((n) => ({ ...n, [sp]: e.target.value }))}>
+                {[...new Set(["Provider", "Patient", sp])].map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+          ))}
+          {speakers.length === 2 && (
+            <button className="secondary" onClick={() => setNames({ [speakers[0]]: names[speakers[1]] ?? speakers[1], [speakers[1]]: names[speakers[0]] ?? speakers[0] })}>
+              Swap the two
+            </button>
+          )}
+          {renameMsg && <p className="small err">{renameMsg}</p>}
+        </>
+      )}
+      {text !== null && text !== "" && !renaming && (
+        <>
+          <p className="small">Showing the copy from: {source}{hasUnconfirmed(blocks) ? ". Speaker labels are not confirmed yet." : ""}</p>
+          <div className="tx-scroll" aria-label="Transcript text" role="region" tabIndex={0}>
+            {bucketize(blocks).map((bk, i) => (
+              <div key={i}>
+                {bk.heading && <div className="tx-bucket">{bk.heading}</div>}
+                {bk.blocks.map((b, j) => (
+                  <div key={j} className={`tx-block ${b.speaker.toLowerCase() === "provider" ? "provider" : b.speaker.toLowerCase() === "patient" ? "patient" : ""}`}>
+                    <span className="tx-time">{b.time}</span>
+                    <span className={`tx-who ${/^Speaker \d+$/.test(b.speaker) ? "unsure" : ""}`}>{b.speaker}</span>
+                    <span className="tx-text">{b.text}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </>
       )}
     </Modal>

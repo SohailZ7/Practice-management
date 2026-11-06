@@ -1,6 +1,6 @@
 [package]
 name = "practice-notes"
-version = "1.0.5"
+version = "1.0.8"
 description = "Practice Recorder: captures visit audio and transcribes it locally"
 edition = "2021"
 
@@ -20,6 +20,7 @@ ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 keyring = { version = "3", features = ["apple-native"] }
 aes-gcm = "0.10"
 whisper-rs = { version = "0.16.0", features = ["metal"] }
+tauri-plugin-updater = "2"
 
 # Capturing the audio of a telehealth call needs a native API: macOS does not let a web page record what comes out
 # of the speakers. ScreenCaptureKit is what Meetily uses for the same reason.
