@@ -10,3 +10,4 @@ Web 1.7 | Settings shows build and environment; Mac app card | cbb490b (staging,
 Web 1.8 | Logs why the release manifest cannot be read | 7ca4aae (staging, rev practice-mgmt-00059-tob)
 Web 1.9 | Notes document wording matches Desktop | 936f2a1 (staging, rev practice-mgmt-00061-hos)
 Web 1.10 | Notes visits appear on the Schedule | da41fa8 (staging, rev practice-mgmt-00063-vad)
+Web 1.11 | Recorder visit list needs Notes view only | pending

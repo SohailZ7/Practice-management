@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
  * which visit they are recording, and does not need the name for anything.
  */
 export const GET = handle(async (req) => {
-  const { user } = await authenticate(req, { module: "notes", level: "edit" });
+  // Listing needs Notes VIEW, the same as the web Notes board. Visits are not scoped by creator or provider.
+  const { user } = await authenticate(req, { module: "notes", level: "view" });
   const date = new URL(req.url).searchParams.get("date") ?? todayISO();
   if (!isISODate(date)) throw new ApiError(400, "bad_date");
 
