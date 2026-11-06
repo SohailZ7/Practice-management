@@ -214,6 +214,28 @@ pub fn api_request(
     }
 }
 
+/// Fetches a binary file (a document PDF) from the practice app. Same address rules as `api_request`; the body is
+/// capped at 30 MB. Any HTTP status comes back as data.
+pub fn download(base_url: &str, path: &str, token: &str) -> Result<(u16, Vec<u8>), String> {
+    use std::io::Read;
+    check_base_url(base_url)?;
+    if !path.starts_with("/api/desktop/v1/") || path.contains("..") || path.contains('\\') {
+        return Err("Not a practice app address.".into());
+    }
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(120)).build();
+    let req = agent.get(&format!("{}{}", base_url.trim_end_matches('/'), path)).set("authorization", &format!("Bearer {token}"));
+    match req.call() {
+        Ok(r) => {
+            let status = r.status();
+            let mut bytes = Vec::new();
+            r.into_reader().take(30 * 1024 * 1024).read_to_end(&mut bytes).map_err(|_| "The download was interrupted.".to_string())?;
+            Ok((status, bytes))
+        }
+        Err(ureq::Error::Status(code, _)) => Ok((code, Vec::new())),
+        Err(e) => Err(format!("Could not reach the practice app ({}).", e.kind())),
+    }
+}
+
 /// Swaps a refresh token for a new pair. The server rotates the refresh token, so the old one is dead afterwards.
 /// `Ok(None)` means the server refused it (signed out for good); `Err` means it could not be reached.
 pub fn refresh(practice_url: &str, refresh_token: &str) -> Result<Option<PracticeTokens>, String> {

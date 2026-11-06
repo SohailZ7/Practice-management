@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
+import { FormBody } from "./FormBody";
 import {
-  fetchDocTypes, fetchDocument, listDocuments, noteErrorMessage, saveDocumentVersion,
+  downloadDocumentPdf, fetchDocTypes, fetchDocument, listDocuments, noteErrorMessage, saveDocumentVersion,
   type DocType, type DocumentDetail, type FieldValue, type NoteDocument, type Session, type Visit,
 } from "./lib/api";
 
@@ -60,6 +61,7 @@ export function DocumentEditor({ visit, doc, session, onClose }: {
   const [stale, setStale] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const [pending, setPending] = useState<null | (() => void)>(null);
 
   async function load(version?: number) {
@@ -90,10 +92,19 @@ export function DocumentEditor({ visit, doc, session, onClose }: {
     } finally { setSaving(false); }
   }
 
+  async function download() {
+    setDownloading(true); setError(""); setSaved("");
+    try {
+      const path = await downloadDocumentPdf(session, visit.id, doc.id, `${visit.realInitials ?? visit.initials}_${doc.title}_v${latest}`.replace(/\s+/g, "_"));
+      setSaved(`Saved the PDF (version ${latest}) to Downloads: ${path.split("/").pop()}`);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save the PDF."); }
+    finally { setDownloading(false); }
+  }
+
   const set = (name: string, v: FieldValue) => { setSaved(""); setValues((p) => ({ ...p, [name]: v })); };
 
   return (
-    <Modal title={doc.title} onClose={() => guard(onClose)} width={820}
+    <Modal title={doc.title} onClose={() => guard(onClose)} width={1000}
       footer={pending ? (
         <>
           <span className="err" style={{ flex: "1 1 auto", alignSelf: "center" }}>You have unsaved changes.</span>
@@ -108,6 +119,11 @@ export function DocumentEditor({ visit, doc, session, onClose }: {
             </span>
           )}
           <button className="secondary" onClick={() => guard(onClose)}>Close</button>
+          {detail && (
+            <button className="secondary" disabled={dirty || saving || downloading}
+              title={dirty ? "Save as new version first: the PDF is made from the latest saved version" : "Download the latest saved version as a PDF to your Downloads folder"}
+              onClick={() => void download()}>{downloading ? "Saving PDF…" : "Download PDF"}</button>
+          )}
           {detail && !readOnly && <button disabled={!dirty || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save as new version"}</button>}
         </>
       )}>
@@ -128,28 +144,7 @@ export function DocumentEditor({ visit, doc, session, onClose }: {
             </select>
           </label>
           {readOnly && <p className="small">You are reading an older version. Choose the latest version to edit.</p>}
-          {detail.fields.map((f) => {
-            const v = values[f.name];
-            if (f.type === "checkbox") return (
-              <label key={f.name} style={{ display: "block", margin: "8px 0" }}>
-                <input type="checkbox" disabled={readOnly} checked={v === true} onChange={(e) => set(f.name, e.target.checked)} /> {f.label}
-              </label>
-            );
-            return (
-              <label key={f.name} className="field"><span>{f.label}</span>
-                {f.type === "longtext" ? (
-                  <textarea rows={6} readOnly={readOnly} style={{ width: "100%" }} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
-                ) : f.type === "select" ? (
-                  <select disabled={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)}>
-                    <option value="" />
-                    {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input type={f.type === "date" ? "date" : "text"} readOnly={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
-                )}
-              </label>
-            );
-          })}
+          <FormBody fields={detail.fields} values={values} readOnly={readOnly} set={set} />
         </>
       )}
     </Modal>
@@ -168,13 +163,24 @@ export function DocumentIcons({ visit, session, refreshKey }: { visit: Visit; se
   }, [visit.id, visit.documentCount, refreshKey]);
   return (
     <>
-      {docs.map((d) => (
-        <button key={d.id} className="secondary" title={`${d.title} (version ${d.latestVersion})`} aria-label={`Open ${d.title}`} onClick={() => setOpen(d)}>
-          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M10 1.5v3h3M5.5 8.5h5M5.5 11h5" /></svg>
-          {" "}{d.title.length > 18 ? `${d.title.slice(0, 17)}…` : d.title}
-        </button>
-      ))}
+      <span className="doc-icons">
+        {docs.map((d) => (
+          <button key={d.id} className="secondary doc-icon" title={`${d.title} (version ${d.latestVersion})`} aria-label={`Open ${d.title}`} onClick={() => setOpen(d)}>
+            <DocIcon docType={d.docType} />
+          </button>
+        ))}
+      </span>
       {open && <DocumentEditor visit={visit} doc={open} session={session} onClose={() => setOpen(null)} />}
     </>
   );
+}
+
+/** One distinct small picture per kind of document, so a row shows them in a line. The tooltip carries the full name. */
+export function DocIcon({ docType }: { docType: string }) {
+  const t = docType.toLowerCase();
+  const common = { width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": true, fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  if (/discharge/.test(t)) return <svg {...common}><path d="M3 2.5h6v11H3z" /><path d="M9 8h5M12 5.5 14.5 8 12 10.5" /></svg>;
+  if (/admit/.test(t)) return <svg {...common}><path d="M7 2.5h6v11H7z" /><path d="M1.5 8H9M6.5 5.5 9 8l-2.5 2.5" /></svg>;
+  if (/eval/.test(t)) return <svg {...common}><path d="M3 1.5h7l3 3V14.5H3z" /><circle cx="8" cy="9" r="2.2" /><path d="m9.7 10.7 2 2" /></svg>;
+  return <svg {...common}><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M10 1.5v3h3M5.5 8.5h5M5.5 11h5" /></svg>;
 }

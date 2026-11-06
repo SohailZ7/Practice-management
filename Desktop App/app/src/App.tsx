@@ -9,6 +9,9 @@ import { Search } from "./Search";
 import { Mfa } from "./Mfa";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
+import { longDate, practiceToday, shiftDate as shift } from "./lib/dates";
+import { canShowFullNames, displayVisits, loadShowFull, saveShowFull } from "./lib/names";
+import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
 import { fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
@@ -17,15 +20,6 @@ import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } fro
 import { retryAll, setCopyLabel, uploadQueued } from "./lib/queue";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
-const practiceToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
-const shift = (iso: string, days: number) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-};
-const longDate = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
-
 type RowState =
   | { phase: "idle" }
   | { phase: "recording"; since: number; warning?: string }
@@ -43,12 +37,12 @@ export function App() {
   const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [showFull, setShowFull] = useState(loadShowFull);
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [message, setMessage] = useState("");
   useEffect(() => { setMessage(""); }, [tab]); // a notice belongs to the screen that raised it
   const [pasting, setPasting] = useState(false);
   const [provider, setProvider] = useState("");
-  const [telehealth, setTelehealth] = useState(true);
   const [adding, setAdding] = useState(false);
   const [options, setOptions] = useState<VisitOptions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -133,8 +127,10 @@ export function App() {
     setRows({});
     setVisits(null);
     setMessage("");
-    void load();
-  }, [load]);
+  }, [env, date]);
+  // A refreshed sign-in token only reloads the list. It must not wipe what the rows show (a recording in progress, a
+  // failure message), so the reset above is tied to the environment and the date alone.
+  useEffect(() => { void load(); }, [load]);
 
   const loadQueue = useCallback(async () => {
     if (!engine) return;
@@ -244,9 +240,11 @@ export function App() {
               <button className="secondary" onClick={() => void load()}>Refresh</button>
               {session && <button className="secondary" onClick={() => { setAdding((v) => !v); setPasting(false); }}>{adding ? "Cancel" : "Add one visit"}</button>}
               {session && <button className="secondary" onClick={() => { setPasting((v) => !v); setAdding(false); }}>{pasting ? "Cancel" : "Paste schedule"}</button>}
-              <label className="small" title="Tick for video or phone visits. Untick for in-person visits, where only your microphone is used.">
-                <input type="checkbox" checked={telehealth} onChange={(e) => setTelehealth(e.target.checked)} /> Patient is on a call (record their voice too)
-              </label>
+              {canShowFullNames(visits) && (
+                <label className="small" title="Only people the practice has allowed see this option.">
+                  <input type="checkbox" checked={showFull} onChange={(e) => { setShowFull(e.target.checked); saveShowFull(e.target.checked); }} /> Show full names
+                </label>
+              )}
             </div>
 
             {missing.length > 0 && (
@@ -263,7 +261,16 @@ export function App() {
                 provider={provider}
                 onProvider={setProvider}
                 onDone={(m) => { setAdding(false); setMessage(m); void load(); }}
-                create={(v) => createVisit(session, date, v)}
+                create={async (v) => {
+                  const made = await createVisit(session, date, v);
+                  // Read the day back: the server said "created", so the visit must be in that day's list.
+                  const back = await fetchVisits(session, date);
+                  setVisits(back.visits);
+                  if (!back.visits.some((x) => x.id === made.id)) {
+                    throw new Error("The practice app accepted the visit but it is not in the list for " + longDate(date) + ". Nothing was lost; tell support.");
+                  }
+                  return made;
+                }}
               />
             )}
 
@@ -314,12 +321,12 @@ export function App() {
               <table className="board">
                 <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
                 <tbody>
-                  {visits.map((v) => (
+                  {displayVisits(visits, showFull && canShowFullNames(visits)).map((v) => (
                     <Row key={v.id} visit={v} date={date}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
-                      onState={setRow} engine={engine!} session={session} telehealth={telehealth}
+                      onState={setRow} engine={engine!} session={session}
                       onSent={() => { void load(); void loadQueue(); }} />
                   ))}
                 </tbody>
@@ -329,8 +336,8 @@ export function App() {
             <p className="small">
               The recording stays on this Mac and is never saved. It is turned into text here, and only the text is sent
               to the practice app, where the notes are written. Until the practice app confirms it, the text is kept
-              encrypted on this Mac. With <strong>Patient is on a call</strong> ticked, the call's audio is recorded as well as
-              your microphone, so the patient's side of the visit is captured; macOS asks for System Audio Recording permission the first time. If the other person's side comes out empty, allow Practice Recorder under System Settings &gt; Privacy &amp; Security &gt; System Audio Recording (it is not a Screen Recording permission, and no picture of your screen is ever taken).
+              encrypted on this Mac. Recording picks up your microphone and, when a call is playing through this Mac, the
+              other person's voice as well. If nothing comes from the speakers, only your voice is transcribed. To capture the other side of a call, allow Practice Recorder under System Settings &gt; Privacy &amp; Security &gt; System Audio Recording (it is not a Screen Recording permission, and no picture of your screen is ever taken).
             </p>
           </>
         )}
@@ -341,12 +348,7 @@ export function App() {
 
 /** Option lists from the server, topped up with what is already on the loaded day when the server has no list. */
 function mergeOptions(server: VisitOptions | null, visits: Visit[], provider: string): VisitOptions {
-  const distinct = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))].sort();
-  return {
-    programs: distinct([...(server?.programs ?? []), ...visits.map((v) => v.program)]),
-    appointmentTypes: distinct([...(server?.appointmentTypes ?? []), ...visits.map((v) => v.appointmentType)]),
-    providers: distinct([...(server?.providers ?? []), ...visits.map((v) => v.providerName), provider]),
-  };
+  return formChoices(server, visits, { provider });
 }
 
 /** One visit by hand, sent straight to the practice app. Use made-up names when testing. */
@@ -360,14 +362,11 @@ function AddVisit({ date, options, provider, onProvider, onDone, create }: {
   const [type, setType] = useState("");
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
+  const [failure, setFailure] = useState("");
   const cleanTime = normalizeTime(time);
-  const errors = {
-    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? "" : "Pick a date first.",
-    patient: /\S+\s+\S+/.test(patient.trim()) ? "" : "Enter the client as First Last.",
-    time: cleanTime === null ? "Enter a time like 9:00 AM or 9:00 - 11:30." : "",
-  };
+  const errors = visitFormErrors({ date, patient, time, type, provider });
   const invalid = Object.values(errors).some(Boolean);
-  const show = (m: string) => tried && m && <div className="small err">{m}</div>;
+  const show = (m: string) => tried && m && <div className="small err" role="alert">{m}</div>;
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add one visit</h2>
@@ -376,26 +375,28 @@ function AddVisit({ date, options, provider, onProvider, onDone, create }: {
       <label className="field"><span>Client (First Last)</span><input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Alpha Testcase" />{show(errors.patient)}</label>
       <label className="field"><span>Time</span><TimeField value={time} onChange={setTime} /></label>
       <label className="field"><span>Program</span><ComboField label="Program" value={program} onChange={setProgram} options={options.programs} placeholder="KIOP-AM" /></label>
-      <label className="field"><span>Type</span><StrictSelect label="Type" value={type} onChange={setType} options={options.appointmentTypes} /></label>
-      <label className="field"><span>Provider</span><StrictSelect label="Provider" value={provider} onChange={onProvider} options={options.providers} /></label>
+      <label className="field"><span>Type</span><StrictSelect label="Type" value={type} onChange={setType} options={options.appointmentTypes} />{show(errors.type)}</label>
+      <label className="field"><span>Provider</span><StrictSelect label="Provider" value={provider} onChange={onProvider} options={options.providers} />{show(errors.provider)}</label>
       <div className="row">
         <button disabled={busy} onClick={async () => {
           setTried(true);
+          setFailure("");
           if (invalid) return;
           setBusy(true);
           try {
             await create({
-              patient: patient.trim(), apptTime: cleanTime || undefined, program: program.trim() || undefined,
+              patient: clientNameToSend(patient), apptTime: cleanTime || undefined, program: program.trim() || undefined,
               appointmentType: type.trim() || undefined, providerName: provider.trim() || undefined,
             });
             onDone("Added 1 visit.");
           } catch (e) {
-            onDone(visitErrorMessage(e));
+            setFailure(visitErrorMessage(e)); // stay on the form so the reason is next to the button
           } finally {
             setBusy(false);
           }
         }}>{busy ? "Adding…" : "Add visit"}</button>
       </div>
+      {failure && <div className="err" role="alert" style={{ marginTop: 8 }}>The visit was not added. {failure}</div>}
     </div>
   );
 }
@@ -442,10 +443,10 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent, telehealth }: {
+function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
   visit: Visit; date: string; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
-  engine: Engine; session: Session; onSent: () => void; telehealth: boolean;
+  engine: Engine; session: Session; onSent: () => void;
 }) {
   const [secs, setSecs] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -486,7 +487,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   async function start() {
     setBusy(true);
     try {
-      const { warning } = await engine.startRecording(telehealth);
+      const { warning } = await engine.startRecording(true);
       setSecs(0);
       onState(visit.id, { phase: "recording", since: Date.now(), warning: warning ?? undefined });
     } catch (e) {
@@ -504,23 +505,9 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       // The transcript is saved (encrypted) on this Mac before anything is sent.
       const prev = earlier.current;
       const summary = await engine.stopRecording(visit.id, env, prev?.text, prev ? addedSeparator(new Date()) : undefined);
-      // A telehealth call that only heard one person would produce a note missing half the visit.
-      if (summary.one_sided && telehealth) {
-        const go = window.confirm(
-          "Only one side of this call was recorded, so the note would be missing what the other person said.\n\n" +
-            "Send it anyway?",
-        );
-        if (!go) {
-          // Undo: text that only lived in the queue is put back as it was; text on the cloud was never touched.
-          if (prev?.fromQueue) await engine.queueSetText(visit.id, env, prev.text);
-          else await engine.queueDiscard(visit.id);
-          earlier.current = null;
-          return onState(visit.id, { phase: "idle" });
-        }
-      }
       onState(visit.id, { phase: "working", detail: "sending to the practice app" });
       const item = (await engine.queueList()).find((q) => q.visit_id === visit.id);
-      setCopyLabel(visit.id, `${visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
+      setCopyLabel(visit.id, `${visit.realInitials ?? visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
       const result = item ? await uploadQueued(engine, item, session) : { ok: false, reason: "missing" };
       onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: SAVED_MESSAGE });
       onSent();
@@ -537,7 +524,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   return (
     <tr>
       <td><input type="checkbox" aria-label={`Select visit for ${visit.initials}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>
-      <td title="Shown as initials">{visit.initials}</td>
+      <td title={visit.fullName && visit.initials === visit.fullName ? "Full name" : "Shown as initials"}>{visit.initials}</td>
       <td style={{ whiteSpace: "nowrap" }}>
         <TimeCell
           value={visit.apptTime ?? ""}
@@ -578,8 +565,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             onStart={(types) => { clearGeneration(visit.id); void startGenerate(session, visit.id, types); }} />
         )}
         <DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} />
-        <button className="secondary" disabled={!canGenerate || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
-          title={canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
+        <button className="secondary" disabled={!canGenerate || visit.documentCount > 0 || gen?.phase === "done" || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
+          title={visit.documentCount > 0 || gen?.phase === "done" ? "The documents are already generated. Open them with the icons." : canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
           onClick={() => setChooser(true)}>
           {gen?.phase === "running" ? "Generating…" : "Generate documents"}
         </button>
@@ -612,26 +599,30 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
           </>
         )}
         {state.phase !== "recording" && state.phase !== "working" && (
-          confirmDelete ? (
-            <>
-              <span className="small">Delete this visit and its transcript and documents?</span>
-              <button className="secondary" disabled={busy} onClick={async () => {
-                setBusy(true);
-                try {
-                  await deleteVisit(session, visit.id);
-                  onSent();
-                } catch (e) {
-                  setConfirmDelete(false);
-                  onState(visit.id, { phase: "failed", message: visitErrorMessage(e) });
-                } finally {
-                  setBusy(false);
-                }
-              }}>Yes, delete</button>
-              <button className="secondary" onClick={() => setConfirmDelete(false)}>Keep</button>
-            </>
-          ) : (
+          <>
             <button className="secondary" disabled={busy} title="Remove this row from the day's list" onClick={() => setConfirmDelete(true)}>Delete</button>
-          )
+            {confirmDelete && (
+              <Modal title="Delete this record?" onClose={() => setConfirmDelete(false)} width={460}
+                footer={<>
+                  <button className="secondary" onClick={() => setConfirmDelete(false)}>Keep it</button>
+                  <button className="danger" disabled={busy} onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await deleteVisit(session, visit.id);
+                      setConfirmDelete(false);
+                      onSent();
+                    } catch (e) {
+                      setConfirmDelete(false);
+                      onState(visit.id, { phase: "failed", message: visitErrorMessage(e) });
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}>Yes, delete</button>
+                </>}>
+                <p style={{ marginTop: 0 }}>Are you sure you want to delete the record for <strong>{visit.initials}</strong>{visit.apptTime ? ` at ${visit.apptTime}` : ""}? Its transcript and documents are deleted too. This cannot be undone.</p>
+              </Modal>
+            )}
+          </>
         )}
       </div></td>
     </tr>

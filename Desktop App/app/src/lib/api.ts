@@ -7,6 +7,10 @@ import { assertSafeBaseUrl } from "./environments";
 export type Visit = {
   id: string;
   initials: string;
+  /** Sent only to the few people allowed to see it. Absent for everyone else. */
+  fullName?: string;
+  /** Set by the recorder when full names are shown, so file names keep using initials. */
+  realInitials?: string;
   program: string;
   /** Clock time(s) from the pasted board, e.g. "9:00-11:30". Empty or missing when the board had none. */
   apptTime?: string;
@@ -219,6 +223,7 @@ export function visitErrorMessage(e: unknown): string {
     if (e.code === "bad_provider") return "Choose a provider from the list.";
     if (e.code === "bad_date") return "That date is not valid.";
     if (e.code === "not_found") return "That visit no longer exists. Refresh the list.";
+    return `The practice app refused this (${e.status}${e.code ? " " + e.code : ""}).`;
   }
   return e instanceof Error ? e.message : String(e);
 }
@@ -405,4 +410,29 @@ export function searchInputProblem(initials: string, date: string): string {
   if (i && i.replace(/[^A-Za-z]/g, "").length > 3) return "Use up to 3 initials, like AB.";
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "That date is not valid.";
   return "";
+}
+
+/**
+ * Saves the latest version of a document as a PDF in the Downloads folder (in a plain browser, a normal download).
+ * Returns where it went.
+ */
+export async function downloadDocumentPdf(session: Session, visitId: string, docId: string, label: string): Promise<string> {
+  const path = `${vpath(visitId)}/documents/${encodeURIComponent(docId)}/pdf`;
+  const base = session.baseUrl.replace(/\/$/, "");
+  assertSafeBaseUrl(base);
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    try {
+      return await invoke<string>("download_document_pdf", { baseUrl: base, path, token: session.accessToken, label });
+    } catch (e) {
+      throw new Error(typeof e === "string" ? e : "Could not save the PDF.");
+    }
+  }
+  const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${session.accessToken}` } });
+  if (!res.ok) throw new Error(`The practice app returned ${res.status}.`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = `${label}.pdf`; a.click();
+  URL.revokeObjectURL(url);
+  return `${label}.pdf`;
 }

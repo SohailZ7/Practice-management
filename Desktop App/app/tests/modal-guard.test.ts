@@ -14,3 +14,13 @@ describe("pop-ups", () => {
     expect(readFileSync("src/App.tsx", "utf8")).not.toMatch(/textAlign:\s*"right",\s*whiteSpace:\s*"nowrap"/);
   });
 });
+
+// The Mac webview draws <datalist> as a detached, unstyled popup far from its field. Use Combobox (src/Fields.tsx).
+describe("native autocomplete", () => {
+  const files = readdirSync("src").filter((f) => f.endsWith(".tsx"));
+  it.each(files)("%s has no <datalist> or list= attribute", (f) => {
+    const src = readFileSync(`src/${f}`, "utf8");
+    expect(src).not.toMatch(/<datalist/);
+    expect(src).not.toMatch(/\blist=\{/);
+  });
+});

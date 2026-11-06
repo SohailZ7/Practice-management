@@ -602,6 +602,43 @@ async fn save_transcript_copy(visit_id: String, label: String) -> Result<bool, S
     Ok(true)
 }
 
+/// Saves a document's PDF (the latest version, as the practice app renders it) into the Downloads folder and returns
+/// the file's path. Nothing is logged; the file is a document the provider is entitled to keep.
+#[tauri::command]
+async fn download_document_pdf(base_url: String, path: String, token: String, label: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bare = path.split('?').next().unwrap_or("");
+        if !bare.contains("/documents/") || !bare.ends_with("/pdf") {
+            return Err("Not a document address.".to_string());
+        }
+        let (status, bytes) = google::download(&base_url, &path, &token)?;
+        if status == 401 {
+            return Err("Signed out. Sign in again in Setup.".into());
+        }
+        if status != 200 {
+            return Err(format!("The practice app returned {status}."));
+        }
+        if !bytes.starts_with(b"%PDF") {
+            return Err("The practice app did not send a PDF.".into());
+        }
+        let dir = home().join("Downloads");
+        if !dir.is_dir() {
+            return Err("The Downloads folder was not found.".into());
+        }
+        let stem = clean_file_stem(&label);
+        let mut out = dir.join(format!("{stem}.pdf"));
+        let mut n = 2;
+        while out.exists() {
+            out = dir.join(format!("{stem}-{n}.pdf"));
+            n += 1;
+        }
+        fs::write(&out, bytes).map_err(|_| "Could not save the PDF.".to_string())?;
+        Ok(out.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|_| "Could not save the PDF.".to_string())?
+}
+
 /// Deletes a queued transcript the provider chose not to send.
 #[tauri::command]
 async fn queue_discard(visit_id: String) -> Result<(), String> {
@@ -613,7 +650,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy
+            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");

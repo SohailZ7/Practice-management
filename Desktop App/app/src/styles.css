@@ -89,3 +89,39 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select {
 }
 input::placeholder, textarea::placeholder { color: var(--muted); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--navy-2); }
+
+/* Combobox (src/Fields.tsx): own drop-down under the input instead of the webview's detached <datalist>. */
+.combo { position: relative; display: inline-block; max-width: 100%; }
+.field .combo { display: block; }
+.combo input { width: 100%; }
+.combo-list { position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 3px); margin: 0; padding: 4px; list-style: none;
+  max-height: 220px; overflow-y: auto; min-width: 140px; background: var(--card); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.35); text-align: left; white-space: nowrap; }
+.combo-list li { padding: 5px 9px; border-radius: 6px; cursor: pointer; }
+.combo-list li.on { background: var(--navy-2); color: #fff; }
+.combo-list li.sel { font-weight: 700; }
+.combo-list li.combo-clear { color: var(--muted); font-style: italic; }
+
+/* A document as the printed form (src/FormBody.tsx): bordered tables, label column, choices side by side. */
+.form-sheet { display: flex; flex-direction: column; gap: 14px; }
+.form-top { display: block; }
+.form-top > span { display: block; font-weight: 700; margin-bottom: 4px; text-decoration: underline; }
+.form-top textarea, .form-top input:not([type="checkbox"]) { width: 100%; }
+.form-section h3 { margin: 0 0 4px; font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; }
+.form-table { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.form-table.paired { display: grid; grid-template-columns: 1fr 1fr; }
+.form-row { display: grid; grid-template-columns: minmax(110px, 170px) 1fr; border-bottom: 1px solid var(--line); }
+.form-table.paired .form-row:nth-child(odd) { border-right: 1px solid var(--line); }
+.form-row:last-child { border-bottom: 0; }
+.form-label { padding: 5px 8px; font-weight: 700; font-size: .85rem; border-right: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.form-label label { font-weight: 700; }
+.form-opts { padding: 5px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; min-width: 0; }
+.opt { display: inline-flex; align-items: center; gap: 5px; font-size: .85rem; white-space: nowrap; }
+.opt-group { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
+.opt-text { display: inline-flex; align-items: center; gap: 5px; flex: 1 1 160px; min-width: 120px; }
+.opt-text input { flex: 1; min-width: 0; padding: 3px 7px; }
+.opt-text textarea { width: 100%; }
+@media (max-width: 760px) { .form-table.paired { grid-template-columns: 1fr; } .form-table.paired .form-row:nth-child(odd) { border-right: 0; } }
+.doc-icons { display: inline-flex; gap: 3px; flex-wrap: nowrap; max-width: 1.2in; }
+.doc-icon { padding: 5px 6px; line-height: 0; }
+button.danger { background: #a02323; color: #fff; }
