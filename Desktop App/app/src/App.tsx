@@ -53,6 +53,10 @@ export function App() {
   const [bulkBusy, setBulkBusy] = useState(false);
   // Only keep ticks for rows that are still on screen (the day changed or rows were deleted).
   useEffect(() => {
+    // Window title carries the build so a stale install is obvious.
+    import("@tauri-apps/api/window").then((m) => m.getCurrentWindow().setTitle(`Brain and Behavior Center v${__APP_VERSION__} (${__APP_COMMIT__})`)).catch(() => {});
+  }, []);
+  useEffect(() => {
     setSelected((cur) => {
       const ids = new Set((visits ?? []).map((v) => v.id));
       const next = new Set([...cur].filter((id) => ids.has(id)));
@@ -630,7 +634,7 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
         <div><strong style={{ fontSize: "1.15rem" }}>Brain and Behavior Center</strong><div className="small">Practice Recorder</div></div>
       </div>}
       <h2 style={{ marginTop: 0 }}>{signedIn ? "Setup" : "Sign in"}</h2>
-      <div className="small" style={{ marginTop: -8, marginBottom: 8 }}>Version 0.0.1 · build {__APP_COMMIT__}</div>
+      <div className="small" style={{ marginTop: -8, marginBottom: 8 }}>v{__APP_VERSION__} ({__APP_COMMIT__})</div>
 
       <label className="field">
         <span>Environment</span>

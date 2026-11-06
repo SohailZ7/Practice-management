@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Main window: core IPC only. All file, process and network work goes through the app's own commands.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-title"]
 }
