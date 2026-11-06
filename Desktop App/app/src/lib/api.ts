@@ -249,8 +249,9 @@ export const deleteVisit = (session: Session, id: string) =>
   call<{ ok: boolean }>(session, `/notes/visits/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 /** Plain wording for the add/edit errors. */
-export function visitErrorMessage(e: unknown): string {
+export function visitErrorMessage(e: unknown, action = "change visits"): string {
   if (e instanceof ApiFailure) {
+    if (e.status === 403) return `Your account does not have permission to ${action}. Ask an admin to give you Notes access. (HTTP 403${e.code ? " " + e.code : ""})`;
     if (e.code === "bad_patient") return "Enter the client as First Last.";
     if (e.code === "bad_time") return "That time is not valid. Use a form like 9:00 or 9:00 - 11:30.";
     if (e.code === "bad_type") return "Choose an appointment type from the list.";

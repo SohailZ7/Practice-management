@@ -12,3 +12,4 @@ v1.0.9 | 2026-11-05 | built on 80aea4d | Download PDF built the web route instea
 v1.0.10 | 2026-11-05 | built on 8abbbfa | Build number and environment always visible: footer, Setup badge, window title
 v1.0.11 | 2026-11-05 | built on bc47ad0 | Same look as the web app: shared design tokens, left navigation, light default with Light/Dark/System in Setup
 v1.0.12 | 2026-11-05 | built on 4ec0c69 | Environment switch: a token is never sent to the other environment, late answers from the old one are dropped, tabs reset
+v1.0.13 | 2026-11-05 | built on 9572c0b | Add visit: clear message for 403 (no permission, ask an admin for Notes access) with status and code

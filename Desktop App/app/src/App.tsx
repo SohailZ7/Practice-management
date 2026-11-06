@@ -425,7 +425,7 @@ function AddVisit({ date, options, provider, onProvider, onDone, create }: {
             });
             onDone("Added 1 visit.");
           } catch (e) {
-            setFailure(visitErrorMessage(e)); // stay on the form so the reason is next to the button
+            setFailure(visitErrorMessage(e, "add visits")); // stay on the form so the reason is next to the button
           } finally {
             setBusy(false);
           }
