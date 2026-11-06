@@ -11,3 +11,4 @@ v1.0.8 | 2026-11-05 | built on f8276fc | Speaker labels: timestamped Provider/Pa
 v1.0.9 | 2026-11-05 | built on 80aea4d | Download PDF built the web route instead of the desktop API route; fixed, plus a test that every API path the app builds stays inside /api/desktop/v1
 v1.0.10 | 2026-11-05 | built on 8abbbfa | Build number and environment always visible: footer, Setup badge, window title
 v1.0.11 | 2026-11-05 | built on bc47ad0 | Same look as the web app: shared design tokens, left navigation, light default with Light/Dark/System in Setup
+v1.0.12 | 2026-11-05 | built on 4ec0c69 | Environment switch: a token is never sent to the other environment, late answers from the old one are dropped, tabs reset

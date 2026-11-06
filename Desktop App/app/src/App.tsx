@@ -22,6 +22,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import { SpeakerDialog } from "./SpeakerDialog";
 import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
+import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
 import { retryAll, sessionFor, setCopyLabel, uploadQueued } from "./lib/queue";
 
@@ -39,7 +40,7 @@ const SAVED_MESSAGE = "Saved on this Mac, will retry";
 export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [tokenState, setTokenState] = useState<ScopedToken>(null);
   const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
@@ -67,6 +68,9 @@ export function App() {
 
   const env: EnvironmentId = status && isEnvironment(status.settings.environment) ? status.settings.environment : "production";
   const signedIn = !!status?.signed_in[env];
+  // The token is only valid for the environment it was fetched for: right after a switch there is none until the new one loads.
+  const token = tokenFor(tokenState, env);
+  const setToken = (v: string | null) => setTokenState(scopeToken(env, v));
   useEffect(() => {
     // Window title carries the environment and build so a stale install or the wrong server is obvious.
     import("@tauri-apps/api/window").then((m) => m.getCurrentWindow().setTitle(`Brain and Behavior Center - ${labelFor(env).toUpperCase()} - v${__APP_VERSION__} (${__APP_COMMIT__})`)).catch(() => {});
@@ -89,10 +93,10 @@ export function App() {
 
   // The access token lives in the Keychain; fetch it for the selected environment.
   useEffect(() => {
-    setToken(null);
+    setTokenState(null);
     if (!engine || !signedIn) return;
     let alive = true;
-    engine.accessToken(env).then((t) => alive && setToken(t)).catch(() => alive && setToken(null));
+    engine.accessToken(env).then((t) => alive && setTokenState(scopeToken(env, t))).catch(() => alive && setTokenState(null));
     return () => { alive = false; };
   }, [engine, env, signedIn]);
 
@@ -127,12 +131,16 @@ export function App() {
     return () => { alive = false; };
   }, [session?.baseUrl, token, adding]);
 
+  // Only the newest request may fill the list, so a slow answer from the other environment is dropped.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++loadSeq.current;
     if (!session) { setVisits(null); return; }
     try {
       const r = await fetchVisits(session, date);
-      setVisits(r.visits);
+      if (mine === loadSeq.current) setVisits(r.visits);
     } catch (e) {
+      if (mine !== loadSeq.current) return;
       setVisits(null);
       if (e instanceof SignedOutError) await refreshStatus(); // the sign-in screen takes over
       else setMessage(e instanceof Error ? e.message : String(e));
@@ -239,15 +247,15 @@ export function App() {
         )}
 
         {signedIn && tab === "search" && session && engine && (
-          <Search engine={engine} session={session} onSignedOut={() => refreshStatus()} />
+          <Search key={env} engine={engine} session={session} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "tasks" && session && (
-          <Tasks session={session} onSignedOut={() => refreshStatus()} />
+          <Tasks key={env} session={session} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "feedback" && session && engine && (
-          <Feedback engine={engine} env={env} session={session} visitRecording={recording} onSignedOut={() => refreshStatus()} />
+          <Feedback key={env} engine={engine} env={env} session={session} visitRecording={recording} onSignedOut={() => refreshStatus()} />
         )}
 
         {signedIn && tab === "visits" && (
