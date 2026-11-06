@@ -7,3 +7,4 @@ v1.0.4 | 2026-11-05 | built on f5898b8 | Own styled dropdown (Combobox) replaces
 v1.0.5 | 2026-11-05 | built on f8f3987 | Promote to production: from Staging, copies a visit and its transcript to Production (needs full names); button turns off once promoted. Download PDF.
 v1.0.6 | 2026-11-05 | built on 40e1898 | Auto-update from the practice app (never during a recording), Send diagnostics and automatic error reports (no patient data), release script
 v1.0.7 | 2026-11-05 | built on 5f09820 | Request-address check no longer rejects harmless dots; the error now names the rule and route (no ids), tests added
+v1.0.8 | 2026-11-05 | built on f8276fc | Speaker labels: timestamped Provider/Patient blocks, local two-voice separation on one mic with a which-speaker-is-the-patient prompt, rename speakers, time buckets

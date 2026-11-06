@@ -19,6 +19,8 @@ import { sendDiagnostics, pushTranscript, fetchVisitOptions, type VisitOptions, 
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { UpdateBanner } from "./UpdateBanner";
+import { SpeakerDialog } from "./SpeakerDialog";
+import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { retryAll, sessionFor, setCopyLabel, uploadQueued } from "./lib/queue";
 
@@ -471,6 +473,9 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   const [promoteMsg, setPromoteMsg] = useState("");
   const [promoted, setPromoted] = useState(() => isPromoted(visit.id));
   const [viewing, setViewing] = useState(false);
+  // "Which speaker is the patient?" question after a one-microphone recording; resolves with the chosen label or null.
+  const [ask, setAsk] = useState<{ speakers: { label: string; sample: string }[]; resolve: (patient: string | null) => void } | null>(null);
+  const askSpeaker = (speakers: { label: string; sample: string }[]) => new Promise<string | null>((resolve) => setAsk({ speakers, resolve }));
   const [chooser, setChooser] = useState(false);
   const [askAppend, setAskAppend] = useState(false);
   // Earlier text of this visit, held in memory while the new recording runs; `fromQueue` says where it came from.
@@ -542,6 +547,13 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       // The transcript is saved (encrypted) on this Mac before anything is sent.
       const prev = earlier.current;
       const summary = await engine.stopRecording(visit.id, env, prev?.text, prev ? addedSeparator(new Date()) : undefined);
+      if (summary.needs_speaker_choice) {
+        // One microphone, two voices: ask which speaker is the patient before anything is sent. Closing the question
+        // keeps "Speaker 1" / "Speaker 2" (they can be renamed later from the transcript window).
+        onState(visit.id, { phase: "working", detail: "waiting for you to say which speaker is the patient" });
+        const patient = await askSpeaker(summary.speakers);
+        if (patient) await engine.queueRelabel(visit.id, patientChoice(patient, summary.speakers.map((x) => x.label)));
+      }
       onState(visit.id, { phase: "working", detail: "sending to the practice app" });
       const item = (await engine.queueList()).find((q) => q.visit_id === visit.id);
       setCopyLabel(visit.id, `${visit.realInitials ?? visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
@@ -590,7 +602,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         <button className="secondary" title="View the transcript (read-only)" aria-label="View transcript" onClick={() => setViewing(true)}>
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2.5" /></svg>
         </button>
-        {viewing && (
+        {ask && <SpeakerDialog speakers={ask.speakers} onChoose={(p) => { ask.resolve(p); setAsk(null); }} />}
+        {viewing && !ask && (
           <TranscriptDialog
             visit={visit} date={date} queued={queued} queueItem={queueItem} engine={engine} session={session}
             status={{ phase: state.phase, reason: state.phase === "failed" ? state.message : undefined }}

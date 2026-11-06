@@ -12,7 +12,15 @@ export type EngineStatus = {
 };
 
 /** What was captured, so the UI can warn when only one side of a call was heard. */
-export type StopResult = { seconds: number; system_audio: boolean; one_sided: boolean };
+export type StopResult = {
+  seconds: number; system_audio: boolean; one_sided: boolean;
+  /** Voices found on one microphone (1 or 2); 2 also when both call channels were captured. */
+  voices: number;
+  /** One microphone, two voices: the provider still has to say which speaker is the patient. */
+  needs_speaker_choice: boolean;
+  /** The first words each unconfirmed speaker said, only to help choose. Never stored or logged. */
+  speakers: { label: string; sample: string }[];
+};
 
 /** A transcript saved on this Mac, waiting for the server to confirm it. */
 export type QueueItem = {
@@ -54,6 +62,8 @@ export interface Engine {
   queueText(visitId: string): Promise<string>;
   /** Puts the saved transcript back to exactly this text (undoes an addition). */
   queueSetText(visitId: string, environment: EnvironmentId, text: string): Promise<void>;
+  /** Renames speakers in the saved transcript before it is sent, e.g. {"Speaker 1": "Provider", "Speaker 2": "Patient"}. */
+  queueRelabel(visitId: string, mapping: Record<string, string>): Promise<void>;
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
   queueComplete(visitId: string): Promise<void>;
   queueDiscard(visitId: string): Promise<void>;
@@ -91,6 +101,7 @@ async function nativeEngine(): Promise<Engine> {
     queueList: () => invoke<QueueItem[]>("queue_list"),
     queueText: (visitId) => invoke<string>("queue_text", { visitId }),
     queueSetText: (visitId, environment, text) => invoke<void>("queue_set_text", { visitId, environment, text }),
+    queueRelabel: (visitId, mapping) => invoke<void>("queue_relabel", { visitId, mapping }),
     queueComplete: (visitId) => invoke<void>("queue_complete", { visitId }),
     chooseTranscriptDir: () => invoke<string | null>("choose_transcript_dir"),
     setTranscriptCopyDir: (dir) => invoke<Settings>("set_transcript_copy_dir", { dir }),
@@ -100,8 +111,8 @@ async function nativeEngine(): Promise<Engine> {
 }
 
 const FAKE_TRANSCRIPT =
-  "FAKE ENGINE, nothing was recorded. Doctor: how have you been? Patient: better, I am sleeping about seven " +
-  "hours now. I deny any thoughts of suicide.";
+  "[00:00] Provider: FAKE ENGINE, nothing was recorded. How have you been?\n" +
+  "[00:06] Patient: Better, I am sleeping about seven hours now. I deny any thoughts of suicide.";
 
 /** `?qa=1` in a plain browser (dev only): looks signed in to localhost, so every screen can be seen against tests/qa/mock-server.mjs. */
 const qaMode = () => typeof location !== "undefined" && location.search.includes("qa=1");
@@ -128,13 +139,18 @@ function fakeEngine(): Engine {
     startRecording: async () => ({ warning: "Fake engines: nothing is being recorded." }),
     stopRecording: async (visitId, env, previous, separator) => {
       queue.set(visitId, { visit_id: visitId, environment: env, created_at: new Date().toISOString(), duration_seconds: 12, status: "pending" });
-      return { seconds: 12, system_audio: true, one_sided: false };
+      const two = typeof location !== "undefined" && new URLSearchParams(location.search).has("speakers");
+      return {
+        seconds: 12, system_audio: !two, one_sided: false, voices: 2, needs_speaker_choice: two,
+        speakers: two ? [{ label: "Speaker 1", sample: "Good morning, how have you been sleeping?" }, { label: "Speaker 2", sample: "Not great. I wake up a lot." }] : [],
+      };
     },
     cancelRecording: async () => {},
     stopDictation: async () => FAKE_TRANSCRIPT,
     queueList: async () => [...queue.values()],
     queueText: async () => FAKE_TRANSCRIPT,
     queueSetText: async () => {},
+    queueRelabel: async () => {},
     queueComplete: async (id) => { queue.delete(id); },
     queueDiscard: async (id) => { queue.delete(id); },
     chooseTranscriptDir: async () => null,

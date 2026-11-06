@@ -1,6 +1,6 @@
 [package]
 name = "practice-notes"
-version = "1.0.7"
+version = "1.0.8"
 description = "Practice Recorder: captures visit audio and transcribes it locally"
 edition = "2021"
 

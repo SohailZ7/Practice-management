@@ -24,6 +24,10 @@ pub struct Segment {
     pub timestamp: String,
     /// "mic" (the provider) or "system" (the other side of a call).
     pub channel: String,
+    /// Who spoke: "Provider", "Patient", or "Speaker 1" / "Speaker 2" before the provider says which is the patient.
+    /// Empty in transcripts saved before speaker labels existed.
+    #[serde(default)]
+    pub speaker: String,
     pub audio_start_time: Option<f64>,
     pub audio_end_time: Option<f64>,
     pub sequence_id: u64,
@@ -210,33 +214,62 @@ fn shred_file(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
-/// The text sent to the practice app. When both sides of a call were heard the lines are labelled so the note
-/// writer knows who spoke; with one channel the text is plain.
+/// The speaker shown for a segment. Older segments carry no speaker; they fall back to their channel when both sides
+/// of a call were heard.
+fn speaker_of(s: &Segment, both: bool) -> String {
+    if !s.speaker.is_empty() {
+        s.speaker.clone()
+    } else if both {
+        (if s.channel == "mic" { "Provider" } else { "Patient" }).to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// The text sent to the practice app and shown in the transcript window. Each block is one speaker's consecutive
+/// lines: `[mm:ss] Speaker: text`, so the notes model and the provider both see who said what and when. A transcript
+/// with no speaker information at all stays plain text.
 pub fn assemble_text(segments: &[Segment]) -> String {
     let both = segments.iter().any(|s| s.channel == "mic") && segments.iter().any(|s| s.channel == "system");
-    let mut lines: Vec<String> = Vec::new();
-    let mut last: Option<&str> = None;
+    if segments.iter().all(|s| speaker_of(s, both).is_empty()) {
+        return segments.iter().map(|s| s.text.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ");
+    }
+    let mut blocks: Vec<(String, String, String)> = Vec::new(); // (time, speaker, text)
     for s in segments {
         let text = s.text.trim();
         if text.is_empty() {
             continue;
         }
-        if both {
-            if last == Some(s.channel.as_str()) {
-                if let Some(l) = lines.last_mut() {
-                    l.push(' ');
-                    l.push_str(text);
-                    continue;
-                }
+        let who = speaker_of(s, both);
+        match blocks.last_mut() {
+            Some(last) if last.1 == who => {
+                last.2.push(' ');
+                last.2.push_str(text);
             }
-            let who = if s.channel == "mic" { "Provider" } else { "Other party" };
-            lines.push(format!("{who}: {text}"));
-            last = Some(s.channel.as_str());
-        } else {
-            lines.push(text.to_string());
+            _ => blocks.push((s.timestamp.clone(), who, text.to_string())),
         }
     }
-    lines.join(if both { "\n" } else { " " })
+    blocks
+        .into_iter()
+        .map(|(t, who, text)| if who.is_empty() { format!("{t} {text}") } else { format!("{t} {who}: {text}") })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Renames speakers in a visit's saved transcript (the provider said which speaker is the patient). Only the segments
+/// transcribed in this recording are changed; text kept from earlier recordings stays as it was.
+pub fn relabel(support: &Path, key: &[u8; 32], visit_id: &str, map: &std::collections::HashMap<String, String>) -> Result<(), String> {
+    let dir = visit_dir(support, visit_id)?;
+    let meta = read_metadata(support, key, visit_id)?;
+    let data = fs::read(dir.join("transcripts.json")).map_err(|_| "no saved transcript for that visit".to_string())?;
+    let mut tf: TranscriptFile =
+        serde_json::from_slice(&decrypt(key, &data)?).map_err(|_| "the saved transcript is unreadable".to_string())?;
+    for s in tf.segments.iter_mut() {
+        if let Some(to) = map.get(&s.speaker) {
+            s.speaker = to.clone();
+        }
+    }
+    save(support, key, &meta, &tf.segments, &tf.preface)
 }
 
 /// UTC time as RFC 3339, without pulling in a date crate.
@@ -263,6 +296,7 @@ mod tests {
 
     fn seg(id: &str, text: &str, ch: &str, s: f64) -> Segment {
         Segment {
+            speaker: String::new(),
             id: id.into(), text: text.into(), timestamp: "[00:00]".into(), channel: ch.into(),
             audio_start_time: Some(s), audio_end_time: Some(s + 1.0), sequence_id: 0,
         }
@@ -330,7 +364,28 @@ mod tests {
         let one = [seg("1", "hello", "mic", 0.0), seg("2", "there", "mic", 2.0)];
         assert_eq!(assemble_text(&one), "hello there");
         let two = [seg("1", "How are you?", "mic", 0.0), seg("2", "Fine.", "system", 2.0), seg("3", "Good.", "system", 3.0)];
-        assert_eq!(assemble_text(&two), "Provider: How are you?\nOther party: Fine. Good.");
+        assert_eq!(assemble_text(&two), "[00:00] Provider: How are you?\n[00:00] Patient: Fine. Good.");
+    }
+
+    #[test]
+    fn speaker_blocks_carry_time_and_label_and_relabel_only_new_segments() {
+        let dir = tmp();
+        let key = [5u8; 32];
+        let meta = Metadata {
+            version: "1.0".into(), visit_id: "v9".into(), environment: "staging".into(),
+            created_at: rfc3339_utc(0), duration_seconds: 5.0, status: Status::Pending,
+        };
+        let mut a = seg("1", "Hello.", "mic", 0.0); a.speaker = "Speaker 1".into(); a.timestamp = "[00:03]".into();
+        let mut b = seg("2", "Hi.", "mic", 3.0); b.speaker = "Speaker 2".into(); b.timestamp = "[00:07]".into();
+        let mut c = seg("3", "Fine.", "mic", 4.0); c.speaker = "Speaker 2".into(); c.timestamp = "[00:09]".into();
+        save(&dir, &key, &meta, &[a, b, c], "[00:00] Speaker 1: earlier line\n\n").unwrap();
+        assert_eq!(read_text(&dir, &key, "v9").unwrap(), "[00:00] Speaker 1: earlier line\n\n[00:03] Speaker 1: Hello.\n[00:07] Speaker 2: Hi. Fine.");
+        let mut map = std::collections::HashMap::new();
+        map.insert("Speaker 1".to_string(), "Provider".to_string());
+        map.insert("Speaker 2".to_string(), "Patient".to_string());
+        relabel(&dir, &key, "v9", &map).unwrap();
+        assert_eq!(read_text(&dir, &key, "v9").unwrap(), "[00:00] Speaker 1: earlier line\n\n[00:03] Provider: Hello.\n[00:07] Patient: Hi. Fine.");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

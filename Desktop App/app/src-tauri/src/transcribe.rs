@@ -82,6 +82,7 @@ pub fn assemble_chunk(channel: &str, chunk_start_sample: usize, raw: &[RawSegmen
                 text: t.split_whitespace().collect::<Vec<_>>().join(" "),
                 timestamp: display_time(start),
                 channel: channel.to_string(),
+                speaker: String::new(),
                 audio_start_time: Some(start),
                 audio_end_time: Some(end),
                 sequence_id: 0,
@@ -203,7 +204,7 @@ mod tests {
     #[test]
     fn channels_merge_in_time_order_and_are_numbered() {
         let mk = |ch: &str, t: &str, s: f64| Segment {
-            id: String::new(), text: t.into(), timestamp: display_time(s), channel: ch.into(),
+            id: String::new(), text: t.into(), timestamp: display_time(s), channel: ch.into(), speaker: String::new(),
             audio_start_time: Some(s), audio_end_time: Some(s + 1.0), sequence_id: 0,
         };
         let m = merge_channels(vec![mk("system", "b", 5.0), mk("mic", "a", 1.0), mk("mic", "c", 65.0)]);
