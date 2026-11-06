@@ -4,6 +4,7 @@ import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { Modal } from "./Modal";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
+import { RowMenu } from "./RowMenu";
 import { Tasks } from "./Tasks";
 import { Search } from "./Search";
 import { Mfa } from "./Mfa";
@@ -53,6 +54,7 @@ export function App() {
   const [adding, setAdding] = useState(false);
   const [options, setOptions] = useState<VisitOptions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selecting, setSelecting] = useState(false);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   // Only keep ticks for rows that are still on screen (the day changed or rows were deleted).
@@ -215,7 +217,7 @@ export function App() {
         </div>
         {signedIn && (
           <nav className="tabs">
-            <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
+            <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Schedule</button>
             <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Find a visit</button>
             <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>My Tasks</button>
             <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
@@ -320,6 +322,9 @@ export function App() {
               <p className="small">No visits for this day. Use Add one visit or Paste schedule.</p>
             ) : (
               <>
+              <div className="row" style={{ marginBottom: ".5rem" }}>
+                <button className="secondary" onClick={() => { setSelecting((v) => !v); setSelected(new Set()); }}>{selecting ? "Done selecting" : "Select visits"}</button>
+              </div>
               {selected.size > 0 && (
                 <div className="row" style={{ marginBottom: ".5rem" }}>
                   {confirmBulk ? (
@@ -349,10 +354,10 @@ export function App() {
                 </div>
               )}
               <table className="board">
-                <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr>{selecting && <th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th>}<th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th>Documents</th><th>Actions</th></tr></thead>
                 <tbody>
                   {displayVisits(visits, showFull && canShowFullNames(visits)).map((v) => (
-                    <Row key={v.id} visit={v} date={date}
+                    <Row key={v.id} visit={v} date={date} selecting={selecting}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
@@ -478,8 +483,8 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
-  visit: Visit; date: string; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, date, selecting, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
+  visit: Visit; date: string; selecting: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void;
 }) {
@@ -590,7 +595,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
 
   return (
     <tr>
-      <td><input type="checkbox" aria-label={`Select visit for ${visit.initials}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>
+      {selecting && <td><input type="checkbox" aria-label={`Select visit for ${visit.initials}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} /></td>}
       <td title={visit.fullName && visit.initials === visit.fullName ? "Full name" : "Shown as initials"}>{visit.initials}</td>
       <td style={{ whiteSpace: "nowrap" }}>
         <TimeCell
@@ -604,8 +609,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       </td>
       <td>{visit.program}</td>
       <td>{visit.appointmentType}</td>
-      <td className="docs"><DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} /></td>
       <td className="small status">
+        <span className={`pill ${pillFor(state, queued, visit).tone}`} data-testid="status-pill">{pillFor(state, queued, visit).label}</span>
         {state.phase === "recording" && state.warning && <span className="err">{state.warning}</span>}
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
@@ -615,13 +620,15 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         {gen?.phase === "done" && <div>{gen.documents.length ? "Documents ready." : ""}{gen.failedTypes.length > 0 && <span className="err"> Could not write: {gen.failedTypes.join(", ")}.</span>}</div>}
         {state.phase === "sent" && <>Transcript sent{state.note && <span className="err"> ({state.note})</span>}</>}
         {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
-        {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
       </td>
+      <td className="docs"><div className="docs-cell"><DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} />
+      <button className="secondary gen-btn" disabled={!canGenerate || visit.documentCount > 0 || gen?.phase === "done" || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
+        title={visit.documentCount > 0 || gen?.phase === "done" ? "The documents are already generated. Open them in the Documents column." : canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
+        onClick={() => setChooser(true)}>
+        {gen?.phase === "running" ? "Generating…" : "Generate docs"}
+      </button>
+</div></td>
       <td className="actions"><div className="acts">
-        <button className="secondary" title="View the transcript (read-only)" aria-label="View transcript" onClick={() => setViewing(true)}>
-          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2.5" /></svg>
-          Transcript
-        </button>
         {ask && <SpeakerDialog speakers={ask.speakers} onChoose={(p) => { ask.resolve(p); setAsk(null); }} />}
         {viewing && !ask && (
           <TranscriptDialog
@@ -634,11 +641,6 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
           <GenerateDialog visit={visit} session={session} onClose={() => setChooser(false)}
             onStart={(types) => { clearGeneration(visit.id); void startGenerate(session, visit.id, types); }} />
         )}
-        <button className="secondary" disabled={!canGenerate || visit.documentCount > 0 || gen?.phase === "done" || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
-          title={visit.documentCount > 0 || gen?.phase === "done" ? "The documents are already generated. Open them in the Documents column." : canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
-          onClick={() => setChooser(true)}>
-          {gen?.phase === "running" ? "Generating…" : "Generate documents"}
-        </button>
         {state.phase === "recording" ? (
           <>
             <span className="rec"><span className="dot" />{mmss}</span>
@@ -669,9 +671,6 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         )}
         {env === "staging" && state.phase !== "recording" && state.phase !== "working" && (
           <>
-            <button className="secondary" disabled={promoted || promoting || !!promoteBlocker(visit)}
-              title={promoted ? "Already promoted to Production" : promoteBlocker(visit) || "Copy this visit and its transcript to the real Production app"}
-              onClick={() => setPromoteAsk(true)}>{promoted ? "Promoted" : promoting ? "Promoting…" : "Promote to production"}</button>
             {promoteAsk && (
               <Modal title="Promote to production?" onClose={() => setPromoteAsk(false)} width={480}
                 footer={<>
@@ -686,7 +685,6 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         {promoteMsg && <div className="small" role="status" style={{ flexBasis: "100%", textAlign: "right" }}>{promoteMsg}</div>}
         {state.phase !== "recording" && state.phase !== "working" && (
           <>
-            <button className="secondary" disabled={busy} title="Remove this row from the day's list" onClick={() => setConfirmDelete(true)}>Delete</button>
             {confirmDelete && (
               <Modal title="Delete this record?" onClose={() => setConfirmDelete(false)} width={460}
                 footer={<>
@@ -710,9 +708,26 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             )}
           </>
         )}
+        <RowMenu items={[
+          { label: "Transcript", title: "View the transcript (read-only)", onClick: () => setViewing(true) },
+          ...(env === "staging" ? [{ label: promoted ? "Promoted" : promoting ? "Promoting…" : "Promote to production", disabled: promoted || promoting || state.phase === "recording" || state.phase === "working" || !!promoteBlocker(visit), title: promoted ? "Already promoted to Production" : promoteBlocker(visit) || "Copy this visit and its transcript to the real Production app", onClick: () => setPromoteAsk(true) }] : []),
+          { label: "Delete", danger: true, disabled: busy || state.phase === "recording" || state.phase === "working", title: "Remove this row from the day's list", onClick: () => setConfirmDelete(true) },
+        ]} />
       </div></td>
     </tr>
   );
+}
+
+/** What happened to the visit, as one coloured pill. Interim: derived from the recorder's own state until the
+ *  web app's visit status field is wired in. */
+function pillFor(state: RowState, queued: boolean, visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } {
+  if (state.phase === "recording") return { label: "Recording", tone: "bad" };
+  if (state.phase === "working") return { label: "Working…", tone: "warn" };
+  if (state.phase === "failed") return { label: "Failed", tone: "bad" };
+  if (state.phase === "saved" || queued) return { label: "Saved on this Mac", tone: "warn" };
+  if (state.phase === "sent") return { label: "Transcript sent", tone: "ok" };
+  if (visit.hasTranscript) return { label: visit.documentCount > 0 ? "Documents ready" : "Transcript on file", tone: "ok" };
+  return { label: "Scheduled", tone: "" };
 }
 
 function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, onChanged }: {

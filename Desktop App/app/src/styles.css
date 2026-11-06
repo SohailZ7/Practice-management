@@ -181,25 +181,28 @@ body { padding-bottom: 30px; }
 .theme-option { display: flex; gap: .6rem; align-items: center; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
 .theme-option:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
 
-/* The visits table fits the window: columns shrink and wrap, the actions stack instead of being clipped. */
-table.board { table-layout: auto; }
-table.board td, table.board th { overflow-wrap: break-word; }
-table.board td:nth-child(2), table.board td:nth-child(3), table.board td:nth-child(4), table.board th { white-space: nowrap; overflow-wrap: normal; }
-table.board td.status { min-width: 110px; }
-td.actions .acts { max-width: 280px; margin-left: auto; }
-td.docs { min-width: 120px; }
-.doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-/* One button size everywhere in a row: the same height, padding and type, text always readable. */
+/* The schedule is one line per visit and fits the window: cells that can wrap do, the rest stay on one line. */
+table.board { table-layout: auto; width: 100%; }
+table.board th, table.board td { white-space: nowrap; padding: .5rem .6rem; }
+table.board td.status, table.board td.docs { white-space: normal; overflow-wrap: break-word; }
+table.board td.status { min-width: 110px; max-width: 220px; }
+.pill { display: inline-block; padding: .1rem .6rem; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--card)); }
+.pill.warn { color: var(--warn); border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--card)); }
+.pill.bad { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--card)); }
+.docs-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.doc-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.doc-chip { width: 30px; padding: 0; }
+td.actions { width: 120px; min-width: 112px; }
+td.actions .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; margin-left: auto; }
+/* One button size in a row: same height, same type, readable text. */
 table.board button, .acts button { min-height: 30px; padding: .3rem .7rem; font-size: 12px; line-height: 1.2; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.doc-chip { text-align: left; white-space: normal; }
-
-/* Actions: two columns of equal buttons that wrap inside their cell, so nothing is clipped at any window width. */
-td.actions { width: 160px; min-width: 160px; }
-td.actions .acts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; max-width: 160px; margin-left: auto; }
-@media (min-width: 1280px) { td.actions { width: 280px; min-width: 280px; } td.actions .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 280px; } }
-td.actions .acts > * { min-width: 0; }
-td.actions .acts button { white-space: nowrap; width: 100%; }
-td.actions .acts > .small, td.actions .acts > .rec { grid-column: 1 / -1; }
+table.board .acts > .small, table.board .acts > .rec { flex-basis: 100%; text-align: right; }
+.menu-btn { width: 30px; padding: 0; font-size: 16px; letter-spacing: 0; }
+.row-menu { position: fixed; z-index: 120; min-width: 190px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; }
+.row-menu .menu-item { background: transparent; color: var(--text); border-radius: 8px; justify-content: flex-start; width: 100%; font-size: 13px; }
+.row-menu .menu-item:hover:not(:disabled) { background: var(--side-hover); }
+.row-menu .menu-item.danger { color: var(--danger); }
 /* Narrow windows: the navigation becomes a bar across the top and the content uses the full width. */
 @media (max-width: 1100px) {
   .shell { flex-direction: column; }
@@ -210,3 +213,5 @@ td.actions .acts > .small, td.actions .acts > .rec { grid-column: 1 / -1; }
   .content-wrap { padding-top: 0; }
   .content { border-top-left-radius: 24px; padding: 1.1rem 1rem 3rem; min-height: 0; }
 }
+.row-menu .menu-item { text-align: left; display: flex; border: 0; }
+.row-menu .menu-item.danger { background: transparent; border: 0; }
