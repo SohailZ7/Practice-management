@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { docsApi as defaultApi, type DocsApi, type DocSummary, type DocType } from "@/lib/notes/docsClient";
 import { defaultSelection, generateErrorMessage, toggleSelection, typeLabel } from "@/lib/notes/docUi";
+import { Modal } from "../Modal";
 
 /** Chooser for which documents to write, then a progress state while the model works (up to about two minutes). */
 export function GenerateDialog({ visitId, initials, appointmentType, onDone, onClose, api = defaultApi }: {
@@ -47,35 +48,39 @@ export function GenerateDialog({ visitId, initials, appointmentType, onDone, onC
 
   const working = phase === "working";
   return (
-    <div className="modal-back" onClick={() => !working && onClose()}>
-      <div className="modal docdlg-small" role="dialog" aria-label="Generate documents" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: 0 }}>Generate documents</h2>
-        <p className="small muted">Visit for {initials} · {appointmentType || "no type"}</p>
-        {error && <p role="alert" className="small docdlg-bad">{error}</p>}
-        {!types && !error && <p className="muted">Loading…</p>}
-        {types && !working && (
-          <fieldset className="docdlg-types">
-            <legend className="small muted">Documents to write</legend>
-            {types.length === 0 && <p className="muted small">No documents are set up for this appointment type.</p>}
-            {types.map((t) => (
-              <label key={t.id}>
-                <input type="checkbox" checked={sel.includes(t.id)} onChange={() => setSel(toggleSelection(sel, t.id))} /> {t.label}
-                {t.default && <span className="small muted"> · usual for this visit</span>}
-              </label>
-            ))}
-          </fieldset>
-        )}
-        {working && (
-          <div role="status" aria-live="polite">
-            <p><span className="spinner" aria-hidden /> Writing {sel.map((s) => typeLabel(types ?? [], s)).join(", ") || "documents"}… {secs}s</p>
-            <p className="small muted">This can take up to about 2 minutes. Keep this window open; nothing is lost if it fails.</p>
-          </div>
-        )}
-        <div className="row">
-          {!working && <button disabled={!types || sel.length === 0} onClick={() => void run()}>{sel.length > 1 ? `Generate ${sel.length} documents` : "Generate"}</button>}
+    <Modal
+      title="Generate documents"
+      size="sm"
+      busy={working}
+      onClose={onClose}
+      notices={error ? <p role="alert" className="small docdlg-bad">{error}</p> : undefined}
+      footer={
+        <>
           <button className="secondary" disabled={working} onClick={onClose}>Cancel</button>
+          {!working && <button disabled={!types || sel.length === 0} onClick={() => void run()}>{sel.length > 1 ? `Generate ${sel.length} documents` : "Generate"}</button>}
+        </>
+      }
+    >
+      <p className="small muted" style={{ margin: 0 }}>Visit for {initials} · {appointmentType || "no type"}</p>
+      {!types && !error && <p className="muted">Loading…</p>}
+      {types && !working && (
+        <fieldset className="docdlg-types">
+          <legend className="small muted">Documents to write</legend>
+          {types.length === 0 && <p className="muted small">No documents are set up for this appointment type.</p>}
+          {types.map((t) => (
+            <label key={t.id}>
+              <input type="checkbox" checked={sel.includes(t.id)} onChange={() => setSel(toggleSelection(sel, t.id))} /> {t.label}
+              {t.default && <span className="small muted"> · usual for this visit</span>}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {working && (
+        <div role="status" aria-live="polite">
+          <p><span className="spinner" aria-hidden /> Writing {sel.map((s) => typeLabel(types ?? [], s)).join(", ") || "documents"}… {secs}s</p>
+          <p className="small muted">This can take up to about 2 minutes. Keep this window open; nothing is lost if it fails.</p>
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getDocument, saveDocument } from "@/app/notes/actions";
+import { Modal } from "../Modal";
 
 /**
  * The document pop-up (change request 17). It opens showing the document, the provider edits it, and closing asks
@@ -58,47 +59,35 @@ export function DocumentEditor({ documentId, label, canEdit, onClose }: {
     onClose();
   }
 
-  // Escape closes, going through the same save prompt.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
   const isDraft = (text ?? "").includes("**DRAFT.**");
 
   return (
-    <div className="modal-back" onClick={close}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="row">
-          <h2 style={{ margin: 0 }}>{label}</h2>
-          {isDraft && <span className="badge">Draft</span>}
-          <span className="grow" />
-          {dirty && <span className="small muted">Unsaved changes</span>}
-          <button className="secondary" onClick={close}>Close</button>
-        </div>
-        {error && <p className="small" style={{ color: "var(--bad, #b42318)" }}>{error}</p>}
-        {text === null ? (
-          <p className="muted">Loading…</p>
-        ) : (
-          <textarea
-            value={text}
-            readOnly={!canEdit}
-            onChange={(e) => setText(e.target.value)}
-            aria-label="Document"
-            spellCheck
-            style={{ width: "100%", flex: 1, minHeight: "50vh", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5, lineHeight: 1.5 }}
-          />
-        )}
-        <div className="row">
-          {canEdit && <button disabled={!dirty || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>}
+    <Modal
+      title={label}
+      size="lg"
+      onClose={() => void close()}
+      headerExtra={<>{isDraft && <span className="badge">Draft</span>}{dirty && <span className="small muted">Unsaved changes</span>}</>}
+      notices={error ? <p className="small" style={{ color: "var(--danger)" }}>{error}</p> : undefined}
+      footer={
+        <>
+          {isDraft && <span className="small muted" style={{ marginRight: "auto" }}>Delete the DRAFT line once you have reviewed it.</span>}
           <a className="btn secondary" href={`/notes/${documentId}/pdf`} target="_blank" rel="noreferrer">Download PDF</a>
-          <span className="grow" />
-          {isDraft && <span className="small muted">Delete the DRAFT line once you have reviewed it.</span>}
-        </div>
-      </div>
-    </div>
+          {canEdit && <button disabled={!dirty || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>}
+        </>
+      }
+    >
+      {text === null ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <textarea
+          value={text}
+          readOnly={!canEdit}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Document"
+          spellCheck
+          style={{ width: "100%", flex: 1, minHeight: "40vh", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5, lineHeight: 1.5 }}
+        />
+      )}
+    </Modal>
   );
 }
