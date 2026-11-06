@@ -13,10 +13,11 @@ export const DRAFT_LINE =
   "> **DRAFT.** Written by AI from the visit recording. Not reviewed. Check every section, then delete this line.";
 
 /** A value the recording could not settle is marked so it stands out while reading, not just in the list at the end. */
-const mark = (p: Para): string => {
-  if (p.flag === "not_discussed" || p.text === NOT_DISCUSSED) return `_${NOT_DISCUSSED}_`;
+const mark = (p: Para, item = ""): string => {
+  const what = (p.label || item).trim();
+  if (p.flag === "not_discussed" || p.text === NOT_DISCUSSED) return `**[Not discussed in this visit: ${what || "this item"}]**`;
   if (p.flag === "not_assessed" || p.text === NOT_ASSESSED) return `_${NOT_ASSESSED}_`;
-  if (p.flag === "removed" && p.removed) return `_${NOT_DISCUSSED}_ ==removed: ${p.removed.text}==`;
+  if (p.flag === "removed" && p.removed) return `**[Not discussed in this visit: ${what || "this item"}]** ==removed: ${p.removed.text}==`;
   if (p.flag === "ungrounded") return `==${p.text}==`;
   if (p.flag === "confirm") return `==${p.text}== _(check who said this)_`;
   return p.text;
@@ -55,7 +56,8 @@ export function noteToMarkdown(note: DraftNote, header: DocHeader, attention: st
     if (s.action === "drop" || s.action === "info") continue;
     out.push(`## ${s.heading.replace(/^\d+\.\s*/, "")}`, "");
     if (s.mustConfirm) out.push("> Confirm every line of this section before signing.", "");
-    for (const p of s.paragraphs) out.push(p.label ? `**${p.label}:** ${mark(p)}` : mark(p), "");
+    const sectionItem = s.heading.replace(/^\d+\.\s*/, "");
+    for (const p of s.paragraphs) out.push(p.label ? `**${p.label}:** ${mark(p)}` : mark(p, sectionItem), "");
   }
   out.push(attentionBlock(attention));
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
@@ -78,8 +80,11 @@ export function formToMarkdown(
       for (const o of spec.options) out.push(`- [${ticked.has(o.toLowerCase()) ? "x" : " "}] ${o}`);
       out.push("");
     }
-    if (spec.text) out.push(v?.text ? v.text : `_${NOT_DISCUSSED}_`, "");
-    else if (!spec.options?.length) out.push(`_${NOT_DISCUSSED}_`, "");
+    const missing = `**[Not discussed in this visit: ${spec.field.replace(/^\*/, "")}]**`;
+    if (spec.text) {
+      if (v?.text) out.push(v.text, "");
+      else if (!v?.ticked?.length) out.push(missing, "");
+    } else if (!spec.options?.length) out.push(missing, "");
   }
   out.push(attentionBlock(attention));
   return out.join("\n").replace(/\n{3,}/g, "\n\n");

@@ -1,0 +1,125 @@
+{
+  "version": "1.0",
+  "source": "UHS Critical Documentation Practices training (pages 4-10; CMS Conditions of Participation appendix pages 12-14). Edit this file to change what the note writer is told. Bump version when you do; the version is printed on every generated document's gap check.",
+  "payerNote": "The training says frequency of notes and some timing varies by state, payer and level of care. The UHS jurisdiction and payer variations are NOT known to this app. Never state a due date or frequency as a requirement in a note; if the clinician said one, record that they said it.",
+  "antiFabrication": [
+    "NEVER invent a clinical fact. Every symptom, quote, score, medication, dose, date, name, diagnosis and risk statement must come from the TRANSCRIPT or PRIOR NOTE.",
+    "The example sentences in these rules show STYLE only. Their clinical content (hallucinations, sertraline, PHQ-9 scores and so on) is NOT about this patient. Never copy it.",
+    "If a required element was not said in this visit, do not fill it in and do not soften it with a generic sentence. Write the not-discussed sentence exactly as the section instructions give it. The app shows it to the clinician as [Not discussed in this visit: <item>].",
+    "Do not write a word such as improving, stable, better, or doing well unless the speaker said it, and when the speaker did say it, add what it was based on only if that was also said.",
+    "Do not copy forward text from the PRIOR NOTE as if it happened today. Carry forward only history. Today's status, symptoms, risk and plan must come from today's transcript."
+  ],
+  "levelOfCareNote": "The training examples are written for inpatient care. Use the level of care stated in the transcript (outpatient, IOP, PHP, inpatient). Do not write hospitalization, inpatient or admission unless that is what the visit was about.",
+  "docTypes": {
+    "psych_eval": {
+      "label": "Psychiatric Evaluation",
+      "rules": [
+        "Chief complaint: the patient's own words where the transcript has them, in quotation marks.",
+        "Include history of present illness, psychiatric history, substance use, medical history, social history, trauma history and current medications, each only as far as the transcript covers it.",
+        "Overall risk assessment: record what the patient said about suicidal and homicidal thoughts, intent, plan, behavior, protective factors and access to means. Do not rate the risk level; that is the physician's judgment.",
+        "Mental status exam: record only observations stated in the transcript or dictation. Do not invent observations. Say how a cognitive item was tested only if the transcript shows it.",
+        "Diagnosis and initial treatment plan with goals: only what the physician said.",
+        "Rationale for the level of care and the problems that need treatment: use the physician's reasons. Prefer specific functional impact over general words (see the strong and weak examples).",
+        "Estimated length of stay or treatment and a preliminary discharge plan: only if stated.",
+        "Physician certification statement and justification: write it only if the physician said it. Otherwise write the not-discussed sentence. The training says it must be signed within 24 hours of admission; do not state this as a fact about this patient."
+      ],
+      "required": [
+        { "id": "chief_complaint", "label": "Chief complaint in the patient's words" },
+        { "id": "hpi", "label": "History of present illness" },
+        { "id": "risk", "label": "Overall risk assessment (suicide, violence, protective factors)" },
+        { "id": "mse", "label": "Mental status exam" },
+        { "id": "meds", "label": "Current medications" },
+        { "id": "diagnosis", "label": "Diagnosis or differential" },
+        { "id": "plan", "label": "Initial treatment plan with goals" },
+        { "id": "loc_rationale", "label": "Rationale for the level of care (why a lower level is not enough)" },
+        { "id": "elos_dc", "label": "Estimated length of stay and preliminary discharge plan" },
+        { "id": "certification", "label": "Physician certification statement and justification" }
+      ]
+    },
+    "progress_note": {
+      "label": "Progress Note",
+      "rules": [
+        "Every progress note needs date, time, service type, and the provider's signature with credentials. The header supplies date and provider. If the time or service type is not in the sources, write the not-discussed sentence. Never write a time.",
+        "State why this level of care is still needed, in the physician's words. If the physician did not say, write the not-discussed sentence.",
+        "Medication changes, or the reason there was no change. If neither was said, write the not-discussed sentence.",
+        "Response to interventions: what the patient did or said in response, in specific terms.",
+        "Use the patient's own words in quotation marks where the transcript has them, and connect a conclusion to its evidence with 'as evidenced by' only when both were said.",
+        "Describe symptoms and function with specifics (what, how often, how it affects work, sleep, self-care). Avoid vague words.",
+        "Where the form or note has a checkbox, the words next to it must say what the patient actually showed; a ticked box alone is not enough.",
+        "No copy-forward: do not repeat earlier text as today's findings.",
+        "Update discharge planning and the estimated length of stay only if they were discussed."
+      ],
+      "required": [
+        { "id": "service_type", "label": "Date, time, service type" },
+        { "id": "loc_rationale", "label": "Why this level of care is still needed" },
+        { "id": "med_change", "label": "Medication changes, or why there were none" },
+        { "id": "symptoms", "label": "Today's symptoms with specifics" },
+        { "id": "response", "label": "Response to interventions" },
+        { "id": "mse_changes", "label": "Mental status changes" },
+        { "id": "risk", "label": "Risk and safety today" },
+        { "id": "quotes", "label": "At least one patient quote or specific evidence" },
+        { "id": "dc_planning", "label": "Discharge planning or length-of-stay update" }
+      ]
+    },
+    "recertification": {
+      "label": "Recertification statement (inside a progress note)",
+      "rules": [
+        "Write a recertification statement only if the physician said, in this visit, that the patient still needs this level of care and why. Use their reasons. Otherwise write the not-discussed sentence.",
+        "Do not state when a recertification is due. The training gives first recertification by day 12 and at least every 30 days afterward, but payer rules vary and are not known here."
+      ],
+      "required": [
+        { "id": "recert", "label": "Recertification statement, if due" }
+      ]
+    },
+    "discharge_summary": {
+      "label": "Discharge Summary",
+      "rules": [
+        "Include the hospital or program course, diagnoses, discharge status (psychiatric, physical, functional), aftercare, and a complete medication list.",
+        "Aftercare: provider names, dates and times of appointments, exactly as said. Never fill in a name, date or time.",
+        "Medication list: every medication with dose and frequency as said, including any stopped or changed. If the list was not stated, write the not-discussed sentence; do not write a partial list as if it were complete.",
+        "The training says finalize within 30 days unless state or payer rules differ. Do not state a deadline in the note."
+      ],
+      "required": [
+        { "id": "course", "label": "Course of treatment" },
+        { "id": "diagnoses", "label": "Diagnoses at discharge" },
+        { "id": "status", "label": "Discharge status: psychiatric, physical and functional" },
+        { "id": "aftercare", "label": "Aftercare with names, dates and times" },
+        { "id": "meds", "label": "Complete medication list" }
+      ]
+    },
+    "h_and_p": {
+      "label": "History and Physical",
+      "rules": [
+        "Include only elements stated in the sources: history, review of systems, physical exam findings, assessment and plan.",
+        "Physical exam findings and vital signs: only if stated. Never write normal findings by default."
+      ],
+      "required": [
+        { "id": "history", "label": "History" },
+        { "id": "exam", "label": "Physical exam findings" },
+        { "id": "assessment", "label": "Assessment and plan" }
+      ]
+    }
+  },
+  "medicalNecessity": {
+    "intro": "Strong statements are specific, observable and tied to function or to a failed treatment. Weak statements are general. Write like the strong ones, but only from facts in this transcript. If the transcript only supports the weak version, write the plain facts as said, and let the gap check flag it.",
+    "pairs": [
+      { "topic": "Functional impairment", "strong": "Patient unable to maintain employment or self-care due to severe, persistent auditory hallucinations.", "weak": "Patient is having difficulty." },
+      { "topic": "Failed lower levels of care", "strong": "Outpatient therapy (2x/week for 6 months) and medication trials (sertraline, venlafaxine) failed to stabilize.", "weak": "Patient needs inpatient care." },
+      { "topic": "Active treatment", "strong": "CBT session focused on cognitive restructuring; patient identified 3 distortion patterns; PHQ-9 reduced from 22 to 16.", "weak": "Patient attended group therapy." }
+    ]
+  },
+  "stems": {
+    "note": "Sentence starters from the training. Use a stem only when the transcript supplies what completes it, and complete it only with transcript facts. Never use a stem to say something the transcript did not.",
+    "groups": {
+      "Current clinical status": ["The patient continues to experience ___, as evidenced by...", "These symptoms impair the patient's ability to..."],
+      "Risk and safety": ["Current safety risks include...", "The patient's risk is supported by...", "Monitoring remains necessary because..."],
+      "Medical necessity": ["A lower level of care is not appropriate because...", "Without continued treatment at this level, the patient is at risk for...", "Continued treatment at this level is required to address..."],
+      "Active treatment": ["Active treatment since the last assessment includes...", "Medication ___ changed because...", "Interventions address treatment goal..."],
+      "Treatment response": ["Improved in ___; still requires treatment for...", "Progress is limited by...", "Adverse effects: ___; managed by..."],
+      "Continued-stay rationale": ["Treatment at this level remains necessary to achieve...", "Discharge is currently limited by...", "Before transition, the patient must demonstrate..."],
+      "Discharge planning": ["The anticipated discharge setting is...", "Barriers to a safe discharge include...", "The safety and support plan includes..."]
+    }
+  },
+  "vagueTerms": ["improving", "improved", "doing well", "doing better", "doing ok", "doing okay", "stable", "difficulty", "having a hard time", "attended group", "participated in group", "tolerating", "needs inpatient", "continues to need treatment", "ongoing symptoms"],
+  "evidenceMarkers": ["as evidenced by", "evidenced by", "due to", "because", "\"", "%"]
+}

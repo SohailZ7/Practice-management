@@ -5,6 +5,9 @@ import { NOT_ASSESSED, NOT_DISCUSSED, PLANS, type SectionSpec } from "./sectionM
 import { ungroundedTerms } from "./grounding";
 import { stripThinking } from "./text";
 import { askRiskQuestion, verifyParas } from "./passes";
+import { ucpSystem, type UcpDocType } from "./ucpRules";
+
+const UCP_FOR_KIND: Record<NoteKind, UcpDocType> = { EVAL: "psych_eval", FOLLOW_UP: "progress_note", DISCHARGE: "discharge_summary" };
 
 export const SYSTEM_RULES = [
   "You write one section of a psychiatric clinic note from a visit transcript.",
@@ -35,6 +38,8 @@ export type DraftInput = {
   llm: Llm;
   /** Safety passes (default on). Turn off only to measure what they add. */
   passes?: { ssrs?: boolean; verify?: boolean };
+  /** UHS documentation rules (default on). Turn off only to measure what they add. */
+  ucp?: boolean;
   onProgress?: (done: number, total: number, heading: string) => void;
 };
 
@@ -124,7 +129,8 @@ export async function draftNote(input: DraftInput): Promise<DraftNote> {
       paras = [];
       for (const label of spec.labels ?? []) paras.push(await askRiskQuestion(input.llm, input.transcript, label, spec.questions[label]));
     } else {
-      const output = await input.llm({ system: SYSTEM_RULES, prompt: buildPrompt(input, spec, title) });
+      const system = input.ucp === false ? SYSTEM_RULES : `${SYSTEM_RULES}\n\n${ucpSystem(UCP_FOR_KIND[input.kind])}`;
+      const output = await input.llm({ system, prompt: buildPrompt(input, spec, title) });
       paras = flagParas(parseSection(output, spec.labels ?? []), source);
       if (input.passes?.verify !== false) paras = await verifyParas(input.llm, sourceAll, paras, !!spec.aboutPatient);
     }

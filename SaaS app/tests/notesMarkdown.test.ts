@@ -63,7 +63,7 @@ describe("formToMarkdown", () => {
   });
   it("writes free text, and says not discussed where there is none", () => {
     expect(md).toContain("I feel low");
-    expect(md).toContain("_Not discussed in this recording._");
+    expect(md).toContain("[Not discussed in this visit: Subjective]");
   });
   it("marks the risk-bearing fields", () => {
     expect(md).toContain("⚠︎");

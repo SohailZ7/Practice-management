@@ -9,6 +9,7 @@ import { draftForm, ADMIT_ORDER_FIELDS, DISCHARGE_ORDER_FIELDS, PROGRESS_NOTE_FI
 import { formToMarkdown, noteToMarkdown, type DocHeader } from "./markdown";
 import { NOT_ASSESSED } from "./sectionMap";
 import type { Llm, NoteKind } from "./types";
+import { gapCheck, ucpFormAddendum, ucpTypeFor } from "./ucpRules";
 
 /** The question set belonging to each form. Asking a form the wrong set leaves every box blank. */
 export function fieldsFor(template: DocSpec["template"]): FieldSpec[] {
@@ -36,7 +37,21 @@ export type GenerateInput = {
   onProgress?: (p: { label: string; done: number; total: number; detail: string }) => void;
 };
 
-export type GeneratedDocument = { kind: string; label: string; markdown: string; attention: string[] };
+export type GeneratedDocument = { kind: string; label: string; markdown: string; attention: string[]; /** Required elements missing or weak, from the UHS documentation check. */ gaps?: string[] };
+
+/** Appends the gap check to the document's attention list. A check that cannot run says so; it never passes silently. */
+async function withGaps(llm: Llm, kind: string, markdown: string, attention: string[]): Promise<{ markdown: string; attention: string[]; gaps?: string[] }> {
+  const type = ucpTypeFor(kind);
+  if (!type) return { markdown, attention };
+  const r = await gapCheck(llm, type, markdown);
+  const gapLines = r.gaps.map((g) => `**Fix before signing** — ${g}`);
+  const all = [...attention, ...gapLines];
+  const marker = "\n---\n\n## Needs your attention";
+  const i = markdown.lastIndexOf(marker);
+  const head = i >= 0 ? markdown.slice(0, i) : markdown;
+  const block = ["", "---", "", "## Needs your attention", "", ...(all.length ? all.map((x) => `- ${x}`) : ["Nothing was flagged. Review the whole document anyway."]), "", `_Documentation check: UHS Critical Documentation Practices rules v${r.version}._`].join("\n");
+  return { markdown: head + block, attention: all, gaps: r.gaps };
+}
 
 /** What a provider must look at: removed lines, values not found in the recording, and sections left blank. */
 function attentionFromNote(note: Awaited<ReturnType<typeof draftNote>>): string[] {
@@ -83,22 +98,19 @@ async function generateOne(input: GenerateInput, spec: DocSpec, index: number, t
       onProgress: (done, all, heading) => say(`section ${done} of ${all}: ${heading.replace(/^\d+\.\s*/, "")}`),
     });
     const attention = attentionFromNote(note);
-    return { kind: spec.kind, label: spec.label, markdown: noteToMarkdown(note, header, attention), attention };
+    const g = await withGaps(input.llm, spec.kind, noteToMarkdown(note, header, attention), attention);
+    return { kind: spec.kind, label: spec.label, markdown: g.markdown, attention: g.attention, gaps: g.gaps };
   }
 
   say("filling the form");
   const fields = fieldsFor(spec.template);
-  const draft = await draftForm(input.llm, fields, input.transcript, (done, all, field) => say(`field ${done} of ${all}: ${field}`));
+  const draft = await draftForm(input.llm, fields, input.transcript, (done, all, field) => say(`field ${done} of ${all}: ${field}`), ucpTypeFor(spec.kind) ? ucpFormAddendum() : undefined);
   const attention = [
     ...draft.needsAttention.map((f) => `**${f}** — confirm this before signing.`),
     ...(draft.blank.length ? [`Left blank because the recording did not cover them: ${draft.blank.join(", ")}.`] : []),
   ];
-  return {
-    kind: spec.kind,
-    label: spec.label,
-    markdown: formToMarkdown(TITLES[spec.template], fields, draft.values, header, attention),
-    attention,
-  };
+  const g = await withGaps(input.llm, spec.kind, formToMarkdown(TITLES[spec.template], fields, draft.values, header, attention), attention);
+  return { kind: spec.kind, label: spec.label, markdown: g.markdown, attention: g.attention, gaps: g.gaps };
 }
 
 /** Generates the visit's documents one at a time, in the order the appointment type implies. */

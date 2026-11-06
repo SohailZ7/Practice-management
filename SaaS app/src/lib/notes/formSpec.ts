@@ -138,6 +138,8 @@ export async function draftForm(
   fields: FieldSpec[],
   transcript: string,
   onProgress?: (done: number, total: number, field: string) => void,
+  /** Extra rules appended to the form prompt (the UHS documentation standard). */
+  extraSystem?: string,
 ): Promise<FormDraft> {
   const values: FormValues = {};
   const blank: string[] = [];
@@ -147,7 +149,7 @@ export async function draftForm(
     onProgress?.(i, fields.length, spec.field);
     const optionList = spec.options?.length ? `OPTIONS:\n${spec.options.map((o) => `- ${o}`).join("\n")}` : "OPTIONS: none, answer with TEXT only";
     const raw = await llm({
-      system: FORM_SYSTEM,
+      system: extraSystem ? `${FORM_SYSTEM}\n\n${extraSystem}` : FORM_SYSTEM,
       prompt: `TRANSCRIPT:\n<<<\n${transcript.trim()}\n>>>\n\nFIELD: ${spec.field}\nQUESTION: ${spec.ask}\n${optionList}`,
     });
     const answer = parseFormAnswer(raw, spec.options ?? []);
