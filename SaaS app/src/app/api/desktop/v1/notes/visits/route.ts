@@ -27,6 +27,8 @@ export const GET = handle(async (req) => {
     visits: visits.map((v) => ({
       id: v.id,
       initials: patientInitials(v.patient.lastName, v.patient.firstName),
+      // Only for users an admin has allowed (User.showFullNames); omitted for everyone else. Never logged or audited.
+      ...(user.showFullNames ? { fullName: `${v.patient.firstName} ${v.patient.lastName}`.trim() } : {}),
       program: v.program,
       apptTime: v.apptTime,
       appointmentType: v.appointmentType,

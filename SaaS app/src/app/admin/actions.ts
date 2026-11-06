@@ -55,6 +55,7 @@ export async function updateUser(form: FormData) {
   const id = str(form, "id");
   const role = str(form, "role");
   const active = form.get("active") === "on";
+  const showFullNames = form.get("showFullNames") === "on";
   const target = await db.user.findUnique({ where: { id } });
   if (!target) flash(BACK, "error", "User not found.");
   if (!isRole(role)) flash(BACK, "error", "Unknown role.");
@@ -77,7 +78,7 @@ export async function updateUser(form: FormData) {
   if (wouldRemoveLastAdmin(await activeAdminIds(), id, { role, active })) {
     flash(BACK, "error", "There must always be at least one active administrator.");
   }
-  await db.user.update({ where: { id }, data: { role, active, name, email } });
+  await db.user.update({ where: { id }, data: { role, active, name, email, showFullNames } });
   // Keep the linked employee record (their task list) in step with the login.
   if (employee) await db.employee.update({ where: { id: employee.id }, data: { name, email } });
   // API-9: deactivating a user, or changing their email, ends their Desktop App sessions at once.
@@ -88,7 +89,7 @@ export async function updateUser(form: FormData) {
   await audit(
     admin.email,
     "user.update",
-    `${target!.email}: role=${role} active=${active}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
+    `${target!.email}: role=${role} active=${active} fullNames=${showFullNames}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
   );
   revalidatePath(BACK);
   flash(BACK, "notice", `Updated ${email}.`);
