@@ -11,6 +11,8 @@
 import { PrismaClient } from "@prisma/client";
 import { phi } from "../src/lib/crypto/phi";
 import { planScheduleEntry, planValue, type Mode } from "../src/lib/crypto/backfill";
+import { guard } from "./guard";
+guard({ name: "encrypt-phi" });
 
 const BATCH = 500;
 const argv = process.argv.slice(2);

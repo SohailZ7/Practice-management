@@ -3,6 +3,8 @@
 //   npm run verify:audit
 
 import { PrismaClient, Prisma } from "@prisma/client";
+import { guard } from "./guard";
+guard({ name: "verify-audit-append-only", neverProd: true });
 
 const db = new PrismaClient();
 let failures = 0;

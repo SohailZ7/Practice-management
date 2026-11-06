@@ -8,9 +8,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:push": "prisma db push",
+    "db:push": "tsx scripts/safe-db-push.ts",
     "db:seed": "tsx prisma/seed.ts",
-    "setup": "prisma generate && prisma db push && npm run db:harden && tsx prisma/seed.ts",
+    "setup": "prisma generate && tsx scripts/safe-db-push.ts && npm run db:harden && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "import:todo": "tsx scripts/import-todo.ts",
     "verify:recurring": "tsx scripts/verify-recurring.ts",
@@ -18,7 +18,9 @@
     "verify:audit": "tsx scripts/verify-audit-append-only.ts",
     "db:encrypt-phi": "tsx scripts/encrypt-phi.ts",
     "phi:generate-key": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
-    "verify:phi": "tsx scripts/verify-phi-encryption.ts"
+    "verify:phi": "tsx scripts/verify-phi-encryption.ts",
+    "schema:apply": "tsx scripts/schema-apply.ts",
+    "counts": "tsx scripts/row-counts.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

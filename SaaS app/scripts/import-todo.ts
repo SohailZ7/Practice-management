@@ -6,6 +6,8 @@
 import { readFileSync } from "node:fs";
 import { createDb } from "../src/lib/db";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "../src/lib/links";
+import { guard } from "./guard";
+guard({ name: "import-todo" });
 
 type TodoState = {
   categories: { id: string; name: string }[];

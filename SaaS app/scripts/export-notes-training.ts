@@ -7,6 +7,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { trainingRecords } from "../src/lib/notes/docService";
+import { guard } from "./guard";
+guard({ name: "export-notes-training" });
 
 async function main() {
   const out = process.argv[2];

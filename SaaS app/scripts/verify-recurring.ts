@@ -2,6 +2,8 @@
 // removes afterwards:  npx tsx scripts/verify-recurring.ts
 import { PrismaClient } from "@prisma/client";
 import { ensureRecurringTasks, reconcileRecurring } from "../src/lib/recurring";
+import { guard } from "./guard";
+guard({ name: "verify-recurring", neverProd: true });
 
 const db = new PrismaClient();
 let failures = 0;

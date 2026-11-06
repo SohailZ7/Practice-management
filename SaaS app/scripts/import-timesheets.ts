@@ -4,6 +4,8 @@
 import { readFileSync } from "node:fs";
 import { db } from "../src/lib/db";
 import { runImport } from "../src/lib/timesheets/importService";
+import { guard } from "./guard";
+guard({ name: "import-timesheets" });
 
 async function main() {
   const file = process.argv.find((a, i) => i >= 2 && !a.startsWith("--"));

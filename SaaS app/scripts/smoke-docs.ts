@@ -3,6 +3,8 @@
 //   npx tsx scripts/smoke-docs.ts
 import { db } from "../src/lib/db";
 import { documentPdf, generateDocs, getDocument, listDocuments, saveVersion } from "../src/lib/notes/docService";
+import { guard } from "./guard";
+guard({ name: "smoke-docs", neverProd: true });
 
 const FAKE =
   "Doctor: how have you been since the last visit? Patient: a bit better, sleeping about six hours, appetite is fair. " +

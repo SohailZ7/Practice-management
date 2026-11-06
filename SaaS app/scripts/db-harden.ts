@@ -5,6 +5,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { parseSqlStatements } from "../src/lib/sqlStatements";
+import { guard } from "./guard";
+guard({ name: "db-harden" });
 
 const TRIGGERS = ["AuditLog_append_only", "AuditLog_no_truncate", "BillingHistory_append_only", "BillingHistory_no_truncate", "TaskMove_append_only", "TaskMove_no_truncate"];
 

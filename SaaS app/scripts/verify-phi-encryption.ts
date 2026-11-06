@@ -9,6 +9,8 @@ import { createDb } from "../src/lib/db";
 import { commitImport } from "../src/lib/import/service";
 import { legacyDedupeKey, makeDedupeKey, type ParseResult } from "../src/lib/import/outpatientBoard";
 import { isKeyedDedupe } from "../src/lib/crypto/phi";
+import { guard } from "./guard";
+guard({ name: "verify-phi-encryption", neverProd: true });
 
 const dbName = new URL(process.env.DATABASE_URL ?? "postgres://x/").pathname.slice(1);
 const argv = process.argv.slice(2);

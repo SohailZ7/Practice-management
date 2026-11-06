@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { guard } from "../scripts/guard";
+guard({ name: "seed", neverProd: true });
 
 const db = new PrismaClient();
 
