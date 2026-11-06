@@ -85,7 +85,7 @@ export class ReleaseNotConfigured extends Error {}
 
 function config() {
   const bucket = process.env.DESKTOP_RELEASE_BUCKET;
-  const account = process.env.RELEASES_SIGNER;
+  const account = process.env.DESKTOP_RELEASE_SIGNER;
   if (!bucket || !account) throw new ReleaseNotConfigured("releases are not set up");
   return { bucket, account };
 }
