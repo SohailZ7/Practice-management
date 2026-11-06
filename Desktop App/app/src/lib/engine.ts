@@ -103,14 +103,17 @@ const FAKE_TRANSCRIPT =
   "FAKE ENGINE, nothing was recorded. Doctor: how have you been? Patient: better, I am sleeping about seven " +
   "hours now. I deny any thoughts of suicide.";
 
+/** `?qa=1` in a plain browser (dev only): looks signed in to localhost, so every screen can be seen against tests/qa/mock-server.mjs. */
+const qaMode = () => typeof location !== "undefined" && location.search.includes("qa=1");
+
 function fakeEngine(): Engine {
   let environment: EnvironmentId = "localhost";
-  const tokens: Record<string, string> = {};
+  const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token" } : {};
   const queue = new Map<string, QueueItem>();
   return {
     kind: "fake",
     status: async () => ({
-      whisper_model: false,
+      whisper_model: qaMode(),
       settings: { environment },
       signed_in: { production: !!tokens.production, staging: !!tokens.staging, localhost: !!tokens.localhost },
     }),

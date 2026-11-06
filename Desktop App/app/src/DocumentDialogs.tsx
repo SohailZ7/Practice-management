@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
+import { Modal } from "./Modal";
 import {
   fetchDocTypes, fetchDocument, listDocuments, noteErrorMessage, saveDocumentVersion,
   type DocType, type DocumentDetail, type FieldValue, type NoteDocument, type Session, type Visit,
 } from "./lib/api";
 
-const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 } as const;
 
 /** Pick which documents to write from the transcript. The appointment type's defaults are pre-checked. */
 export function GenerateDialog({ visit, session, onStart, onClose }: {
@@ -26,24 +26,21 @@ export function GenerateDialog({ visit, session, onStart, onClose }: {
   const toggle = (id: string, on: boolean) => setPicked((p) => { const n = new Set(p); if (on) n.add(id); else n.delete(id); return n; });
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Generate documents" onClick={onClose} style={overlay}>
-      <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 94vw)" }}>
-        <h2 style={{ marginTop: 0 }}>Generate documents</h2>
-        <p className="small"><strong>{visit.initials}</strong> · {visit.appointmentType}. Checked documents are the usual ones for this visit type; tick any others you also need.</p>
-        {error && <p className="small err">{error}</p>}
-        {!types && !error && <p className="small">Loading…</p>}
-        {types?.map((t) => (
-          <label key={t.id} style={{ display: "block", margin: "6px 0" }}>
-            <input type="checkbox" checked={picked.has(t.id)} onChange={(e) => toggle(t.id, e.target.checked)} /> {t.label}
-          </label>
-        ))}
-        <p className="small">Writing takes up to 2 minutes. You can leave this screen while it works.</p>
-        <div className="row">
-          <button disabled={picked.size === 0} onClick={() => { onStart([...picked]); onClose(); }}>Generate</button>
-          <button className="secondary" onClick={onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
+    <Modal title="Generate documents" onClose={onClose} width={520}
+      footer={<>
+        <button className="secondary" onClick={onClose}>Cancel</button>
+        <button disabled={picked.size === 0} onClick={() => { onStart([...picked]); onClose(); }}>Generate</button>
+      </>}>
+      <p className="small" style={{ marginTop: 0 }}><strong>{visit.initials}</strong> · {visit.appointmentType}. Checked documents are the usual ones for this visit type; tick any others you also need.</p>
+      {error && <p className="small err">{error}</p>}
+      {!types && !error && <p className="small">Loading…</p>}
+      {types?.map((t) => (
+        <label key={t.id} style={{ display: "block", margin: "6px 0" }}>
+          <input type="checkbox" checked={picked.has(t.id)} onChange={(e) => toggle(t.id, e.target.checked)} /> {t.label}
+        </label>
+      ))}
+      <p className="small">Writing takes up to 2 minutes. You can leave this screen while it works.</p>
+    </Modal>
   );
 }
 
@@ -96,63 +93,66 @@ export function DocumentEditor({ visit, doc, session, onClose }: {
   const set = (name: string, v: FieldValue) => { setSaved(""); setValues((p) => ({ ...p, [name]: v })); };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={doc.title} onClick={() => guard(onClose)} style={overlay}>
-      <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "min(820px, 94vw)", maxHeight: "90vh", overflow: "auto" }}>
-        <h2 style={{ marginTop: 0 }}>{doc.title}</h2>
-        <p className="small"><strong>{visit.initials}</strong>{visit.apptTime ? ` · ${visit.apptTime}` : ""}</p>
-        {error && <p className="small err">{error}{stale && <> <button className="secondary" onClick={() => void load()}>Load latest</button></>}</p>}
-        {saved && <p className="small">{saved}</p>}
-        {!detail && !error && <p className="small">Loading…</p>}
-        {detail && (
-          <>
-            <label className="field"><span>Version</span>
-              <select value={detail.current.version} onChange={(e) => {
-                const v = Number(e.target.value);
-                guard(() => void load(v === latest ? undefined : v));
-              }}>
-                {[...detail.versions].sort((a, b) => b.version - a.version).map((v) => (
-                  <option key={v.version} value={v.version}>
-                    v{v.version}{isOriginal(v) ? " · model original" : ""} · {new Date(v.createdAt).toLocaleString()}{v.authorName ? ` · ${v.authorName}` : ""}{v.version === latest ? " (latest)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {readOnly && <p className="small">You are reading an older version. Choose the latest version to edit.</p>}
-            {detail.fields.map((f) => {
-              const v = values[f.name];
-              if (f.type === "checkbox") return (
-                <label key={f.name} style={{ display: "block", margin: "8px 0" }}>
-                  <input type="checkbox" disabled={readOnly} checked={v === true} onChange={(e) => set(f.name, e.target.checked)} /> {f.label}
-                </label>
-              );
-              return (
-                <label key={f.name} className="field"><span>{f.label}</span>
-                  {f.type === "longtext" ? (
-                    <textarea rows={6} readOnly={readOnly} style={{ width: "100%" }} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
-                  ) : f.type === "select" ? (
-                    <select disabled={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)}>
-                      <option value="" />
-                      {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input type={f.type === "date" ? "date" : "text"} readOnly={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
-                  )}
-                </label>
-              );
-            })}
-          </>
-        )}
-        {pending && (
-          <p className="small err">You have unsaved changes.{" "}
-            <button className="secondary" onClick={() => { const a = pending; setPending(null); a(); }}>Discard them</button>{" "}
-            <button onClick={() => setPending(null)}>Keep editing</button></p>
-        )}
-        <div className="row">
-          {detail && !readOnly && <button disabled={!dirty || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save as new version"}</button>}
+    <Modal title={doc.title} onClose={() => guard(onClose)} width={820}
+      footer={pending ? (
+        <>
+          <span className="err" style={{ flex: "1 1 auto", alignSelf: "center" }}>You have unsaved changes.</span>
+          <button className="secondary" onClick={() => { const a = pending; setPending(null); a(); }}>Discard them</button>
+          <button onClick={() => setPending(null)}>Keep editing</button>
+        </>
+      ) : (
+        <>
+          {(error || saved) && (
+            <span role="status" className={error ? "small err" : "small"} style={{ flex: "1 1 200px", alignSelf: "center" }}>
+              {error || saved}{error && stale && <> <button className="secondary" onClick={() => void load()}>Load latest</button></>}
+            </span>
+          )}
           <button className="secondary" onClick={() => guard(onClose)}>Close</button>
-        </div>
-      </div>
-    </div>
+          {detail && !readOnly && <button disabled={!dirty || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save as new version"}</button>}
+        </>
+      )}>
+      <p className="small" style={{ marginTop: 0 }}><strong>{visit.initials}</strong>{visit.apptTime ? ` · ${visit.apptTime}` : ""}</p>
+      {!detail && !error && <p className="small">Loading…</p>}
+      {detail && (
+        <>
+          <label className="field"><span>Version</span>
+            <select value={detail.current.version} onChange={(e) => {
+              const v = Number(e.target.value);
+              guard(() => void load(v === latest ? undefined : v));
+            }}>
+              {[...detail.versions].sort((a, b) => b.version - a.version).map((v) => (
+                <option key={v.version} value={v.version}>
+                  v{v.version}{isOriginal(v) ? " · model original" : ""} · {new Date(v.createdAt).toLocaleString()}{v.authorName ? ` · ${v.authorName}` : ""}{v.version === latest ? " (latest)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {readOnly && <p className="small">You are reading an older version. Choose the latest version to edit.</p>}
+          {detail.fields.map((f) => {
+            const v = values[f.name];
+            if (f.type === "checkbox") return (
+              <label key={f.name} style={{ display: "block", margin: "8px 0" }}>
+                <input type="checkbox" disabled={readOnly} checked={v === true} onChange={(e) => set(f.name, e.target.checked)} /> {f.label}
+              </label>
+            );
+            return (
+              <label key={f.name} className="field"><span>{f.label}</span>
+                {f.type === "longtext" ? (
+                  <textarea rows={6} readOnly={readOnly} style={{ width: "100%" }} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
+                ) : f.type === "select" ? (
+                  <select disabled={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)}>
+                    <option value="" />
+                    {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input type={f.type === "date" ? "date" : "text"} readOnly={readOnly} value={String(v ?? "")} onChange={(e) => set(f.name, e.target.value)} />
+                )}
+              </label>
+            );
+          })}
+        </>
+      )}
+    </Modal>
   );
 }
 

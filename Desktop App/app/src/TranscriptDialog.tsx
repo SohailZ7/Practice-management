@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiFailure, fetchTranscript, type Session, type Visit } from "./lib/api";
 import type { Engine, QueueItem } from "./lib/engine";
+import { Modal } from "./Modal";
 
 export type TranscriptState = "recording" | "working" | "saved" | "uploaded" | "failed" | "none";
 
@@ -70,32 +71,28 @@ export function TranscriptDialog({ visit, date, status, queueItem, queued, engin
   }, [visit.id, queueItem?.visit_id, status.phase, queued]);
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Transcript" onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-      <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "min(720px, 92vw)", maxHeight: "86vh", overflow: "auto" }}>
-        <h2 style={{ marginTop: 0 }}>Transcript</h2>
-        <p className="small">
-          <strong>{visit.initials}</strong> · {date}{visit.apptTime ? ` · ${visit.apptTime}` : ""}
-          {queueItem ? ` · recorded ${new Date(queueItem.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
-        </p>
-        <p className={info.state === "failed" ? "small err" : "small"} role="status"><strong>Status:</strong> {info.text}</p>
-        {problem && <p className="small err">{problem}</p>}
-        {text === "" && <p className="small">The practice app has no transcript stored for this visit.</p>}
-        {text !== null && text !== "" && (
-          <>
-            <p className="small">Showing the copy from: {source}</p>
-            <textarea readOnly rows={14} value={text} aria-label="Transcript text" style={{ width: "100%" }} />
-          </>
+    <Modal title="Transcript" onClose={onClose} width={720}
+      footer={<>
+        {text && (
+          <button className="secondary" onClick={async () => {
+            try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
+          }}>{copied ? "Copied" : "Copy"}</button>
         )}
-        <div className="row">
-          {text && (
-            <button className="secondary" onClick={async () => {
-              try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
-            }}>{copied ? "Copied" : "Copy"}</button>
-          )}
-          <button onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+        <button onClick={onClose}>Close</button>
+      </>}>
+      <p className="small" style={{ marginTop: 0 }}>
+        <strong>{visit.initials}</strong> · {date}{visit.apptTime ? ` · ${visit.apptTime}` : ""}
+        {queueItem ? ` · recorded ${new Date(queueItem.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
+      </p>
+      <p className={info.state === "failed" ? "small err" : "small"} role="status"><strong>Status:</strong> {info.text}</p>
+      {problem && <p className="small err">{problem}</p>}
+      {text === "" && <p className="small">The practice app has no transcript stored for this visit.</p>}
+      {text !== null && text !== "" && (
+        <>
+          <p className="small">Showing the copy from: {source}</p>
+          <textarea readOnly rows={14} value={text} aria-label="Transcript text" style={{ width: "100%" }} />
+        </>
+      )}
+    </Modal>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { addedSeparator } from "./lib/append";
 import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
+import { Modal } from "./Modal";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { Tasks } from "./Tasks";
 import { Search } from "./Search";
@@ -44,6 +45,7 @@ export function App() {
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [message, setMessage] = useState("");
+  useEffect(() => { setMessage(""); }, [tab]); // a notice belongs to the screen that raised it
   const [pasting, setPasting] = useState(false);
   const [provider, setProvider] = useState("");
   const [telehealth, setTelehealth] = useState(true);
@@ -560,7 +562,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
         {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
         {state.phase === "idle" && !queued && (visit.hasTranscript ? `Transcript on file${visit.documentCount ? `, ${visit.documentCount} documents` : ""}` : "")}
       </td>
-      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+      <td className="actions"><div className="acts">
         <button className="secondary" title="View the transcript (read-only)" aria-label="View transcript" onClick={() => setViewing(true)}>
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2.5" /></svg>
         </button>
@@ -599,17 +601,13 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             Record
           </button>
           {askAppend && (
-            <div role="dialog" aria-modal="true" aria-label="Add to the transcript"
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-              <div className="card" style={{ width: "min(460px, 92vw)" }}>
-                <h3 style={{ marginTop: 0 }}>This visit already has a transcript</h3>
-                <p>Append the new recording to it? The earlier text is kept, and the new text is added after a time line.</p>
-                <div style={{ display: "flex", gap: ".5rem", justifyContent: "flex-end" }}>
-                  <button className="secondary" onClick={() => setAskAppend(false)}>No</button>
-                  <button onClick={startAdding}>Yes, append</button>
-                </div>
-              </div>
-            </div>
+            <Modal title="This visit already has a transcript" onClose={() => setAskAppend(false)} width={460}
+              footer={<>
+                <button className="secondary" onClick={() => setAskAppend(false)}>No</button>
+                <button onClick={startAdding}>Yes, append</button>
+              </>}>
+              <p style={{ marginTop: 0 }}>Append the new recording to it? The earlier text is kept, and the new text is added after a time line.</p>
+            </Modal>
           )}
           </>
         )}
@@ -635,7 +633,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
             <button className="secondary" disabled={busy} title="Remove this row from the day's list" onClick={() => setConfirmDelete(true)}>Delete</button>
           )
         )}
-      </td>
+      </div></td>
     </tr>
   );
 }
