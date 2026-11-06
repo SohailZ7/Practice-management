@@ -19,6 +19,8 @@ export type Visit = {
   providerName: string;
   hasTranscript: boolean;
   documentCount: number;
+  /** scheduled, seen, note_signed, no_show or cancelled. Absent from an older server (shown as scheduled). */
+  status?: string;
 };
 
 export type Session = {
@@ -231,7 +233,7 @@ export const cleanupFeedback = (session: Session, transcript: string) =>
     body: JSON.stringify({ transcript }),
   });
 
-export type NewVisit = { patient: string; apptTime?: string; program?: string; appointmentType?: string; providerName?: string };
+export type NewVisit = { patient: string; apptTime?: string; program?: string; appointmentType?: string; providerName?: string; status?: string };
 
 /** Adds one visit by hand. `patient` is "First Last". */
 export const createVisit = (session: Session, date: string, v: NewVisit) =>
@@ -257,6 +259,7 @@ export function visitErrorMessage(e: unknown, action = "change visits"): string 
     if (e.code === "bad_type") return "Choose an appointment type from the list.";
     if (e.code === "bad_provider") return "Choose a provider from the list.";
     if (e.code === "bad_date") return "That date is not valid.";
+    if (e.code === "bad_status") return "That status is not valid.";
     if (e.code === "not_found") return "That visit no longer exists. Refresh the list.";
     return `The practice app refused this (${e.status}${e.code ? " " + e.code : ""}).`;
   }

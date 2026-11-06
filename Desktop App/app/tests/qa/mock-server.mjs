@@ -4,7 +4,7 @@ import http from "node:http";
 
 let n = 100;
 const visits = [
-  { id: "v1", initials: "A.B.", program: "IOP", apptTime: "9:00-10:00", appointmentType: "Initial Evaluation", providerName: "Dr. Test", hasTranscript: true, documentCount: 2 },
+  { id: "v1", initials: "A.B.", program: "IOP", apptTime: "9:00-10:00", appointmentType: "Initial Evaluation", providerName: "Dr. Test", hasTranscript: true, documentCount: 2, status: "seen" },
   { id: "v2", initials: "C.D.", program: "PHP", apptTime: "10:00", appointmentType: "Follow Up", providerName: "Dr. Test", hasTranscript: false, documentCount: 0 },
   { id: "v3", initials: "E.F.", program: "IOP", apptTime: "", appointmentType: "Follow Up", providerName: "Dr. Test", hasTranscript: true, documentCount: 0 },
 ];

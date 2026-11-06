@@ -5,6 +5,7 @@ import { TranscriptDialog } from "./TranscriptDialog";
 import { Modal } from "./Modal";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { RowMenu } from "./RowMenu";
+import { VISIT_STATUSES, statusTone, statusValue } from "./lib/visitStatus";
 import { Tasks } from "./Tasks";
 import { Search } from "./Search";
 import { Mfa } from "./Mfa";
@@ -495,6 +496,9 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   const [promoting, setPromoting] = useState(false);
   const [promoteMsg, setPromoteMsg] = useState("");
   const [promoted, setPromoted] = useState(() => isPromoted(visit.id));
+  const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
+  useEffect(() => { setLocalStatus(undefined); }, [visit.status]);
+  const shownStatus = localStatus ?? visit.status;
   const [viewing, setViewing] = useState(false);
   // "Which speaker is the patient?" question after a one-microphone recording; resolves with the chosen label or null.
   const [ask, setAsk] = useState<{ speakers: { label: string; sample: string }[]; resolve: (patient: string | null) => void } | null>(null);
@@ -610,7 +614,17 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
       <td>{visit.program}</td>
       <td>{visit.appointmentType}</td>
       <td className="small status">
-        <span className={`pill ${pillFor(state, queued, visit).tone}`} data-testid="status-pill">{pillFor(state, queued, visit).label}</span>
+        <select className={`status-pill tone-${statusTone(shownStatus)}`} data-testid="status-pill" value={statusValue(shownStatus)}
+          aria-label={`Status for ${visit.initials}`} disabled={busy || state.phase === "recording" || state.phase === "working"}
+          onChange={async (e) => {
+            const next = e.target.value, before = shownStatus;
+            setLocalStatus(next);
+            try { await updateVisit(session, visit.id, { status: next }); onSent(); }
+            catch (err) { setLocalStatus(before); onState(visit.id, { phase: "failed", message: visitErrorMessage(err, "change a visit's status") }); }
+          }}>
+          {VISIT_STATUSES.map((st) => <option key={st.value} value={st.value}>{st.label}</option>)}
+        </select>
+        {pillFor(state, queued, visit) && <div><span className={`pill ${pillFor(state, queued, visit)!.tone}`} data-testid="recorder-pill">{pillFor(state, queued, visit)!.label}</span></div>}
         {state.phase === "recording" && state.warning && <span className="err">{state.warning}</span>}
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
@@ -718,16 +732,15 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   );
 }
 
-/** What happened to the visit, as one coloured pill. Interim: derived from the recorder's own state until the
- *  web app's visit status field is wired in. */
-function pillFor(state: RowState, queued: boolean, visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } {
+/** The recorder's own state for this row (recording, saved on this Mac, ...). Null when there is nothing to say; the
+ *  visit's status itself is the dropdown above it. */
+function pillFor(state: RowState, queued: boolean, _visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } | null {
   if (state.phase === "recording") return { label: "Recording", tone: "bad" };
   if (state.phase === "working") return { label: "Working…", tone: "warn" };
   if (state.phase === "failed") return { label: "Failed", tone: "bad" };
   if (state.phase === "saved" || queued) return { label: "Saved on this Mac", tone: "warn" };
   if (state.phase === "sent") return { label: "Transcript sent", tone: "ok" };
-  if (visit.hasTranscript) return { label: visit.documentCount > 0 ? "Documents ready" : "Transcript on file", tone: "ok" };
-  return { label: "Scheduled", tone: "" };
+  return null;
 }
 
 function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, onChanged }: {

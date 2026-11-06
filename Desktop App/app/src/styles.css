@@ -215,3 +215,12 @@ table.board .acts > .small, table.board .acts > .rec { flex-basis: 100%; text-al
 }
 .row-menu .menu-item { text-align: left; display: flex; border: 0; }
 .row-menu .menu-item.danger { background: transparent; border: 0; }
+
+/* Visit status: a dropdown that looks like the web app's coloured pill. */
+.status-pill { appearance: none; -webkit-appearance: none; border-radius: 999px; border: 1px solid var(--line); font-size: 11px; font-weight: 600; padding: .15rem 1.2rem .15rem .6rem; background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b9eb9' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right .4rem center / 10px; color: var(--text); cursor: pointer; min-height: 24px; max-width: 100%; }
+.status-pill:disabled { cursor: default; opacity: .75; }
+.status-pill.tone-ok { color: var(--ok); border-color: var(--ok); }
+.status-pill.tone-done { color: #fff; background-color: var(--ok); border-color: var(--ok); }
+.status-pill.tone-warn { color: var(--warn); border-color: var(--warn); }
+.status-pill.tone-bad { color: var(--danger); border-color: var(--danger); }
+.status-pill option { color: var(--text); background: var(--card); }
