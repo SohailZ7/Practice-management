@@ -122,7 +122,8 @@ export async function latestManifestCached(): Promise<Manifest | null> {
   let value: Manifest | null = null;
   try {
     value = await latestManifest();
-  } catch {
+  } catch (e) {
+    console.warn(JSON.stringify({ msg: "release manifest unreadable", reason: "exception", error: e instanceof Error ? e.message.slice(0, 120) : "unknown" }));
     value = null;
   }
   manifestCache = { at: Date.now(), value };
@@ -132,7 +133,10 @@ export async function latestManifestCached(): Promise<Manifest | null> {
 export async function latestManifest(): Promise<Manifest | null> {
   const { bucket } = config();
   const res = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucket}/o/latest.json?alt=media`, { headers: { authorization: `Bearer ${await token()}` }, cache: "no-store" });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.warn(JSON.stringify({ msg: "release manifest unreadable", reason: "storage", status: res.status }));
+    return null;
+  }
   try {
     return parseManifest(await res.json());
   } catch {
