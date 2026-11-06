@@ -163,10 +163,11 @@ export function DocumentIcons({ visit, session, refreshKey }: { visit: Visit; se
   }, [visit.id, visit.documentCount, refreshKey]);
   return (
     <>
-      <span className="doc-icons">
+      <span className="doc-chips">
+        {docs.length === 0 && <span className="small">{visit.documentCount === 0 && refreshKey === "" ? "None yet" : "…"}</span>}
         {docs.map((d) => (
-          <button key={d.id} className="secondary doc-icon" title={`${d.title} (version ${d.latestVersion})`} aria-label={`Open ${d.title}`} onClick={() => setOpen(d)}>
-            <DocIcon docType={d.docType} />
+          <button key={d.id} className="secondary doc-chip" title={`${d.title} (version ${d.latestVersion}). Click to open`} aria-label={`Open ${d.title}`} onClick={() => setOpen(d)}>
+            <DocIcon docType={d.docType} />{d.title}
           </button>
         ))}
       </span>

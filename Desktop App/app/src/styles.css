@@ -95,7 +95,7 @@ pre.doc { flex: 1; overflow: auto; white-space: pre-wrap; font: 12px/1.5 ui-mono
 .envbar.staging { background: #a15c00; }
 .envbar.localhost { background: #6b2fa0; }
 /* The row's buttons wrap inside their own cell instead of pushing the table past the window. */
-td.actions { width: 1%; min-width: 260px; }
+td.actions { width: 1%; min-width: 0; }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
 .acts > .small { flex-basis: 100%; text-align: right; }
 .board-wrap { overflow-x: auto; }
@@ -138,8 +138,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--navy-2); }
 .opt-text input { flex: 1; min-width: 0; padding: 3px 7px; }
 .opt-text textarea { width: 100%; }
 @media (max-width: 760px) { .form-table.paired { grid-template-columns: 1fr; } .form-table.paired .form-row:nth-child(odd) { border-right: 0; } }
-.doc-icons { display: inline-flex; gap: 3px; flex-wrap: nowrap; max-width: 1.2in; }
-.doc-icon { padding: 5px 6px; line-height: 0; }
 button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
 
 .speaker-choice { border: 1px solid var(--line, #d8dde3); border-radius: 8px; padding: .6rem .8rem; margin: .5rem 0; display: flex; flex-direction: column; gap: .35rem; align-items: flex-start; }
@@ -182,3 +180,33 @@ body { padding-bottom: 30px; }
 .theme-options { border: 0; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .theme-option { display: flex; gap: .6rem; align-items: center; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
 .theme-option:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+
+/* The visits table fits the window: columns shrink and wrap, the actions stack instead of being clipped. */
+table.board { table-layout: auto; }
+table.board td, table.board th { overflow-wrap: break-word; }
+table.board td:nth-child(2), table.board td:nth-child(3), table.board td:nth-child(4), table.board th { white-space: nowrap; overflow-wrap: normal; }
+table.board td.status { min-width: 110px; }
+td.actions .acts { max-width: 280px; margin-left: auto; }
+td.docs { min-width: 120px; }
+.doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* One button size everywhere in a row: the same height, padding and type, text always readable. */
+table.board button, .acts button { min-height: 30px; padding: .3rem .7rem; font-size: 12px; line-height: 1.2; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.doc-chip { text-align: left; white-space: normal; }
+
+/* Actions: two columns of equal buttons that wrap inside their cell, so nothing is clipped at any window width. */
+td.actions { width: 160px; min-width: 160px; }
+td.actions .acts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; max-width: 160px; margin-left: auto; }
+@media (min-width: 1280px) { td.actions { width: 280px; min-width: 280px; } td.actions .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 280px; } }
+td.actions .acts > * { min-width: 0; }
+td.actions .acts button { white-space: nowrap; width: 100%; }
+td.actions .acts > .small, td.actions .acts > .rec { grid-column: 1 / -1; }
+/* Narrow windows: the navigation becomes a bar across the top and the content uses the full width. */
+@media (max-width: 1100px) {
+  .shell { flex-direction: column; }
+  .side { position: static; width: auto; height: auto; flex-direction: row; align-items: center; gap: 1rem; padding: .6rem .9rem; flex-wrap: wrap; }
+  .side .brand { margin-bottom: 0; }
+  .side nav.tabs { flex-direction: row; flex-wrap: wrap; }
+  .side nav.tabs button { width: auto; padding: .45rem .8rem; }
+  .content-wrap { padding-top: 0; }
+  .content { border-top-left-radius: 24px; padding: 1.1rem 1rem 3rem; min-height: 0; }
+}

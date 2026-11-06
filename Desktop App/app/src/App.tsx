@@ -349,7 +349,7 @@ export function App() {
                 </div>
               )}
               <table className="board">
-                <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th /></tr></thead>
+                <thead><tr><th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th><th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Documents</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {displayVisits(visits, showFull && canShowFullNames(visits)).map((v) => (
                     <Row key={v.id} visit={v} date={date}
@@ -604,7 +604,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       </td>
       <td>{visit.program}</td>
       <td>{visit.appointmentType}</td>
-      <td className="small">
+      <td className="docs"><DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} /></td>
+      <td className="small status">
         {state.phase === "recording" && state.warning && <span className="err">{state.warning}</span>}
         {state.phase === "working" && state.detail}
         {state.phase === "failed" && <span className="err">{state.message}</span>}
@@ -619,6 +620,7 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
       <td className="actions"><div className="acts">
         <button className="secondary" title="View the transcript (read-only)" aria-label="View transcript" onClick={() => setViewing(true)}>
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 1.5h7l3 3V14.5H3z" /><path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2.5" /></svg>
+          Transcript
         </button>
         {ask && <SpeakerDialog speakers={ask.speakers} onChoose={(p) => { ask.resolve(p); setAsk(null); }} />}
         {viewing && !ask && (
@@ -632,9 +634,8 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
           <GenerateDialog visit={visit} session={session} onClose={() => setChooser(false)}
             onStart={(types) => { clearGeneration(visit.id); void startGenerate(session, visit.id, types); }} />
         )}
-        <DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} />
         <button className="secondary" disabled={!canGenerate || visit.documentCount > 0 || gen?.phase === "done" || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
-          title={visit.documentCount > 0 || gen?.phase === "done" ? "The documents are already generated. Open them with the icons." : canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
+          title={visit.documentCount > 0 || gen?.phase === "done" ? "The documents are already generated. Open them in the Documents column." : canGenerate ? "Write the documents from the transcript (can take up to 2 minutes; you can leave this screen)" : "Record the visit first: there is no transcript yet"}
           onClick={() => setChooser(true)}>
           {gen?.phase === "running" ? "Generating…" : "Generate documents"}
         </button>
