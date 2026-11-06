@@ -396,3 +396,6 @@ th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .doc-icon { padding: .15rem .45rem; font-size: 1rem; line-height: 1.2; }
 .spinner { display: inline-block; width: .9em; height: .9em; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: docspin .8s linear infinite; vertical-align: -2px; }
 @keyframes docspin { to { transform: rotate(360deg); } }
+
+/* Modules the signed-in person cannot open stay listed but dimmed. */
+.side a.locked { opacity: 0.5; }

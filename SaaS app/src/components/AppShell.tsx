@@ -105,13 +105,14 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
     }
   };
 
-  const items: { id: string; href: string; label: string; icon: IconName }[] = [];
-  if (levels.schedule !== "none") items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar" });
-  if (levels.tasks !== "none") items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks" });
-  if (levels.employees !== "none") items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users" });
-  if (levels.billing !== "none") items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing" });
-  if (levels.notes !== "none") items.push({ id: "/notes", href: "/notes", label: "Notes", icon: "tasks" });
-  if (levels.ledger !== "none") items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger" });
+  // Every module is listed. One the person cannot open stays visible (dimmed) and shows "no access" when clicked.
+  const items: { id: string; href: string; label: string; icon: IconName; locked?: boolean }[] = [];
+  items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar", locked: levels.schedule === "none" });
+  items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks", locked: levels.tasks === "none" });
+  items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" });
+  items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing", locked: levels.billing === "none" });
+  items.push({ id: "/notes", href: "/notes", label: "Notes", icon: "tasks", locked: levels.notes === "none" });
+  items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" });
   // Feedback is open to every signed-in user.
   items.push({ id: "/feedback", href: "/feedback", label: "Feedback", icon: "flag" });
   // Visible to everyone; anyone but the Admin who opens it sees the "no access" page (AUTH-13).
@@ -136,8 +137,8 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
     writeOrder(ORDER_KEY, next);
   };
 
-  const link = (href: string, label: string, icon: IconName) => (
-    <Link key={href} href={href} title={label} className={path.startsWith(href) ? "active" : ""}>
+  const link = (href: string, label: string, icon: IconName, locked = false) => (
+    <Link key={href} href={href} title={locked ? `${label} (no access)` : label} className={`${path.startsWith(href) ? "active" : ""} ${locked ? "locked" : ""}`.trim()}>
       <Icon name={icon} />
       <span className="label">{label}</span>
     </Link>
@@ -177,13 +178,13 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
               <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 {orderedItems.map((i) => (
                   <SortableNavItem key={i.id} id={i.id} label={i.label}>
-                    {link(i.href, i.label, i.icon)}
+                    {link(i.href, i.label, i.icon, i.locked)}
                   </SortableNavItem>
                 ))}
               </SortableContext>
             </DndContext>
           ) : (
-            items.map((i) => link(i.href, i.label, i.icon))
+            items.map((i) => link(i.href, i.label, i.icon, i.locked))
           )}
         </nav>
         <div className="foot">
