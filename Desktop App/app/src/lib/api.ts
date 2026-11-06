@@ -451,7 +451,7 @@ export function searchInputProblem(initials: string, date: string): string {
  * Returns where it went.
  */
 export async function downloadDocumentPdf(session: Session, visitId: string, docId: string, label: string): Promise<string> {
-  const path = `${vpath(visitId)}/documents/${encodeURIComponent(docId)}/pdf`;
+  const path = `/api/desktop/v1${vpath(visitId)}/documents/${encodeURIComponent(docId)}/pdf`; // download_document_pdf and the Rust check take the full path
   const base = session.baseUrl.replace(/\/$/, "");
   assertSafeBaseUrl(base);
   if (isTauri()) {
