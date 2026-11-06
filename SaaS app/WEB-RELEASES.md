@@ -11,4 +11,4 @@ Web 1.8 | Logs why the release manifest cannot be read | 7ca4aae (staging, rev p
 Web 1.9 | Notes document wording matches Desktop | 936f2a1 (staging, rev practice-mgmt-00061-hos)
 Web 1.10 | Notes visits appear on the Schedule | da41fa8 (staging, rev practice-mgmt-00063-vad)
 Web 1.11 | Recorder visit list needs Notes view only | 59663ea (staging, rev practice-mgmt-00065-vaz)
-Web 1.12 | One Schedule tab: one-line visits with status, doc icons, row menu | pending
+Web 1.12 | One Schedule tab: one-line visits with status, doc icons, row menu | 44afbca (staging, rev practice-mgmt-00067-zaq)
