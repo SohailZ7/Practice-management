@@ -9,6 +9,7 @@ const db = {
   billingPatient: { findFirst: vi.fn(), create: vi.fn() },
 };
 vi.mock("../src/lib/db", () => ({ db }));
+vi.mock("../src/lib/notes/visitSchedule", () => ({ syncScheduleForVisit: vi.fn(), removeScheduleForVisits: vi.fn() }));
 const audit = vi.fn();
 vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));
 

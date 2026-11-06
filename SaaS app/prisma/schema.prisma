@@ -103,11 +103,14 @@ model ScheduleEntry {
   dedupeKey    String          @default("")
   importLogId  String?
   patientId    String?
+  // Set when this row mirrors a Notes visit (added in the web app or the recorder). One row per visit.
+  visitId      String?
   createdAt    DateTime        @default(now())
   provider     Provider?       @relation(fields: [providerId], references: [id])
   patient      BillingPatient? @relation(fields: [patientId], references: [id])
 
   @@index([date])
+  @@index([visitId])
   @@index([dedupeKey])
   @@index([patientId])
 }
