@@ -42,6 +42,10 @@ describe("script guard", () => {
     expect(scriptVerdict({ ...prod, PROD_CONFIRM: prodConfirmPhrase(PROD) }, [], { name: "import" }).ok).toBe(false);
     expect(scriptVerdict({ ...prod, PROD_CONFIRM: prodConfirmPhrase(PROD) }, ["--allow-prod"], { name: "import" }).ok).toBe(true);
   });
+  it("lets read-only scripts look at production without the flag", () => {
+    expect(scriptVerdict(prod, [], { name: "counts", readOnly: true }).ok).toBe(true);
+    expect(scriptVerdict({ APP_ENV: "staging", DATABASE_URL: url(PROD) }, [], { name: "counts", readOnly: true }).ok).toBe(false);
+  });
   it("refuses a staging APP_ENV pointed at the prod database", () => {
     expect(scriptVerdict({ APP_ENV: "staging", DATABASE_URL: url(PROD) }, ["--allow-prod"], { name: "import" }).ok).toBe(false);
   });

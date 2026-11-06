@@ -10,7 +10,7 @@ import { gateSchemaSql, splitDiffSql } from "../src/lib/schemaGate";
 import { describeTarget } from "../src/lib/envGuard";
 
 const apply = process.argv.includes("--apply");
-guard({ name: apply ? "schema-apply" : "schema-diff" });
+guard({ name: apply ? "schema-apply" : "schema-diff", readOnly: !apply });
 
 async function main() {
   const t = describeTarget(process.env);

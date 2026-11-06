@@ -51,7 +51,7 @@ export function envMismatch(env: Record<string, string | undefined>): string | n
 /** The phrase a human types (or a job passes as PROD_CONFIRM) before a script is allowed to write to production. */
 export const prodConfirmPhrase = (host: string): string => `WRITE-TO-PRODUCTION-${host}`;
 
-export type ScriptPolicy = { name: string; neverProd?: boolean };
+export type ScriptPolicy = { name: string; neverProd?: boolean; readOnly?: boolean };
 
 /**
  * Decides whether a script may run. Never on a mismatched environment; never at all on production when neverProd (seeds,
@@ -61,7 +61,7 @@ export function scriptVerdict(env: Record<string, string | undefined>, argv: rea
   const bad = envMismatch(env);
   if (bad) return { ok: false, reason: `${policy.name}: ${bad}` };
   const t = describeTarget(env);
-  if (t.kind !== "production") return { ok: true };
+  if (t.kind !== "production" || policy.readOnly) return { ok: true }; // read-only scripts (diff, counts) may look at production
   if (policy.neverProd) return { ok: false, reason: `${policy.name} must never run against production` };
   if (!argv.includes("--allow-prod")) return { ok: false, reason: `${policy.name} would write to PRODUCTION: pass --allow-prod` };
   if (env.PROD_CONFIRM !== prodConfirmPhrase(t.host)) return { ok: false, reason: `${policy.name}: set PROD_CONFIRM=${prodConfirmPhrase(t.host)} to confirm a production write` };
