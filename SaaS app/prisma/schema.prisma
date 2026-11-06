@@ -17,6 +17,10 @@ model User {
   theme           String           @default("system")
   // Desktop recorder may show full patient names (default: initials only). Set by an admin per user.
   showFullNames   Boolean          @default(false)
+  // Last Desktop version this person's recorder reported, and the newest version whose update banner they dismissed.
+  desktopVersion          String?
+  desktopSeenAt           DateTime?
+  desktopDismissedVersion String?
   createdAt       DateTime         @default(now())
   lastLoginAt     DateTime?
   access          ModuleAccess[]

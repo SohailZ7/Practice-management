@@ -69,6 +69,14 @@ export function v4Request(opts: { bucket: string; object: string; account: strin
   return { toSign, urlBase: `https://storage.googleapis.com${path}?${query}` };
 }
 
+/** Pure rule for the web banner. Only people who use the recorder (it reported a version or has a session) and have Notes access. */
+export function shouldShowUpdateBanner(o: { latest: string | null; reported: string | null; dismissed: string | null; usesDesktop: boolean; hasNotes: boolean }): boolean {
+  if (!o.latest || !isVersion(o.latest) || !o.usesDesktop || !o.hasNotes) return false;
+  if (o.reported && isVersion(o.reported) && compareVersions(o.latest, o.reported) <= 0) return false;
+  if (o.dismissed && isVersion(o.dismissed) && compareVersions(o.latest, o.dismissed) <= 0) return false;
+  return true;
+}
+
 export class ReleaseNotConfigured extends Error {}
 
 function config() {
@@ -103,6 +111,20 @@ export async function signedLink(object: string, now = new Date()): Promise<stri
 }
 
 /** Reads and validates latest.json from the private bucket. Null when it is missing or malformed. */
+let manifestCache: { at: number; value: Manifest | null } | null = null;
+/** Same as latestManifest, kept for 5 minutes so every page view does not call Cloud Storage. Never throws. */
+export async function latestManifestCached(): Promise<Manifest | null> {
+  if (manifestCache && Date.now() - manifestCache.at < 300_000) return manifestCache.value;
+  let value: Manifest | null = null;
+  try {
+    value = await latestManifest();
+  } catch {
+    value = null;
+  }
+  manifestCache = { at: Date.now(), value };
+  return value;
+}
+
 export async function latestManifest(): Promise<Manifest | null> {
   const { bucket } = config();
   const res = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucket}/o/latest.json?alt=media`, { headers: { authorization: `Bearer ${await token()}` }, cache: "no-store" });

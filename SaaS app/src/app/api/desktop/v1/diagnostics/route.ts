@@ -14,6 +14,7 @@ export const POST = handle(async (req) => {
   const since = new Date(Date.now() - 3600_000);
   if ((await db.desktopDiagnostic.count({ where: { userId: user.id, createdAt: { gt: since } } })) >= MAX_PER_HOUR) throw new ApiError(429, "rate_limited");
   await db.desktopDiagnostic.create({ data: { userId: user.id, ...d } });
+  await db.user.update({ where: { id: user.id }, data: { desktopVersion: d.appVersion, desktopSeenAt: new Date() } });
   // Retention: old rows are removed as new ones arrive.
   await db.desktopDiagnostic.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - DIAG_RETENTION_DAYS * 86400_000) } } });
   return json({ ok: true }, 201);

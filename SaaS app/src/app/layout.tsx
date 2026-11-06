@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { getCurrentUser, getSessionTiming, levels } from "@/lib/session";
 import { canOpenAdmin } from "@/lib/access";
 import { normalizeTheme, themeAttribute } from "@/lib/theme";
+import { DesktopUpdateBanner } from "@/components/DesktopUpdateBanner";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
@@ -31,6 +32,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             isAdmin={canOpenAdmin(user)}
             timing={timing}
           >
+            <DesktopUpdateBanner user={user} />
             {children}
           </AppShell>
         ) : (

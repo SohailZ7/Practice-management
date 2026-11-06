@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { ApiError, authenticate, handle, json } from "@/lib/desktop/api";
 import { compareVersions, isTarget, isVersion, latestManifest, ReleaseNotConfigured, signedLink } from "@/lib/release";
@@ -15,6 +16,8 @@ export const GET = handle(async (req) => {
   const target = parts[parts.length - 2];
   if (!isTarget(target)) throw new ApiError(400, "bad_target");
   if (!isVersion(version)) throw new ApiError(400, "bad_version");
+  // Remember which version this person's recorder is on (drives the web update banner).
+  await db.user.update({ where: { id: user.id }, data: { desktopVersion: version, desktopSeenAt: new Date() } });
   let manifest;
   try {
     manifest = await latestManifest();

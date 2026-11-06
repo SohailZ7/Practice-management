@@ -58,3 +58,23 @@ describe("wiring", () => {
   });
   it("diagnostics table is additive", () => expect(readFileSync("prisma/schema.prisma", "utf8")).toMatch(/model DesktopDiagnostic/));
 });
+
+import { shouldShowUpdateBanner } from "@/lib/release";
+describe("update banner rule", () => {
+  const base = { latest: "1.0.6", reported: "1.0.5", dismissed: null, usesDesktop: true, hasNotes: true };
+  it("shows when latest is newer", () => expect(shouldShowUpdateBanner(base)).toBe(true));
+  it("hides when current or newer", () => {
+    expect(shouldShowUpdateBanner({ ...base, reported: "1.0.6" })).toBe(false);
+    expect(shouldShowUpdateBanner({ ...base, reported: "1.0.7" })).toBe(false);
+  });
+  it("hides after dismissing that version, shows again for a newer one", () => {
+    expect(shouldShowUpdateBanner({ ...base, dismissed: "1.0.6" })).toBe(false);
+    expect(shouldShowUpdateBanner({ ...base, latest: "1.0.7", dismissed: "1.0.6" })).toBe(true);
+  });
+  it("hides for people without desktop use or Notes access, and when nothing is published", () => {
+    expect(shouldShowUpdateBanner({ ...base, usesDesktop: false })).toBe(false);
+    expect(shouldShowUpdateBanner({ ...base, hasNotes: false })).toBe(false);
+    expect(shouldShowUpdateBanner({ ...base, latest: null })).toBe(false);
+  });
+  it("is wired into the layout", () => expect(readFileSync("src/app/layout.tsx", "utf8")).toContain("<DesktopUpdateBanner"));
+});
