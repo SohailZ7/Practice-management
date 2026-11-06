@@ -186,7 +186,7 @@ export function App() {
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Visits</button>
             <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Find a visit</button>
-            <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>Tasks</button>
+            <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>My Tasks</button>
             <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
           </nav>
@@ -630,6 +630,7 @@ function Setup({ engine, status, env, signedIn, locked, onEnvironment, onChanged
         <div><strong style={{ fontSize: "1.15rem" }}>Brain and Behavior Center</strong><div className="small">Practice Recorder</div></div>
       </div>}
       <h2 style={{ marginTop: 0 }}>{signedIn ? "Setup" : "Sign in"}</h2>
+      <div className="small" style={{ marginTop: -8, marginBottom: 8 }}>Version 0.0.1 · build {__APP_COMMIT__}</div>
 
       <label className="field">
         <span>Environment</span>
