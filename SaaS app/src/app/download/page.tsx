@@ -9,7 +9,7 @@ export default async function DownloadPage() {
   let ready = false;
   try {
     const m = await latestManifest();
-    ready = !!m?.platforms["darwin-aarch64"]?.dmg;
+    ready = !!m?.dmg;
     version = m?.version ?? "";
   } catch (e) {
     if (!(e instanceof ReleaseNotConfigured)) throw e;
@@ -20,7 +20,7 @@ export default async function DownloadPage() {
       {ready ? (
         <>
           <p>Version {version} for Macs with Apple silicon (M1 or later). The link works for a few minutes after you press the button.</p>
-          <p><a className="button" href="/api/download/dmg">Download</a></p>
+          <p><a className="button" href="/downloads/desktop">Download</a></p>
         </>
       ) : (
         <p>No download is published yet. Ask your Admin.</p>

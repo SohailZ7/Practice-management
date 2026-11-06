@@ -10,7 +10,7 @@ export async function GET() {
   const user = await requireUser();
   try {
     const m = await latestManifest();
-    const dmg = m?.platforms["darwin-aarch64"]?.dmg;
+    const dmg = m?.dmg;
     if (!m || !dmg) return NextResponse.json({ error: "no_release" }, { status: 404 });
     await audit(user.email, "desktop.download", `dmg ${m.version}`);
     return NextResponse.redirect(await signedLink(dmg), { status: 302, headers: { "Cache-Control": "no-store" } });

@@ -558,17 +558,20 @@ model TimesheetPayment {
   @@index([employeeId, date])
 }
 
-// Mac recorder diagnostics: event + error code only (no free text). Pruned after 90 days (src/lib/desktop/diagnostics.ts).
+// Mac recorder diagnostics: versions, kinds and codes only (src/lib/desktop/diagnostics.ts). Pruned after 30 days.
 model DesktopDiagnostic {
-  id         String   @id @default(cuid())
-  userId     String?
-  appVersion String
-  os         String
-  event      String
-  code       String
-  createdAt  DateTime @default(now())
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id          String   @id @default(cuid())
+  userId      String?
+  receivedAt  DateTime @default(now())
+  appVersion  String
+  commit      String   @default("")
+  os          String
+  arch        String
+  environment String
+  manual      Boolean  @default(false)
+  events      Json
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([createdAt])
-  @@index([userId, createdAt])
+  @@index([receivedAt])
+  @@index([userId, receivedAt])
 }

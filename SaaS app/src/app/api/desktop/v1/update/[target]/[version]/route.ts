@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { ApiError, authenticate, handle, json } from "@/lib/desktop/api";
-import { compareVersions, isTarget, isVersion, latestManifest, ReleaseNotConfigured, signedLink } from "@/lib/release";
+import { isTarget, isVersion, latestManifest, ReleaseNotConfigured, signedLink } from "@/lib/release";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +22,13 @@ export const GET = handle(async (req) => {
   try {
     manifest = await latestManifest();
   } catch (e) {
-    if (e instanceof ReleaseNotConfigured) throw new ApiError(404, "no_releases");
+    if (e instanceof ReleaseNotConfigured) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     throw e;
   }
   const p = manifest?.platforms[target];
-  if (!manifest || !p) throw new ApiError(404, "no_release");
-  if (compareVersions(manifest.version, version) <= 0) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
-  await audit(user.email, "desktop.update.check", `${target} ${version} -> ${manifest.version}`);
+  // Nothing published for this Mac, or already on the published version: 204. A different version applies, so pointing
+  // latest.json at an older release is a working rollback.
+  if (!manifest || !p || manifest.version === version) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+  await audit(user.email, "desktop.update.check", `${target} ${version} -> ${manifest.version}`); // never the signed link
   return json({ version: manifest.version, notes: manifest.notes, pub_date: manifest.pub_date, signature: p.signature, url: await signedLink(p.object) });
 });

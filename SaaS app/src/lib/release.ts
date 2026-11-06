@@ -4,13 +4,15 @@ import { createHash } from "node:crypto";
 
 export const TARGETS = ["darwin-aarch64"] as const;
 export type Target = (typeof TARGETS)[number];
-export const SIGNED_LINK_TTL_SEC = 600;
+export const SIGNED_LINK_TTL_SEC = 900;
 
-export type ManifestPlatform = { object: string; signature: string; dmg?: string };
-export type Manifest = { version: string; notes: string; pub_date: string; platforms: Partial<Record<Target, ManifestPlatform>> };
+export type ManifestPlatform = { object: string; signature: string };
+export type Manifest = { version: string; commit: string; notes: string; pub_date: string; dmg?: string; platforms: Partial<Record<Target, ManifestPlatform>> };
 
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,5}$/;
-const SAFE_OBJECT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$/;
+// Object paths inside the bucket, e.g. "releases/1.0.6/Practice Recorder.app.tar.gz": no leading slash, no "..".
+const SAFE_OBJECT = /^[A-Za-z0-9][A-Za-z0-9 ._\/-]{0,200}$/;
+export const safeObject = (o: unknown): o is string => typeof o === "string" && SAFE_OBJECT.test(o) && !o.split("/").some((seg) => seg === ".." || seg === "." || seg === "");
 
 export const isTarget = (t: string): t is Target => (TARGETS as readonly string[]).includes(t);
 export const isVersion = (v: string) => VERSION.test(v);
@@ -33,12 +35,14 @@ export function parseManifest(raw: unknown): Manifest | null {
   for (const t of TARGETS) {
     const p = (m.platforms as Record<string, unknown>)[t] as Record<string, unknown> | undefined;
     if (!p) continue;
-    if (typeof p.object !== "string" || !SAFE_OBJECT.test(p.object) || typeof p.signature !== "string" || !p.signature) return null;
-    if (p.dmg !== undefined && (typeof p.dmg !== "string" || !SAFE_OBJECT.test(p.dmg))) return null;
-    platforms[t] = { object: p.object, signature: p.signature, dmg: p.dmg as string | undefined };
+    if (!safeObject(p.object) || typeof p.signature !== "string" || !p.signature) return null;
+    platforms[t] = { object: p.object, signature: p.signature };
   }
+  if (m.dmg !== undefined && !safeObject(m.dmg)) return null;
   return {
     version: m.version,
+    commit: typeof m.commit === "string" ? m.commit.slice(0, 40) : "",
+    dmg: m.dmg as string | undefined,
     notes: typeof m.notes === "string" ? m.notes.slice(0, 2000) : "",
     pub_date: typeof m.pub_date === "string" ? m.pub_date : "",
     platforms,
@@ -80,7 +84,7 @@ export function shouldShowUpdateBanner(o: { latest: string | null; reported: str
 export class ReleaseNotConfigured extends Error {}
 
 function config() {
-  const bucket = process.env.RELEASES_BUCKET;
+  const bucket = process.env.DESKTOP_RELEASE_BUCKET;
   const account = process.env.RELEASES_SIGNER;
   if (!bucket || !account) throw new ReleaseNotConfigured("releases are not set up");
   return { bucket, account };

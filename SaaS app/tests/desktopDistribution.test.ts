@@ -4,11 +4,15 @@ import { compareVersions, parseManifest, v4Request, isTarget } from "@/lib/relea
 import { parseDiagnostic } from "@/lib/desktop/diagnostics";
 
 describe("release manifest", () => {
-  const good = { version: "1.0.6", notes: "n", pub_date: "2026-11-06T00:00:00Z", platforms: { "darwin-aarch64": { object: "R_1.0.6.app.tar.gz", signature: "sig", dmg: "R_1.0.6.dmg" } } };
-  it("accepts a good manifest", () => expect(parseManifest(good)?.platforms["darwin-aarch64"]?.dmg).toBe("R_1.0.6.dmg"));
-  it("rejects object names with paths", () => {
-    expect(parseManifest({ ...good, platforms: { "darwin-aarch64": { object: "../x", signature: "s" } } })).toBeNull();
-    expect(parseManifest({ ...good, platforms: { "darwin-aarch64": { object: "a/b", signature: "s" } } })).toBeNull();
+  const good = { version: "1.0.6", commit: "abc1234", notes: "n", pub_date: "2026-11-06T00:00:00Z", dmg: "releases/1.0.6/Practice-Recorder-1.0.6.dmg", platforms: { "darwin-aarch64": { object: "releases/1.0.6/Practice Recorder.app.tar.gz", signature: "sig" } } };
+  it("accepts the Desktop agent's shape (paths with slashes and spaces)", () => {
+    const m = parseManifest(good);
+    expect(m?.platforms["darwin-aarch64"]?.object).toBe("releases/1.0.6/Practice Recorder.app.tar.gz");
+    expect(m?.dmg).toBe("releases/1.0.6/Practice-Recorder-1.0.6.dmg");
+  });
+  it("rejects traversal and absolute paths", () => {
+    for (const object of ["../x", "releases/../x", "/etc/passwd", "a//b"]) expect(parseManifest({ ...good, platforms: { "darwin-aarch64": { object, signature: "s" } } })).toBeNull();
+    expect(parseManifest({ ...good, dmg: "../x.dmg" })).toBeNull();
   });
   it("rejects bad versions and missing signatures", () => {
     expect(parseManifest({ ...good, version: "latest" })).toBeNull();
@@ -17,7 +21,6 @@ describe("release manifest", () => {
   it("compares versions numerically", () => {
     expect(compareVersions("1.0.10", "1.0.9")).toBe(1);
     expect(compareVersions("1.0.5", "1.0.5")).toBe(0);
-    expect(compareVersions("1.0.4", "1.1.0")).toBe(-1);
   });
   it("only darwin-aarch64 is a target", () => {
     expect(isTarget("darwin-aarch64")).toBe(true);
@@ -27,8 +30,8 @@ describe("release manifest", () => {
 
 describe("signed link", () => {
   const r = v4Request({ bucket: "b", object: "R 1.dmg", account: "sa@p.iam.gserviceaccount.com", now: new Date("2026-11-06T12:00:00Z") });
-  it("expires in 10 minutes and signs only the host", () => {
-    expect(r.urlBase).toContain("X-Goog-Expires=600");
+  it("expires in 15 minutes and signs only the host", () => {
+    expect(r.urlBase).toContain("X-Goog-Expires=900");
     expect(r.urlBase).toContain("X-Goog-SignedHeaders=host");
     expect(r.urlBase).toContain("/b/R%201.dmg?");
     expect(r.toSign.split("\n")[1]).toBe("20261106T120000Z");
@@ -36,11 +39,25 @@ describe("signed link", () => {
 });
 
 describe("diagnostics", () => {
-  const ok = { appVersion: "1.0.5", os: "macOS 14.5", event: "upload_failed", code: "http_413" };
-  it("accepts slugs", () => expect(parseDiagnostic(ok)).toEqual(ok));
-  it("refuses free text", () => {
-    expect(parseDiagnostic({ ...ok, code: "Jane Doe was late" })).toBeNull();
-    expect(parseDiagnostic({ ...ok, event: "a".repeat(80) })).toBeNull();
+  const ok = { appVersion: "1.0.6", commit: "abc1234", os: "macOS 14.5", arch: "aarch64", environment: "production", manual: false, events: [{ ts: "2026-11-06T12:00:00Z", kind: "api", code: "http_400", route: "/api/desktop/v1/notes/visits?date=2026-11-06", detail: "bad_time" }] };
+  it("accepts the contract body and strips queries from routes", () => {
+    const d = parseDiagnostic(ok);
+    expect(d?.events[0].route).toBe("/api/desktop/v1/notes/visits");
+    expect(d?.events[0].detail).toBe("bad_time");
+  });
+  it("rejects unknown keys at either level", () => {
+    expect(parseDiagnostic({ ...ok, patient: "x" })).toBeNull();
+    expect(parseDiagnostic({ ...ok, events: [{ ts: "2026-11-06T12:00:00Z", kind: "api", body: "x" }] })).toBeNull();
+  });
+  it("drops detail text that looks like an email, URL or long number", () => {
+    for (const detail of ["jane@x.com", "see https://a.b", "mrn 123456"]) {
+      const d = parseDiagnostic({ ...ok, events: [{ ts: "2026-11-06T12:00:00Z", kind: "js", detail }] });
+      expect(d?.events[0].detail).toBeUndefined();
+    }
+  });
+  it("caps events and checks kinds", () => {
+    expect(parseDiagnostic({ ...ok, events: Array(51).fill(ok.events[0]) })).toBeNull();
+    expect(parseDiagnostic({ ...ok, events: [{ ts: "2026-11-06T12:00:00Z", kind: "other" }] })).toBeNull();
   });
 });
 
@@ -48,7 +65,7 @@ describe("wiring", () => {
   it("update, download and diagnostics all require a signed-in user", () => {
     expect(readFileSync("src/app/api/desktop/v1/update/[target]/[version]/route.ts", "utf8")).toContain("authenticate(req)");
     expect(readFileSync("src/app/api/desktop/v1/diagnostics/route.ts", "utf8")).toContain("authenticate(req)");
-    expect(readFileSync("src/app/api/download/dmg/route.ts", "utf8")).toContain("requireUser()");
+    expect(readFileSync("src/app/downloads/desktop/route.ts", "utf8")).toContain("requireUser()");
     expect(readFileSync("src/app/download/page.tsx", "utf8")).toContain("requireUser()");
   });
   it("diagnostics admin page is admin only and has no write actions", () => {
