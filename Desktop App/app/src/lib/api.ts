@@ -2,6 +2,7 @@
 //
 // It pulls the day's visits and pushes back a transcript. The audio never leaves this Mac, and the recorder keeps
 // no patient record of its own: visits arrive as initials and are forgotten when the day changes.
+import { record, recentEvents, routeTemplate, safeCode } from "./diagnostics";
 import { assertSafeBaseUrl } from "./environments";
 
 export type Visit = {
@@ -69,11 +70,15 @@ export async function transport(
   const base = baseUrl.replace(/\/$/, "");
   if (isTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
+    let reply: ApiReply;
     try {
-      return await invoke<ApiReply>("api_request", { baseUrl: base, method, path, token, body: body ?? null });
+      reply = await invoke<ApiReply>("api_request", { baseUrl: base, method, path, token, body: body ?? null });
     } catch (e) {
+      if (!path.endsWith("/diagnostics")) record({ kind: "network", route: routeTemplate(path) });
       throw new Error(typeof e === "string" ? e : "Could not reach the practice app.");
     }
+    noteRefusal(reply, path);
+    return reply;
   }
   try {
     const res = await fetch(`${base}${path}`, {
@@ -84,10 +89,21 @@ export async function transport(
       },
       body,
     });
-    return { status: res.status, body: await res.text() };
+    const reply = { status: res.status, body: await res.text() };
+    noteRefusal(reply, path);
+    return reply;
   } catch {
+    if (!path.endsWith("/diagnostics")) record({ kind: "network", route: routeTemplate(path) });
     throw new Error("Could not reach the practice app.");
   }
+}
+
+/** Remembers a refusal (status plus the server's short code, never the body) for the diagnostics report. */
+function noteRefusal(reply: ApiReply, path: string): void {
+  if (reply.status < 400 || path.endsWith("/diagnostics")) return;
+  let code: string | null = null;
+  try { const b = JSON.parse(reply.body) as { error?: unknown }; code = typeof b.error === "string" ? b.error : null; } catch { /* no code */ }
+  record({ kind: "api", code: `${reply.status}${safeCode(code) ? ":" + safeCode(code) : ""}`, route: routeTemplate(path) });
 }
 
 async function send(session: Session, path: string, init: RequestInit): Promise<ApiReply> {
@@ -170,6 +186,24 @@ export type FeedbackItem = {
 export type FeedbackInput = { kind: FeedbackKind; title: string; description: string };
 
 /** Turns a failed feedback call into a sentence the user can act on. */
+/** Sends the recent diagnostics to the practice app, tagged by the server with the signed-in user. No PHI is in them. */
+export async function sendDiagnostics(session: Session, manual: boolean, env: string): Promise<number> {
+  let os = "unknown", arch = "";
+  if (isTauri()) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const c = await invoke<{ os: string; arch: string }>("diag_context");
+      os = c.os; arch = c.arch;
+    } catch { /* keep unknown */ }
+  }
+  const events = recentEvents();
+  await call<{ ok: boolean }>(session, "/diagnostics", {
+    method: "POST",
+    body: JSON.stringify({ appVersion: __APP_VERSION__, commit: __APP_COMMIT__, os, arch, environment: env, manual, events }),
+  });
+  return events.length;
+}
+
 export function feedbackErrorMessage(e: unknown): string {
   if (e instanceof ApiFailure) {
     if (e.status === 422 && e.code === "possible_phi")

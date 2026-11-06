@@ -16,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod capture;
 pub mod google;
+mod updater;
 pub mod keystore;
 pub mod queue;
 pub mod transcribe;
@@ -197,6 +198,14 @@ fn signed_in_map() -> std::collections::BTreeMap<String, bool> {
 }
 
 // ----------------------------------------------------------------------------- Tauri commands
+
+/// OS version and CPU for the diagnostics report. Nothing about the person or the machine's name.
+#[tauri::command]
+fn diag_context() -> serde_json::Value {
+    let ver = std::process::Command::new("sw_vers").arg("-productVersion").output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+    serde_json::json!({ "os": format!("macOS {ver}"), "arch": std::env::consts::ARCH })
+}
 
 #[tauri::command]
 async fn engine_status_cmd(app: tauri::AppHandle) -> EngineStatus {
@@ -647,10 +656,12 @@ async fn queue_discard(visit_id: String) -> Result<(), String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf
+            queue_list, queue_text, queue_set_text, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf,
+            updater::check_update, updater::install_update, diag_context
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");
