@@ -10,14 +10,15 @@ import { Mfa } from "./Mfa";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
 import { longDate, practiceToday, shiftDate as shift } from "./lib/dates";
+import { isPromoted, markPromoted, promoteBlocker, promoteVisit } from "./lib/promote";
 import { canShowFullNames, displayVisits, loadShowFull, saveShowFull } from "./lib/names";
 import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
-import { fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
-import { retryAll, setCopyLabel, uploadQueued } from "./lib/queue";
+import { retryAll, sessionFor, setCopyLabel, uploadQueued } from "./lib/queue";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
 type RowState =
@@ -451,6 +452,10 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
   const [secs, setSecs] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [promoteAsk, setPromoteAsk] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promoteMsg, setPromoteMsg] = useState("");
+  const [promoted, setPromoted] = useState(() => isPromoted(visit.id));
   const [viewing, setViewing] = useState(false);
   const [chooser, setChooser] = useState(false);
   const [askAppend, setAskAppend] = useState(false);
@@ -496,6 +501,24 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
     } finally {
       setBusy(false);
     }
+  }
+
+  async function promote() {
+    setPromoting(true); setPromoteMsg("");
+    try {
+      const prod = await sessionFor(engine, "production");
+      if (!prod) { setPromoteMsg("Sign in to Production first (Setup tab, choose Production). Nothing was changed."); return; }
+      const r = await promoteVisit(visit, date, {
+        readTranscript: async () => (await fetchTranscript(session, visit.id)).transcript,
+        listProduction: async (d) => (await fetchVisits(prod, d)).visits,
+        createProduction: (d, v) => createVisit(prod, d, v),
+        pushProduction: (id, text) => pushTranscript(prod, id, text),
+      });
+      if (r.ok) { markPromoted(visit.id, r.productionId); setPromoted(true); setPromoteMsg(r.already ? "Already in Production." : "Promoted to Production."); }
+      else setPromoteMsg(r.message);
+    } catch (e) {
+      setPromoteMsg(e instanceof Error ? e.message : "Promote failed. Nothing was lost.");
+    } finally { setPromoting(false); setPromoteAsk(false); }
   }
 
   async function stop() {
@@ -598,6 +621,23 @@ function Row({ visit, date, queueItem, selected, onSelect, state, ready, queued,
           )}
           </>
         )}
+        {env === "staging" && state.phase !== "recording" && state.phase !== "working" && (
+          <>
+            <button className="secondary" disabled={promoted || promoting || !!promoteBlocker(visit)}
+              title={promoted ? "Already promoted to Production" : promoteBlocker(visit) || "Copy this visit and its transcript to the real Production app"}
+              onClick={() => setPromoteAsk(true)}>{promoted ? "Promoted" : promoting ? "Promoting…" : "Promote to production"}</button>
+            {promoteAsk && (
+              <Modal title="Promote to production?" onClose={() => setPromoteAsk(false)} width={480}
+                footer={<>
+                  <button className="secondary" onClick={() => setPromoteAsk(false)}>Cancel</button>
+                  <button disabled={promoting} onClick={() => void promote()}>{promoting ? "Promoting…" : "Yes, promote"}</button>
+                </>}>
+                <p style={{ marginTop: 0 }}>This copies the visit for <strong>{visit.fullName}</strong>{visit.apptTime ? ` at ${visit.apptTime}` : ""} and its transcript to the <strong>real Production app</strong>. After that this button stays off for this visit.</p>
+              </Modal>
+            )}
+          </>
+        )}
+        {promoteMsg && <div className="small" role="status" style={{ flexBasis: "100%", textAlign: "right" }}>{promoteMsg}</div>}
         {state.phase !== "recording" && state.phase !== "working" && (
           <>
             <button className="secondary" disabled={busy} title="Remove this row from the day's list" onClick={() => setConfirmDelete(true)}>Delete</button>
