@@ -326,6 +326,9 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
           const r = await addVisitAction({ date, ...f });
           if (r.ok) onDone("Visit added.");
           else setErr(r.error);
+        } catch {
+          // A thrown server action has its message hidden in production; keep the form open and say so.
+          setErr("The visit could not be added. Your entries are still here; check them and try again.");
         } finally {
           setBusy(false);
         }

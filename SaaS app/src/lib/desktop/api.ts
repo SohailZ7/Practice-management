@@ -18,6 +18,10 @@ export function handle(fn: (req: Request) => Promise<Response>) {
     try {
       return await fn(req);
     } catch (e) {
+      if (e instanceof ApiError) {
+        // Code, status and path only (no query, no body): enough to tell which rule refused, nothing that can hold PHI.
+        console.warn(JSON.stringify({ msg: "desktop api refused", method: req.method, path: new URL(req.url).pathname, status: e.status, code: e.code }));
+      }
       if (e instanceof ApiError) return json({ error: e.code }, e.status);
       console.error("desktop api error"); // never log the error text: it may echo patient values
       return json({ error: "server_error" }, 500);
