@@ -435,3 +435,13 @@ span.status-pill { cursor: default; }
 .row-menu-list .menu-item.danger { color: var(--danger); }
 @media (max-width: 1000px) { table.visits { font-size: .82rem; } table.visits th, table.visits td { padding-left: .3rem; padding-right: .3rem; } }
 @media (min-width: 1300px) { table.visits col.c-prog { width: 20%; } table.visits col.c-type { width: 22%; } table.visits col.c-pat { width: 8rem; } table.visits col.c-time { width: 8rem; } table.visits col.c-status { width: 8.5rem; } table.visits col.c-docs { width: 9rem; } table.visits col.c-act { width: 10.5rem; } button.sm, .v-actions .row-menu summary { font-size: .85rem; } }
+
+/* Admin > Costs */
+.cost-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; margin-top: 1rem; }
+.cost-card { border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 1rem; min-width: 0; }
+.cost-total { font-size: 1.6rem; font-weight: 600; margin: 0.25rem 0; }
+.cost-table { width: 100%; table-layout: fixed; }
+.cost-table td, .cost-table th { overflow-wrap: anywhere; }
+.cost-table .num { text-align: right; width: 5.5rem; white-space: nowrap; }
+.cost-table td { position: relative; }
+.cost-bar { display: block; height: 3px; background: var(--accent); opacity: 0.45; margin-top: 2px; border-radius: 2px; }

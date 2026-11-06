@@ -9,6 +9,7 @@ export const ADMIN_PAGES = [
   { href: "/admin/activity", label: "Recent activity" },
   { href: "/admin/access-review", label: "Access review" },
   { href: "/admin/diagnostics", label: "Recorder diagnostics" },
+  { href: "/admin/costs", label: "Costs" },
 ] as const;
 
 export function adminPageActive(path: string, href: string): boolean {

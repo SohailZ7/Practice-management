@@ -42,7 +42,7 @@ export function modelConfig(env: NodeJS.ProcessEnv = process.env): ModelConfig {
 let cachedToken: { value: string; expires: number } | null = null;
 
 /** Access token for the Cloud Run service account, from the metadata server (no extra dependency). */
-async function serviceAccountToken(): Promise<string> {
+export async function serviceAccountToken(): Promise<string> {
   if (cachedToken && cachedToken.expires > Date.now() + 60_000) return cachedToken.value;
   const res = await fetch(
     "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
