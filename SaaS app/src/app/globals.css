@@ -445,3 +445,13 @@ span.status-pill { cursor: default; }
 .cost-table .num { text-align: right; width: 5.5rem; white-space: nowrap; }
 .cost-table td { position: relative; }
 .cost-bar { display: block; height: 3px; background: var(--accent); opacity: 0.45; margin-top: 2px; border-radius: 2px; }
+
+/* Feedback workflow */
+.fb-status { font-size: .75rem; padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.fb-on_staging, .fb-build_it { border-color: var(--accent); }
+.fb-approved, .fb-shipped { border-color: var(--ok); }
+.fb-needs_changes, .fb-rejected { border-color: var(--danger); }
+.fb-filter { margin: .75rem 0; }
+.fb-notes, .fb-thread { border-left: 3px solid var(--line); padding-left: .75rem; margin: .5rem 0; }
+.fb-actions textarea { width: 100%; margin: .5rem 0; }
+.fb-actions .row { flex-wrap: wrap; }

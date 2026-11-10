@@ -38,6 +38,10 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
             </option>
           ))}
         </select>
+        <select name="scope" defaultValue="tasks" aria-label="Scope">
+          <option value="tasks">Tasks</option>
+          <option value="feedback">Feedback only</option>
+        </select>
         <input name="label" placeholder="Label (e.g. Sohail's Claude)" className="grow" />
         <input name="days" type="number" min={1} max={365} defaultValue={90} aria-label="Days valid" style={{ width: 90 }} />
         <button type="submit">Create token</button>
@@ -47,6 +51,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
           <thead>
             <tr>
               <th>Label</th>
+              <th>Scope</th>
               <th>User</th>
               <th>Expires</th>
               <th>Last used</th>
@@ -59,6 +64,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
               return (
                 <tr key={t.id}>
                   <td>{t.label}</td>
+                  <td className="small">{t.scope}</td>
                   <td className="small muted">{t.user.email}</td>
                   <td className="small">{t.expiresAt.toISOString().slice(0, 10)}</td>
                   <td className="small muted">{t.lastUsedAt ? t.lastUsedAt.toISOString().slice(0, 16).replace("T", " ") : "never"}</td>

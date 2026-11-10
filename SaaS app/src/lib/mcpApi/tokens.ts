@@ -5,7 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 export const TOKEN_PREFIX = "bbcmcp_";
 /** Short-lived HttpOnly cookie that carries a freshly issued token to the admin page (never put it in a URL). */
 export const NEW_TOKEN_COOKIE = "mcp_new_token";
-export const SCOPES = ["tasks"] as const;
+export const SCOPES = ["tasks", "feedback"] as const;
 export type Scope = (typeof SCOPES)[number];
 export const DEFAULT_TTL_DAYS = 90;
 export const MAX_TTL_DAYS = 365;

@@ -50,7 +50,9 @@ export async function authenticateApi(req: Request, need: { scope: Scope; level:
   if (!token || token.revokedAt || token.expiresAt.getTime() <= Date.now()) throw new ApiError(401, "unauthorized");
   const user = await db.user.findUnique({ where: { id: token.userId }, include: { access: true } });
   if (!user || !user.active) throw new ApiError(401, "unauthorized");
-  if (token.scope !== need.scope || !canAccess(user, "tasks", need.level)) {
+  // The tasks scope never exceeds the owner's Tasks access. The feedback scope carries no module access: it can only do what
+  // the feedback agent rules allow (feedback/workflow.ts), and every change is attributed to the agent.
+  if (token.scope !== need.scope || (need.scope === "tasks" && !canAccess(user, "tasks", need.level))) {
     await audit(user.email, "mcp.denied", `token ${token.id} needed ${need.scope}:${need.level}`);
     throw new ApiError(403, "forbidden");
   }

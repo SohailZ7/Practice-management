@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
-import { NEW_TOKEN_COOKIE, clampTtlDays, expiryFrom, newApiToken } from "@/lib/mcpApi/tokens";
+import { NEW_TOKEN_COOKIE, clampTtlDays, expiryFrom, isScope, newApiToken } from "@/lib/mcpApi/tokens";
 import {
   DEFAULT_ACCESS,
   MODULES,
@@ -56,6 +56,7 @@ export async function updateUser(form: FormData) {
   const role = str(form, "role");
   const active = form.get("active") === "on";
   const showFullNames = form.get("showFullNames") === "on";
+  const feedbackApprover = form.get("feedbackApprover") === "on";
   const target = await db.user.findUnique({ where: { id } });
   if (!target) flash(BACK, "error", "User not found.");
   if (!isRole(role)) flash(BACK, "error", "Unknown role.");
@@ -78,7 +79,7 @@ export async function updateUser(form: FormData) {
   if (wouldRemoveLastAdmin(await activeAdminIds(), id, { role, active })) {
     flash(BACK, "error", "There must always be at least one active administrator.");
   }
-  await db.user.update({ where: { id }, data: { role, active, name, email, showFullNames } });
+  await db.user.update({ where: { id }, data: { role, active, name, email, showFullNames, feedbackApprover } });
   // Keep the linked employee record (their task list) in step with the login.
   if (employee) await db.employee.update({ where: { id: employee.id }, data: { name, email } });
   // API-9: deactivating a user, or changing their email, ends their Desktop App sessions at once.
@@ -89,7 +90,7 @@ export async function updateUser(form: FormData) {
   await audit(
     admin.email,
     "user.update",
-    `${target!.email}: role=${role} active=${active} fullNames=${showFullNames}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
+    `${target!.email}: role=${role} active=${active} fullNames=${showFullNames} feedbackApprover=${feedbackApprover}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
   );
   revalidatePath(BACK);
   flash(BACK, "notice", `Updated ${email}.`);
@@ -226,14 +227,15 @@ export async function issueApiToken(form: FormData) {
   const admin = await requireAdmin();
   const userId = str(form, "userId");
   const label = str(form, "label").slice(0, 60) || "Claude";
+  const scope = isScope(str(form, "scope")) ? str(form, "scope") : "tasks";
   const target = await db.user.findUnique({ where: { id: userId } });
   if (!target || !target.active) flash(TOKENS, "error", "Choose an active user.");
   const { token, hash } = newApiToken();
   const days = clampTtlDays(str(form, "days"));
   const row = await db.apiToken.create({
-    data: { userId, label, scope: "tasks", tokenHash: hash, createdByEmail: admin.email, expiresAt: expiryFrom(days) },
+    data: { userId, label, scope, tokenHash: hash, createdByEmail: admin.email, expiresAt: expiryFrom(days) },
   });
-  await audit(admin.email, "mcp.token.issue", `token ${row.id} user ${userId} scope=tasks days=${days}`);
+  await audit(admin.email, "mcp.token.issue", `token ${row.id} user ${userId} scope=${scope} days=${days}`);
   cookies().set(NEW_TOKEN_COOKIE, `${label}\n${token}`, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: TOKENS, maxAge: 60 });
   revalidatePath(TOKENS);
   flash(TOKENS, "notice", "Token created. Copy it now; it is not shown again.");

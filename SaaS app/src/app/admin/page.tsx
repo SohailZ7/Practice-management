@@ -55,6 +55,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
                     <label className="check" title="Lets this person's Mac recorder show full patient names (initials otherwise)">
                       <input type="checkbox" name="showFullNames" defaultChecked={u.showFullNames} /> Full names in recorder
                     </label>
+                    <label className="check" title="Can approve, request changes on, or reject Feedback items that are On staging">
+                      <input type="checkbox" name="feedbackApprover" defaultChecked={u.feedbackApprover} /> Feedback approver
+                    </label>
                     <button type="submit" className="secondary">
                       Save
                     </button>
