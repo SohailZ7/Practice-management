@@ -119,7 +119,7 @@ const qaMode = () => typeof location !== "undefined" && location.search.includes
 
 function fakeEngine(): Engine {
   let environment: EnvironmentId = "localhost";
-  const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token" } : {};
+  const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token", staging: "qa-token", ...(new URLSearchParams(location.search).has("prod") ? { production: "qa-token" } : {}) } : {};
   const queue = new Map<string, QueueItem>();
   return {
     kind: "fake",

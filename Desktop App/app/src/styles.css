@@ -224,3 +224,5 @@ table.board .acts > .small, table.board .acts > .rec { flex-basis: 100%; text-al
 .status-pill.tone-warn { color: var(--warn); border-color: var(--warn); }
 .status-pill.tone-bad { color: var(--danger); border-color: var(--danger); }
 .status-pill option { color: var(--text); background: var(--card); }
+
+.promote-why { flex-basis: 100%; text-align: right; color: var(--muted); font-size: 11px; line-height: 1.25; }

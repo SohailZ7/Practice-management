@@ -22,7 +22,7 @@ export const sameVisit = (a: Visit, b: Visit) =>
   initialsOf(a) === initialsOf(b) && clock(a.apptTime) === clock(b.apptTime) && (a.program ?? "") === (b.program ?? "");
 
 export function promoteBlocker(v: Visit): string {
-  if (!v.fullName) return "Full names are not switched on for your account, and Production needs the patient's name.";
+  if (!v.fullName) return "Full names are off for your account (Production needs the name).";
   if (!v.hasTranscript) return "Record the visit first: there is no transcript to promote.";
   return "";
 }

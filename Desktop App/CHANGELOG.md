@@ -17,3 +17,4 @@ v1.0.14 | 2026-11-05 | built on 6958a08 | Visits table fits the window: Document
 v1.0.15 | 2026-11-05 | built on 1a22c1c | Rebuild from current main for Web 1.11 (Notes view only for the visit list, linked Schedule rows)
 v1.0.16 | 2026-11-05 | built on c127d13 | One Schedule tab: one line per visit, status pill, doc icons + Generate docs, Record + row menu (Transcript, Promote, Delete)
 v1.0.17 | 2026-11-05 | built on 365cb04 | Schedule status dropdown wired to the web's visit status (Scheduled, Seen, Note signed, No-show, Cancelled)
+v1.0.18 | 2026-11-10 | built on 8b8d959 | Promote button visible on every staging row (not hidden in the menu) with a short reason when disabled

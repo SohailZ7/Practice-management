@@ -358,7 +358,7 @@ export function App() {
                 <thead><tr>{selecting && <th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th>}<th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th>Documents</th><th>Actions</th></tr></thead>
                 <tbody>
                   {displayVisits(visits, showFull && canShowFullNames(visits)).map((v) => (
-                    <Row key={v.id} visit={v} date={date} selecting={selecting}
+                    <Row key={v.id} visit={v} date={date} selecting={selecting} prodSignedIn={!!status?.signed_in.production}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
@@ -484,8 +484,8 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
-function Row({ visit, date, selecting, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
-  visit: Visit; date: string; selecting: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
+  visit: Visit; date: string; selecting: boolean; prodSignedIn: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void;
 }) {
@@ -496,6 +496,8 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   const [promoting, setPromoting] = useState(false);
   const [promoteMsg, setPromoteMsg] = useState("");
   const [promoted, setPromoted] = useState(() => isPromoted(visit.id));
+  const promoteWhyNot = state.phase === "recording" || state.phase === "working" ? "Finish the recording first."
+    : !prodSignedIn ? "Sign in to Production first (Setup)." : promoteBlocker(visit);
   const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
   useEffect(() => { setLocalStatus(undefined); }, [visit.status]);
   const shownStatus = localStatus ?? visit.status;
@@ -722,9 +724,14 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
             )}
           </>
         )}
+        {env === "staging" && (
+          <button className="secondary promote-btn" data-testid="promote-btn" disabled={!!promoteWhyNot || promoted || promoting}
+            title={promoted ? "Already promoted to Production" : promoteWhyNot || "Copy this visit and its transcript to the real Production app"}
+            onClick={() => setPromoteAsk(true)}>{promoted ? "Promoted" : promoting ? "Promoting…" : "Promote"}</button>
+        )}
+        {env === "staging" && !promoted && promoteWhyNot && <div className="small promote-why" data-testid="promote-why">{promoteWhyNot}</div>}
         <RowMenu items={[
           { label: "Transcript", title: "View the transcript (read-only)", onClick: () => setViewing(true) },
-          ...(env === "staging" ? [{ label: promoted ? "Promoted" : promoting ? "Promoting…" : "Promote to production", disabled: promoted || promoting || state.phase === "recording" || state.phase === "working" || !!promoteBlocker(visit), title: promoted ? "Already promoted to Production" : promoteBlocker(visit) || "Copy this visit and its transcript to the real Production app", onClick: () => setPromoteAsk(true) }] : []),
           { label: "Delete", danger: true, disabled: busy || state.phase === "recording" || state.phase === "working", title: "Remove this row from the day's list", onClick: () => setConfirmDelete(true) },
         ]} />
       </div></td>
