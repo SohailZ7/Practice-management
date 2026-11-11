@@ -3,7 +3,7 @@
 #   scripts/release.sh                 build from HEAD (must be on origin/main), sign the update, upload, switch latest.json
 #   scripts/release.sh --dry-run       do everything except the upload (checks that would block are shown as warnings)
 #   scripts/release.sh --rollback 1.0.5   point latest.json back at an already-uploaded version
-# Safety: only a clean checkout whose commit is on origin/main is published; versions are immutable (never overwritten);
+# Safety: the release gate (scripts/release-gate.sh) must pass before any upload; only a clean checkout whose commit is on origin/main is published; versions are immutable (never overwritten);
 # latest.json is written LAST, and the old one is kept as previous.json, so a rollback is one re-point.
 # One-time setup (bucket, IAM, updater key) is in Desktop App/docs/auto-update-setup.md.
 set -euo pipefail
@@ -61,6 +61,11 @@ APP="$HOME/PracticeRecorder-signed/Practice Recorder.app"
 # The page is compiled into the binary, so the freshly built dist/ (made by the build above) is what carries the commit.
 grep -q "$VERSION ($SHA)" dist/assets/index-*.js || { echo "built app does not carry $VERSION ($SHA)" >&2; exit 1; }
 [ "$(defaults read "$APP/Contents/Info" CFBundleShortVersionString)" = "$VERSION" ] || { echo "Info.plist version mismatch" >&2; exit 1; }
+
+# 2b. Release gate: model survives an update, banner path, staging reachable. Any failure stops here, before any upload.
+PREV_APP=""; PREV_DMG="$(ls -t "$HOME/PracticeRecorder-signed/versions/"*.dmg 2>/dev/null | head -1 || true)"
+[ -z "$PREV_DMG" ] || PREV_APP="$PREV_DMG"
+./scripts/release-gate.sh "$APP" "$PREV_APP" || { echo "[release] BLOCKED by the release gate. Nothing was uploaded." >&2; exit 1; }
 
 # 3. Update archive (what running apps download) + its signature, and the DMG (what a new Mac installs from).
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/bbc-release.XXXXXX")"

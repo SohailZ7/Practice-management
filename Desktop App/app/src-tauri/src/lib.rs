@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub mod capture;
 pub mod google;
 mod updater;
+mod model;
 mod diarize;
 pub mod keystore;
 pub mod queue;
@@ -166,22 +167,40 @@ fn shred(path: &Path) {
 
 // ----------------------------------------------------------------------------- the transcription model
 
-/// Where the Whisper model may be, best first: the bundled resource, the app's own folder, then the spike's folder
-/// used during development.
+/// Where the Whisper model may be, best first: the kept folder (survives updates), the bundled resource (old builds),
+/// then the spike's folder used during development.
 fn model_candidates(resource: Option<PathBuf>) -> Vec<PathBuf> {
     let lib = home().join("Library/Application Support");
-    let mut v = Vec::new();
+    let mut v = vec![support_dir().join("models").join(model::NAME)];
     if let Some(r) = resource {
         v.push(r);
     }
-    v.push(support_dir().join("models/ggml-small.en.bin"));
-    v.push(lib.join("PracticeNotesSpike/models/ggml-small.en.bin"));
+    v.push(lib.join("PracticeNotesSpike/models").join(model::NAME));
     v
 }
 
+/// The first candidate that is the right size. A partial or damaged file is ignored, so it shows as missing.
 fn find_model(app: &tauri::AppHandle) -> Option<PathBuf> {
     let resource = app.path().resolve("models/ggml-small.en.bin", tauri::path::BaseDirectory::Resource).ok();
-    model_candidates(resource).into_iter().find(|p| p.exists())
+    let found = model_candidates(resource).into_iter().find(|p| model::is_valid(p))?;
+    // A model that only exists inside the app bundle would vanish with the next update: copy it to the kept folder once.
+    let kept = support_dir().join("models");
+    if !found.starts_with(&kept) {
+        static ADOPTING: std::sync::Once = std::sync::Once::new();
+        let src = found.clone();
+        ADOPTING.call_once(move || { std::thread::spawn(move || { let _ = model::adopt(&src, &kept); }); });
+    }
+    Some(found)
+}
+
+#[tauri::command]
+fn model_download() {
+    model::start(support_dir().join("models"));
+}
+
+#[tauri::command]
+fn model_download_status() -> model::Progress {
+    model::PROGRESS.lock().map(|p| p.clone()).unwrap_or_default()
 }
 
 // ----------------------------------------------------------------------------- status
@@ -701,11 +720,37 @@ async fn queue_discard(visit_id: String) -> Result<(), String> {
     queue::shred_folder(&support_dir(), &visit_id)
 }
 
+/// `Practice Recorder --selfcheck [--transcribe]`: used by scripts/release-gate.sh. Prints one JSON line about where the
+/// model was found (and, with --transcribe, whether it really transcribes a generated tone) and exits. No window, no patient data.
+fn selfcheck(transcribe_too: bool) -> i32 {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let resource = exe.parent().and_then(|p| p.parent()).map(|p| p.join("Resources/models").join(model::NAME));
+    let kept = support_dir().join("models");
+    let found = model_candidates(resource.clone()).into_iter().find(|p| model::is_valid(p));
+    let where_ = match &found {
+        Some(p) if p.starts_with(&kept) => "kept",
+        Some(p) if Some(p) == resource.as_ref() => "bundled",
+        Some(_) => "other",
+        None => "missing",
+    };
+    let mut ok_transcribe = serde_json::Value::Null;
+    if let (true, Some(p)) = (transcribe_too, &found) {
+        let tone: Vec<i16> = (0..16000 * 3).map(|i| ((i as f32 * 0.05).sin() * 3000.0) as i16).collect();
+        ok_transcribe = serde_json::json!(transcribe::transcribe(p, &tone, &[]).is_ok());
+    }
+    println!("{}", serde_json::json!({ "model": where_, "transcribe_ok": ok_transcribe, "version": env!("CARGO_PKG_VERSION") }));
+    if where_ == "missing" { 3 } else if ok_transcribe == serde_json::json!(false) { 4 } else { 0 }
+}
+
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--selfcheck") {
+        std::process::exit(selfcheck(args.iter().any(|a| a == "--transcribe")));
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
+            engine_status_cmd, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf,
             updater::check_update, updater::install_update, diag_context

@@ -18,7 +18,7 @@ import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm"
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
 import { sendDiagnostics, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
-import { getEngine, type Engine, type EngineStatus, type QueueItem } from "./lib/engine";
+import { getEngine, type Engine, type EngineStatus, type ModelProgress, type QueueItem } from "./lib/engine";
 import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { UpdateBanner } from "./UpdateBanner";
 import { SpeakerDialog } from "./SpeakerDialog";
@@ -188,7 +188,6 @@ export function App() {
   const ready = !!engine && (engine.kind === "fake" || !!status?.whisper_model);
 
   const missing: string[] = [];
-  if (engine?.kind === "native" && !status?.whisper_model) missing.push("the transcription model");
   const queuedIds = new Set(queue.map((q) => q.visit_id));
 
   const changeEnvironment = async (next: EnvironmentId) => {
@@ -280,6 +279,9 @@ export function App() {
               )}
             </div>
 
+            {engine && status && !status.whisper_model && (engine.kind === "native" || location.search.includes("qa=1")) && (
+              <ModelBanner engine={engine} onDone={refreshStatus} />
+            )}
             {missing.length > 0 && (
               <div className="banner">
                 Recording is off because {missing.join(", ")} {missing.length === 1 ? "is" : "are"} not set up. Open{" "}
@@ -484,6 +486,39 @@ function PasteSchedule({ date, provider, onProvider, onDone, sync }: {
   );
 }
 
+/** Shown when the transcription model file is missing: one click downloads it, with progress, and Record stays off until it is there. */
+function ModelBanner({ engine, onDone, compact }: { engine: Engine; onDone: () => void | Promise<void>; compact?: boolean }) {
+  const [p, setP] = useState<ModelProgress | null>(null);
+  const [starting, setStarting] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const tick = async () => {
+      try {
+        const next = await engine.modelProgress();
+        if (!live) return;
+        setP((prev) => { if (prev?.running && !next.running && !next.error) void onDone(); return next; });
+      } catch { /* ignore */ }
+    };
+    void tick();
+    const t = setInterval(tick, 1000);
+    return () => { live = false; clearInterval(t); };
+  }, [engine]);
+  const running = !!p?.running || starting;
+  const pct = p && p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+  const start = async () => { setStarting(true); try { await engine.downloadModel(); } finally { setStarting(false); } };
+  return (
+    <div className={compact ? "small" : "banner"} data-testid="model-banner">
+      {!compact && <>Recording is off: the transcription model file is missing on this Mac (about 465 MB, a one-time download). </>}
+      {running ? (
+        <span>Downloading the model… {pct}% ({Math.round((p?.done ?? 0) / 1e6)} of {Math.round((p?.total ?? 0) / 1e6)} MB). Keep this window open.</span>
+      ) : (
+        <button onClick={start} data-testid="model-download">Download model</button>
+      )}
+      {p?.error && !running && <div className="err">{p.error}</div>}
+    </div>
+  );
+}
+
 function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
   visit: Visit; date: string; selecting: boolean; prodSignedIn: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
@@ -671,7 +706,7 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
           <span className="small">Working…</span>
         ) : (
           <>
-          <button className="record" disabled={!ready || busy} onClick={() => (hasExisting ? setAskAppend(true) : start())}>
+          <button className="record" title={!ready ? "Recording is off until the transcription model is downloaded (use Download model above)." : undefined} disabled={!ready || busy} onClick={() => (hasExisting ? setAskAppend(true) : start())}>
             Record
           </button>
           {askAppend && (
@@ -901,16 +936,20 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
               <button className="secondary" onClick={async () => { await engine.setTranscriptCopyDir(null); await onChanged(); }}>Turn off</button>
             )}
           </div>
-          <p className="small err">
-            Warning: a copy is patient information stored as a plain file on this Mac, outside the encrypted queue. It is
-            written only after the practice app confirms the upload. Choose a protected folder.
-          </p>
+          {status.settings.transcript_copy_dir && (
+            <p className="small err">
+              Warning: a copy is patient information stored as a plain file on this Mac, outside the encrypted queue. It is
+              written only after the practice app confirms the upload. Choose a protected folder.
+            </p>
+          )}
 
       {signedIn && (
         <>
           <h3>Transcription</h3>
           <ul className="small">
-            <li>Transcription model: {status.whisper_model ? "found" : "missing"}</li>
+            <li>Transcription model: {status.whisper_model ? "found" : "missing"}
+              {!status.whisper_model && engine.kind === "native" && <> <ModelBanner engine={engine} onDone={onChanged} compact /></>}
+            </li>
             {engine.kind === "fake" && <li><strong>Running in a browser with fake engines.</strong> Nothing is recorded.</li>}
           </ul>
           <p className="small">Transcription runs inside this app, on this Mac. The recording is never saved.</p>

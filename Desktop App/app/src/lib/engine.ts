@@ -11,6 +11,8 @@ export type EngineStatus = {
   signed_in: Record<string, boolean>;
 };
 
+export type ModelProgress = { running: boolean; done: number; total: number; error: string | null };
+
 /** What was captured, so the UI can warn when only one side of a call was heard. */
 export type StopResult = {
   seconds: number; system_audio: boolean; one_sided: boolean;
@@ -38,6 +40,9 @@ export type MfaStep = "enroll_start" | "enroll_confirm" | "verify";
 export interface Engine {
   readonly kind: "native" | "fake";
   status(): Promise<EngineStatus>;
+  /** Starts downloading the transcription model into the kept folder (resumable, checksum-checked). */
+  downloadModel(): Promise<void>;
+  modelProgress(): Promise<ModelProgress>;
   setEnvironment(environment: EnvironmentId): Promise<Settings>;
   /** Opens the system browser to sign in with Google; the tokens go to the Keychain. */
   signInWithGoogle(environment: EnvironmentId): Promise<SignInOutcome>;
@@ -82,6 +87,8 @@ async function nativeEngine(): Promise<Engine> {
   return {
     kind: "native",
     status: () => invoke<EngineStatus>("engine_status_cmd"),
+    downloadModel: () => invoke<void>("model_download"),
+    modelProgress: () => invoke<ModelProgress>("model_download_status"),
     setEnvironment: (environment) => invoke<Settings>("set_environment", { environment }),
     signInWithGoogle: (environment) => invoke<SignInOutcome>("sign_in_with_google", { environment }),
     mfaStep: async (environment, step, body) => {
@@ -124,10 +131,12 @@ function fakeEngine(): Engine {
   return {
     kind: "fake",
     status: async () => ({
-      whisper_model: qaMode(),
+      whisper_model: qaMode() && !location.search.includes("nomodel=1"),
       settings: { environment },
       signed_in: { production: !!tokens.production, staging: !!tokens.staging, localhost: !!tokens.localhost },
     }),
+    downloadModel: async () => {},
+    modelProgress: async () => ({ running: false, done: 0, total: 487614201, error: null }),
     setEnvironment: async (e) => ((environment = e), { environment }),
     signInWithGoogle: async () => { throw new Error("Signing in only works in the real app."); },
     mfaStep: async () => { throw new Error("Signing in only works in the real app."); },

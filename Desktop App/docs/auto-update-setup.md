@@ -50,3 +50,10 @@ Open Anyway) until Apple Developer ID notarization exists; updates themselves ar
 cd "Desktop App/app" && scripts/release.sh              # from a pushed origin/main commit only
 scripts/release.sh --rollback 1.0.5                     # re-point latest.json at an uploaded version (apps switch within 30 min)
 ```
+
+## The transcription model and the release gate
+
+- The Whisper model (`ggml-small.en.bin`, 487,614,201 bytes) is kept in `~/Library/Application Support/PracticeNotes/models/`, outside the app, so an update can never remove it. On launch the app checks the file's size; a model found only inside an old bundle is copied there once.
+- If it is missing, Visits shows a banner with **Download model** (resumable, SHA-256 checked) and Record stays off until it is there. Setup shows "Transcription model: found/missing".
+- `scripts/release.sh` runs `scripts/release-gate.sh` before any upload. It fails the release if: tsc, vitest or cargo tests fail; an update swap loses the model or the model does not transcribe a test tone; a clean profile does not report a missing model correctly; staging is unreachable. Set `BBC_STAGING_TOKEN` for a signed-in staging call (the Google sign-in itself needs a person).
+- **Roll the feed back (one command, both buckets):** `scripts/release.sh --rollback <version>`, e.g. `scripts/release.sh --rollback 1.0.17`. Every version stays in `releases/<version>/`, and the previous `latest.json` is kept as `previous.json`.
