@@ -537,6 +537,8 @@ model FeedbackItem {
   scope           String?
   testNotes       String            @default("")
   ownerApprovedAt DateTime?
+  /// Web release number (16 = "Web 1.16") this item was built in; production marks it Shipped when it runs that release.
+  shippedRelease  Int?
   events          FeedbackEvent[]
   comments        FeedbackComment[]
 

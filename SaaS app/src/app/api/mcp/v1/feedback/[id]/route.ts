@@ -12,12 +12,12 @@ export const GET = handle(async (req, { params }) => {
   return json({ item: feedbackShape(item), comments: comments.map((c) => ({ author: c.authorKind === "agent" ? "agent" : c.authorName, kind: c.authorKind, body: c.body, at: c.createdAt })) });
 });
 
-/** Body: { status?, testNotes?, comment? }. The agent may only make the moves feedback/workflow.ts allows it. */
+/** Body: { status?, testNotes?, comment?, release? } (release: 16 or "Web 1.16"; defaults to the running release when moving to On staging). The agent may only make the moves feedback/workflow.ts allows it. */
 export const PATCH = handle(async (req, { params }) => {
   const { user } = await authenticateApi(req, { scope: "feedback", level: "edit" });
   const body = await readJson(req);
   try {
-    const item = await setFeedbackWorkflow(agentActor(user), params.id, { status: body.status, testNotes: body.testNotes, comment: body.comment });
+    const item = await setFeedbackWorkflow(agentActor(user), params.id, { status: body.status, testNotes: body.testNotes, comment: body.comment, release: body.release });
     return json({ item: feedbackShape(item) });
   } catch (e) {
     if (e instanceof FeedbackError) throw new ApiError(e.status, e.code);

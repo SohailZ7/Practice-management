@@ -4,6 +4,7 @@ import { db } from "../db";
 import { audit } from "../audit";
 import { canEditFeedback, checkFeedback, toFeedbackOut, type FeedbackOut, type FeedbackPatch } from "./rules";
 import type { PhiKind } from "../phiGuard";
+import { releaseNumber, runningReleaseNumber, shipDueItems } from "./autoShip";
 
 export class FeedbackError extends Error {
   constructor(public status: number, public code: string, public phi?: PhiKind[]) {
@@ -14,6 +15,7 @@ export class FeedbackError extends Error {
 const withAuthor = { author: { select: { name: true } } } as const;
 
 export async function listFeedback(viewerId: string, limit = 100): Promise<FeedbackOut[]> {
+  await shipDueItems();
   const rows = await db.feedbackItem.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(200, Math.max(1, limit)), include: withAuthor });
   return rows.map((r) => toFeedbackOut(r, viewerId));
 }
@@ -60,7 +62,7 @@ const fail = (code: string) => new FeedbackError(code === "possible_phi" ? 422 :
 export async function setFeedbackWorkflow(
   actor: WorkflowActor,
   id: string,
-  input: { status?: unknown; scope?: unknown; testNotes?: unknown; comment?: unknown },
+  input: { status?: unknown; scope?: unknown; testNotes?: unknown; comment?: unknown; release?: unknown },
 ): Promise<FeedbackOut> {
   const item = await db.feedbackItem.findUnique({ where: { id }, include: withAuthor });
   if (!item) throw new FeedbackError(404, "not_found");
@@ -90,12 +92,24 @@ export async function setFeedbackWorkflow(
     const p = textProblem(comment, MAX_COMMENT);
     if (p) throw fail(p);
   }
+  if (input.release !== undefined) {
+    const n = releaseNumber(input.release);
+    if (n === null) throw fail("bad_release");
+    if (!actor.isAdmin && actor.kind !== "agent") throw fail("not_allowed");
+    if (n !== item.shippedRelease) { data.shippedRelease = n; events.push({ field: "release", from: item.shippedRelease === null ? null : String(item.shippedRelease), to: String(n) }); }
+  }
   if (input.status !== undefined) {
     if (!isStatus(input.status)) throw fail("bad_status");
     const m = checkMove(actor, cur, input.status, { scope, comment, testNotes });
     if (!m.ok) throw fail(m.error);
     data.status = input.status;
     events.push({ field: "status", from: cur.status, to: input.status });
+    // Moving to On staging records the release it was built in: the one given, else the release this build runs (the
+    // agent calls this after deploying). Production later marks the item Shipped by comparing that number.
+    if (input.status === "on_staging" && input.release === undefined) {
+      const n = runningReleaseNumber();
+      if (n !== null) data.shippedRelease = n;
+    }
     // The owner approving (from any status) is the owner's own approval click, which "other" items need.
     if (input.status === "approved" && actor.isAdmin && actor.kind === "user") data.ownerApprovedAt = new Date();
     if (input.status === "needs_changes" || input.status === "build_it") data.ownerApprovedAt = null;
@@ -139,6 +153,7 @@ export async function listEvents(itemIds: string[]): Promise<Record<string, Even
 }
 
 export async function listFeedbackByStatus(viewerId: string, status?: string, limit = 50): Promise<FeedbackOut[]> {
+  await shipDueItems();
   const rows = await db.feedbackItem.findMany({ where: isStatus(status) ? { status } : {}, orderBy: { createdAt: "asc" }, take: Math.min(100, Math.max(1, limit)), include: withAuthor });
   return rows.map((r) => toFeedbackOut(r, viewerId));
 }

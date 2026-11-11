@@ -54,9 +54,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
           </div>
           <div className="muted small">{i.authorName} · {when(i.createdAt)}</div>
           {i.description && <p style={{ whiteSpace: "pre-wrap" }}>{i.description}</p>}
-          {(i.scope || i.status === "approved") && (
+          {(i.scope || i.status === "approved" || i.release) && (
             <p className="muted small">
-              Scope: {i.scope ? SCOPE_LABEL[i.scope] : "not set"}
+              Scope: {i.scope ? SCOPE_LABEL[i.scope] : "not set"}{i.release ? ` · built in Web 1.${i.release}${i.status === "shipped" ? ", live in production" : ""}` : ""}
               {i.status === "approved" ? (readyToPromote(i).ready ? " · ready to promote" : " · needs the owner's approval before promotion") : ""}
             </p>
           )}

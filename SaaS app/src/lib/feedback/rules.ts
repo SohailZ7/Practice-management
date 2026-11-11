@@ -59,10 +59,12 @@ export type FeedbackOut = {
   scope: FeedbackScope | null;
   testNotes: string;
   ownerApproved: boolean;
+  /** Web release number (16 = "Web 1.16") the item was built in, or null. */
+  release: number | null;
 };
 
 export function toFeedbackOut(
-  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; status?: string; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null },
+  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; status?: string; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null; shippedRelease?: number | null },
   viewerId: string,
 ): FeedbackOut {
   return {
@@ -78,6 +80,7 @@ export function toFeedbackOut(
     scope: isScope(row.scope) ? row.scope : null,
     testNotes: row.testNotes ?? "",
     ownerApproved: !!row.ownerApprovedAt,
+    release: row.shippedRelease ?? null,
   };
 }
 
