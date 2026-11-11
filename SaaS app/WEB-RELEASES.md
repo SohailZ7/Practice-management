@@ -15,4 +15,4 @@ Web 1.12 | One Schedule tab: one-line visits with status, doc icons, row menu | 
 Web 1.13 | Note writer follows UHS documentation rules, with a fix-before-signing check | 9623e3a (staging, rev practice-mgmt-00069-buk)
 Web 1.14 | Admin > Costs: monthly cloud cost per environment by service | cae6dd0 (staging, rev practice-mgmt-00071-qih)
 Web 1.15 | Feedback workflow: statuses, approvers, test notes, comments, agent API | 8b8d959 (staging, rev practice-mgmt-00073-qam)
-Web 1.16 | Promote to production button on the staging Schedule list (admin, browser sign-in to prod) | pending
+Web 1.16 | Promote to production button on the staging Schedule list (admin, browser sign-in to prod) | e37a308 (staging, rev practice-mgmt-00075-kij)
