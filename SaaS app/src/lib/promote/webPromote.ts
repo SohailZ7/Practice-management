@@ -72,3 +72,24 @@ export function prodDeps(prodUrl: string, accessToken: string, f: typeof fetch =
     pushProduction: (id, transcript) => call(`/notes/visits/${encodeURIComponent(id)}/transcript`, { method: "POST", body: JSON.stringify({ transcript }) }),
   };
 }
+
+export type Preflight = { ok: true } | { ok: false; message: string };
+
+/**
+ * Read-only check the button makes before offering sign-in: is production set up for this page? A 404/405 means an older
+ * production without the check, so the flow continues (the sign-in itself still reports a refusal clearly).
+ */
+export async function preflightProduction(prodUrl: string, clientId: string, f: typeof fetch = fetch): Promise<Preflight> {
+  let res: Response;
+  try { res = await f(`${prodUrl}/api/desktop/v1/auth/google-web`, { method: "GET", cache: "no-store" }); }
+  catch { return { ok: false, message: "Could not reach production, or production does not allow Promote from this address yet. Check your connection and try again. Nothing was changed." }; }
+  if (res.status === 404 || res.status === 405) return { ok: true };
+  if (res.status === 503) return { ok: false, message: "Production is not set up for Promote yet (its Google sign-in setting is missing). Nothing was changed." };
+  if (res.status === 403) return { ok: false, message: "Production does not allow Promote from this address. Ask for this staging address to be added on production. Nothing was changed." };
+  if (!res.ok) return { ok: false, message: `Production answered with an error (${res.status}). Try again in a minute. Nothing was changed.` };
+  try {
+    const body = (await res.json()) as { clientId?: unknown };
+    if (typeof body.clientId === "string" && body.clientId !== clientId) return { ok: false, message: "Production and staging use different Google sign-in settings. Nothing was changed." };
+  } catch { /* an answer without a body is still a ready server */ }
+  return { ok: true };
+}

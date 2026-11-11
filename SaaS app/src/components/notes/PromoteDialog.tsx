@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "../Modal";
 import { getPromoteSource, recordPromote } from "@/app/notes/actions";
-import { prodDeps, promoteToProduction } from "@/lib/promote/webPromote";
+import { preflightProduction, prodDeps, promoteToProduction } from "@/lib/promote/webPromote";
 
 type Gis = { accounts: { id: { initialize: (o: { client_id: string; callback: (r: { credential?: string }) => void }) => void; renderButton: (el: HTMLElement, o: Record<string, unknown>) => void } } };
 declare global { interface Window { google?: Gis } }
@@ -20,7 +20,7 @@ function loadGoogle(): Promise<void> {
   });
 }
 
-type State = { kind: "ready" } | { kind: "working"; text: string } | { kind: "done"; already: boolean } | { kind: "error"; text: string };
+type State = { kind: "checking" } | { kind: "blocked"; text: string } | { kind: "ready" } | { kind: "working"; text: string } | { kind: "done"; already: boolean } | { kind: "error"; text: string };
 
 /**
  * Staging only, admin only, one visit at a time. The page signs in to production itself (Google, as the person pressing
@@ -28,7 +28,13 @@ type State = { kind: "ready" } | { kind: "working"; text: string } | { kind: "do
  * token lives in this dialog's memory and is gone when it closes. Press again after an error: it never duplicates.
  */
 export function PromoteDialog({ visitId, who, prodUrl, clientId, onClose }: { visitId: string; who: string; prodUrl: string; clientId: string; onClose: () => void }) {
-  const [state, setState] = useState<State>({ kind: "ready" });
+  const [state, setState] = useState<State>({ kind: "checking" });
+
+  useEffect(() => {
+    let dead = false;
+    void preflightProduction(prodUrl, clientId).then((p) => { if (!dead) setState(p.ok ? { kind: "ready" } : { kind: "blocked", text: p.message }); });
+    return () => { dead = true; };
+  }, [prodUrl, clientId]);
   const btn = useRef<HTMLDivElement>(null);
 
   async function run(credential: string) {
@@ -68,14 +74,14 @@ export function PromoteDialog({ visitId, who, prodUrl, clientId, onClose }: { vi
   const busy = state.kind === "working";
   return (
     <Modal title="Promote to production" size="sm" onClose={onClose} busy={busy} footer={<button className="secondary" disabled={busy} onClick={onClose}>{state.kind === "done" ? "Close" : "Cancel"}</button>}
-      notices={state.kind === "error" ? <p className="error" role="alert">{state.text}</p> : undefined}>
+      notices={state.kind === "error" || state.kind === "blocked" ? <p className="error" role="alert">{state.text}</p> : undefined}>
       {state.kind === "done" ? (
         <p>{state.already ? "This visit is already in production with its transcript. Nothing was changed." : "Done. The visit and its transcript are now in production."}</p>
       ) : (
         <>
           <p>Copy the visit for <strong>{who}</strong> and its transcript to production. Nothing in production is replaced, and pressing it twice does not add it twice.</p>
           <p className="small muted">Sign in with the Google account you use on production. The sign-in is used once for this copy and is not kept.</p>
-          {busy ? <p role="status">{state.text}</p> : <div ref={btn} style={{ minHeight: 44 }} />}
+          {state.kind === "checking" ? <p role="status" className="muted">Checking production…</p> : state.kind === "blocked" ? null : busy ? <p role="status">{state.text}</p> : <div ref={btn} style={{ minHeight: 44 }} />}
         </>
       )}
     </Modal>

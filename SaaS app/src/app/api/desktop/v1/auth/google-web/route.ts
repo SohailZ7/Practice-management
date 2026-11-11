@@ -11,12 +11,23 @@ export const dynamic = "force-dynamic";
  * tokens. Off (503) unless GOOGLE_WEB_CLIENT_ID is set, and refused unless the request comes from an origin listed in
  * PROMOTE_WEB_ORIGINS. Same allowlist and same audit as every other sign-in. Nothing here logs a token.
  */
-export const POST = handle(async (req) => {
+function configured(req: Request): string {
   const clientId = (process.env.GOOGLE_WEB_CLIENT_ID ?? "").trim();
   const origins = webPromoteOrigins(process.env);
   if (!clientId || origins.length === 0) throw new ApiError(503, "not_configured");
   const origin = req.headers.get("origin");
   if (!origin || !origins.includes(origin)) throw new ApiError(403, "forbidden");
+  return clientId;
+}
+
+/** Read-only readiness check for the staging button: 200 only when this server is set up for the asking origin. Changes nothing. */
+export const GET = handle(async (req) => {
+  const clientId = configured(req);
+  return json({ ready: true, clientId });
+});
+
+export const POST = handle(async (req) => {
+  const clientId = configured(req);
 
   const body = await readJson(req);
   const credential = body.credential;

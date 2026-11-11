@@ -92,3 +92,24 @@ describe("prodDeps", () => {
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
   });
 });
+
+import { preflightProduction } from "../src/lib/promote/webPromote";
+describe("preflightProduction", () => {
+  const f = (status: number, body: unknown = {}) => vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  it("is ready when production says so, using a plain GET", async () => {
+    const m = f(200, { ready: true, clientId: "c1" });
+    expect(await preflightProduction("https://p.example.com", "c1", m)).toEqual({ ok: true });
+    expect((m as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0][1].method).toBe("GET");
+  });
+  it("explains each refusal and changes nothing", async () => {
+    expect(await preflightProduction("https://p", "c1", f(503))).toMatchObject({ ok: false, message: expect.stringMatching(/not set up/) });
+    expect(await preflightProduction("https://p", "c1", f(403))).toMatchObject({ ok: false, message: expect.stringMatching(/does not allow/) });
+    expect(await preflightProduction("https://p", "c1", f(200, { clientId: "other" }))).toMatchObject({ ok: false, message: expect.stringMatching(/different/) });
+    expect(await preflightProduction("https://p", "c1", f(500))).toMatchObject({ ok: false });
+    const down = vi.fn(async () => { throw new Error("x"); }) as unknown as typeof fetch;
+    expect(await preflightProduction("https://p", "c1", down)).toMatchObject({ ok: false, message: expect.stringMatching(/Could not reach/) });
+  });
+  it("lets an older production without the check continue", async () => {
+    expect(await preflightProduction("https://p", "c1", f(405))).toEqual({ ok: true });
+  });
+});

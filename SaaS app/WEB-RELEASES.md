@@ -17,3 +17,4 @@ Web 1.14 | Admin > Costs: monthly cloud cost per environment by service | cae6dd
 Web 1.15 | Feedback workflow: statuses, approvers, test notes, comments, agent API | 8b8d959 (staging, rev practice-mgmt-00073-qam)
 Web 1.16 | Promote to production button on the staging Schedule list (admin, browser sign-in to prod) | e37a308 (staging, rev practice-mgmt-00075-kij)
 Web 1.17 | Feedback items record their release; production marks Approved items Shipped itself | 5c26e55 (staging, rev practice-mgmt-00077-gak)
+Web 1.18 | Promote button checks production is ready before offering sign-in, with clear refusal messages | pending
