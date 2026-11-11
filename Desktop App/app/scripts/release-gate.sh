@@ -65,7 +65,7 @@ STG="$(grep -o 'https://practice-mgmt-321509350517[^"]*' src-tauri/src/lib.rs | 
 CODE="$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$STG/api/desktop/v1/update/darwin-aarch64/0.0.0")"
 [ "$CODE" = 401 ] || [ "$CODE" = 200 ] || fail "C: staging update feed answered $CODE (expected 401 without a sign-in)"
 if [ -n "${BBC_STAGING_TOKEN:-}" ]; then
-  CODE="$(curl -s -o /dev/null -m 20 -w '%{http_code}' -H "Authorization: Bearer $BBC_STAGING_TOKEN" "$STG/notes/visits?date=$(date +%F)")"
+  CODE="$(curl -s -o /dev/null -m 20 -w '%{http_code}' -H "Authorization: Bearer $BBC_STAGING_TOKEN" "$STG/api/desktop/v1/notes/visits?date=$(date +%F)")"
   [ "$CODE" = 200 ] || fail "C: signed-in call to staging answered $CODE"
   pass "C staging signed-in call works"
 else
