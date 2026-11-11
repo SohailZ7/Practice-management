@@ -8,7 +8,7 @@
 // style-src-attr allows them; <style> elements and stylesheets stay limited to our own files. An inline style cannot
 // run code. No third-party origins are allowed anywhere (fonts, images and scripts are all served by the app).
 
-export function buildCsp(nonce: string, dev = false): string {
+export function buildCsp(nonce: string, dev = false, extra?: { connect?: string[]; frame?: string[] }): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])],
@@ -17,12 +17,12 @@ export function buildCsp(nonce: string, dev = false): string {
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:"],
     "font-src": ["'self'"],
-    "connect-src": ["'self'", ...(dev ? ["ws:", "wss:"] : [])],
+    "connect-src": ["'self'", ...(dev ? ["ws:", "wss:"] : []), ...(extra?.connect ?? [])],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'none'"],
-    "frame-src": ["'none'"],
+    "frame-src": extra?.frame?.length ? extra.frame : ["'none'"],
     "manifest-src": ["'self'"],
     "worker-src": ["'self'", "blob:"],
   };

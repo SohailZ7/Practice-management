@@ -11,7 +11,7 @@ import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
  * the same markup is rendered on the Schedule page and in the layout check. Text columns shorten with "…" rather than wrap
  * or scroll sideways; the full text is in the tooltip.
  */
-export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSelect, onSelectAll, onStatus, onOpenDoc, onGenerate, onTranscript, onPasteTranscript, onDelete, renderTime }: {
+export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSelect, onSelectAll, onStatus, onOpenDoc, onGenerate, onTranscript, onPasteTranscript, onDelete, onPromote, promoteReason, renderTime }: {
   visits: VisitRow[];
   docsOf: (v: VisitRow) => DocSummary[];
   canEdit: boolean;
@@ -25,6 +25,9 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
   onTranscript: (v: VisitRow) => void;
   onPasteTranscript: (v: VisitRow) => void;
   onDelete: (v: VisitRow) => void;
+  /** Staging, admin only: offers "Promote to production". `promoteReason` returns why it is unavailable for a row (empty = available). */
+  onPromote?: (v: VisitRow) => void;
+  promoteReason?: (v: VisitRow) => string;
   renderTime?: (v: VisitRow) => ReactNode;
 }) {
   return (
@@ -108,6 +111,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                       <div className="row-menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
                         <button className="menu-item" disabled={!v.hasTranscript} onClick={() => onTranscript(v)}>View transcript</button>
                         {canEdit && <button className="menu-item" onClick={() => onPasteTranscript(v)}>{v.hasTranscript ? "Replace transcript" : "Add transcript"}</button>}
+                        {onPromote && <button className="menu-item" disabled={!!promoteReason?.(v)} title={promoteReason?.(v) || "Copy this visit and its transcript to production"} onClick={() => onPromote(v)}>Promote to production{promoteReason?.(v) ? ` (${promoteReason(v)})` : ""}</button>}
                         {canEdit && <button className="menu-item danger" disabled={pending} onClick={() => onDelete(v)}>Delete visit</button>}
                       </div>
                     </details>

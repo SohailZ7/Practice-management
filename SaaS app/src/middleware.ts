@@ -3,6 +3,7 @@ import { encode, getToken } from "next-auth/jwt";
 import { checkSession, sessionPolicy, shouldRefresh } from "@/lib/sessionExpiry";
 import { SESSION_COOKIE_NAMES, sessionCookieName, useSecureCookies } from "@/lib/sessionCookie";
 import { buildCsp, makeNonce } from "@/lib/security/csp";
+import { corsHeadersFor, promoteCspExtras } from "@/lib/promote/webConfig";
 import { clientIp, createLimiter, ruleFor, type Rule } from "@/lib/security/rateLimit";
 
 // Everything except static assets requires a valid session. Per-module authorization happens on the
@@ -23,7 +24,9 @@ function limiterFor(rule: Rule) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const dev = process.env.NODE_ENV !== "production";
-  const csp = buildCsp(makeNonce(), dev);
+  const csp = buildCsp(makeNonce(), dev, promoteCspExtras(process.env));
+  // Production only, and only for the exact origins in PROMOTE_WEB_ORIGINS (empty = none): the Desktop API for the staging web page.
+  const cors = pathname.startsWith("/api/desktop/v1/") || pathname === "/api/desktop/v1" ? corsHeadersFor(req.headers.get("origin"), process.env) : null;
 
   // Next.js reads the nonce from the CSP header on the request and stamps it on its own scripts.
   const requestHeaders = new Headers(req.headers);
@@ -35,6 +38,7 @@ export async function middleware(req: NextRequest) {
     res.headers.set("Content-Security-Policy", csp);
     res.headers.set("Cache-Control", "no-store, max-age=0");
     res.headers.set("Pragma", "no-cache");
+    if (cors) for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
     return res;
   };
   const tooMany = (rule: Rule, retryAfterSec: number) => {
@@ -46,6 +50,8 @@ export async function middleware(req: NextRequest) {
 
   const isAction = req.headers.has("next-action");
   const rule = ruleFor(req.method, pathname, isAction);
+
+  if (cors && req.method === "OPTIONS") return finish(new NextResponse(null, { status: 204 }));
 
   if (PUBLIC.some((re) => re.test(pathname))) {
     if (rule?.by === "ip") {

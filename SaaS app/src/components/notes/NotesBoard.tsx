@@ -12,6 +12,7 @@ import { DocumentDialog } from "./DocumentDialog";
 import { GenerateDialog } from "./GenerateDialog";
 import { Modal } from "../Modal";
 import { VisitsTable } from "./VisitsTable";
+import { PromoteDialog } from "./PromoteDialog";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -21,8 +22,10 @@ const shift = (iso: string, days: number) => {
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = false }: {
+export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = false, promote = null }: {
   date: string; visits: VisitRow[]; canEdit: boolean; defaultProvider: string; embedded?: boolean;
+  /** Set only for an admin on staging with Promote configured (and whether their full names are on). */
+  promote?: { prodUrl: string; clientId: string; fullNames: boolean } | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -42,6 +45,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
   };
   const [reading, setReading] = useState<string | null>(null);
   const [pasteFor, setPasteFor] = useState<VisitRow | null>(null);
+  const [promoting, setPromoting] = useState<VisitRow | null>(null);
 
   const go = (d: string) => router.push(`/schedule?view=day&date=${d}`);
 
@@ -111,6 +115,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
           onGenerate={(v) => { void warmUp(); setGenerating(v); }}
           onTranscript={(v) => setReading(v.id)}
           onPasteTranscript={(v) => setPasteFor(v)}
+          onPromote={promote ? (v) => setPromoting(v) : undefined}
+          promoteReason={promote ? (v) => (!v.hasTranscript ? "no transcript yet" : !promote.fullNames ? "full names are off for you" : "") : undefined}
           onDelete={(v) => {
             const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
             if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
@@ -125,6 +131,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
       )}
 
       {pasteFor && <TranscriptPaste visitId={pasteFor.id} onClose={() => setPasteFor(null)} onSaved={() => { setPasteFor(null); router.refresh(); }} />}
+
+      {promoting && promote && <PromoteDialog visitId={promoting.id} who={promoting.initials} prodUrl={promote.prodUrl} clientId={promote.clientId} onClose={() => setPromoting(null)} />}
 
       {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
 

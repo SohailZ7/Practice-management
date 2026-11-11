@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess, requireUser } from "@/lib/session";
 import { redirect } from "next/navigation";
+import { stagingPromoteConfig } from "@/lib/promote/webConfig";
 import { NotesBoard } from "@/components/notes/NotesBoard";
 import { visitsForDate } from "@/lib/notes/queries";
 import { audit } from "@/lib/audit";
@@ -139,7 +140,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
       </div>
 
       {visitsDay && (
-        <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded />
+        <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded promote={promoteFor(user)} />
       )}
 
       {visitsDay && entries.length > 0 && <h2 style={{ marginTop: "1.5rem" }}>Other schedule entries (not linked to a visit)</h2>}
@@ -162,4 +163,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
       )}
     </>
   );
+}
+
+/** The Promote button is offered to admins on staging only, and only when its two settings exist. */
+function promoteFor(user: { role: string; showFullNames: boolean }) {
+  const c = user.role === "ADMIN" ? stagingPromoteConfig(process.env) : null;
+  return c ? { ...c, fullNames: user.showFullNames } : null;
 }

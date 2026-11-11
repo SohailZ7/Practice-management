@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
+import { stagingPromoteConfig } from "@/lib/promote/webConfig";
 import { loadScheduleForDate } from "@/lib/notes/loadSchedule";
 import { generateDocuments } from "@/lib/notes/generate";
 import { makeLlm, modelConfigured, warmModel } from "@/lib/notes/model";
@@ -148,4 +149,34 @@ export async function getVisitTranscript(visitId: string) {
   if (!v) return { ok: false as const, error: "Visit not found." };
   await audit(user.email, "notes.transcript.read", `visit ${visitId} chars=${v.transcript.length}`);
   return { ok: true as const, transcript: v.transcript, updatedAt: (v.transcriptAt ?? v.createdAt).toISOString() };
+}
+
+/**
+ * What the staging "Promote to production" button copies for one visit. Admin only, and only where the button is
+ * configured (staging with a production address). The patient's name and transcript go to this admin's browser, which
+ * sends them straight to production under the admin's own production sign-in. The audit holds ids and counts only.
+ */
+export async function getPromoteSource(visitId: string) {
+  const user = await requireAccess("notes", "edit");
+  if (user.role !== "ADMIN") return { ok: false as const, error: "Only an admin can promote a visit." };
+  if (!stagingPromoteConfig(process.env)) return { ok: false as const, error: "Promote to production is not set up here." };
+  if (!user.showFullNames) return { ok: false as const, error: "Full names are off for your account (production needs the name)." };
+  const v = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true } });
+  if (!v) return { ok: false as const, error: "Visit not found." };
+  if (!v.transcript.trim()) return { ok: false as const, error: "Record the visit first: there is no transcript to promote." };
+  await audit(user.email, "notes.promote.read", `visit ${visitId} chars=${v.transcript.length}`);
+  return {
+    ok: true as const,
+    source: {
+      date: v.visitDate, fullName: `${v.patient.firstName} ${v.patient.lastName}`.trim(), apptTime: v.apptTime, program: v.program,
+      appointmentType: v.appointmentType, providerName: v.providerName, transcript: v.transcript,
+    },
+  };
+}
+
+/** Records that an admin pressed Promote and how it ended. No names or text. */
+export async function recordPromote(visitId: string, outcome: "promoted" | "already" | "failed") {
+  const user = await requireAccess("notes", "edit");
+  if (user.role !== "ADMIN") return;
+  await audit(user.email, "notes.promote", `visit ${visitId} ${outcome}`);
 }
