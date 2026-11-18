@@ -649,3 +649,6 @@ button.sm, .v-actions .row-menu summary { border-radius: 6px; font-size: .85rem;
 .enc-table .num { font-variant-numeric: tabular-nums; }
 .amber-text { color: var(--p-amber-fg); font-weight: 600; }
 @media (max-width: 700px) { .stage-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Respect the system "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
