@@ -7,10 +7,23 @@ import type { Engine, QueueItem } from "../src/lib/engine";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("environments", () => {
-  it("has the three built-in addresses and they are all allowed", () => {
-    expect(ENVIRONMENTS.map((e) => e.id)).toEqual(["production", "staging", "localhost"]);
+  it("the released app has Production only: no staging or localhost address exists to pick or to send to", () => {
+    expect(ENVIRONMENTS.map((e) => e.id)).toEqual(["production"]);
     expect(ENVIRONMENTS.every((e) => isSafeBaseUrl(e.url))).toBe(true);
-    expect(urlFor("staging")).toContain("321509350517");
+    expect(urlFor("production")).toBe("https://practice-mgmt-802176721153.us-east4.run.app");
+    expect(() => urlFor("staging")).toThrow();
+    expect(() => urlFor("localhost")).toThrow();
+  });
+
+  it("the separate Staging TEST build has staging and localhost and never Production", async () => {
+    vi.resetModules();
+    vi.stubEnv("VITE_STAGING_TEST", "1");
+    const t = await import("../src/lib/environments");
+    expect(t.STAGING_TEST).toBe(true);
+    expect(t.ENVIRONMENTS.map((e) => e.id)).toEqual(["staging", "localhost"]);
+    expect(t.urlFor("staging")).toContain("321509350517");
+    expect(() => t.urlFor("production")).toThrow();
+    vi.unstubAllEnvs();
   });
 
   it("refuses plain http except to this Mac", () => {
@@ -54,7 +67,7 @@ describe("token refresh", () => {
 });
 
 describe("the transcript queue", () => {
-  const item: QueueItem = { visit_id: "v1", environment: "staging", created_at: "", duration_seconds: 1, status: "pending" };
+  const item: QueueItem = { visit_id: "v1", environment: "production", created_at: "", duration_seconds: 1, status: "pending" };
   const engine = (done: string[]) =>
     ({
       accessToken: async () => "tok",
@@ -68,7 +81,7 @@ describe("the transcript queue", () => {
     const urls: string[] = [];
     vi.stubGlobal("fetch", (u: string) => (urls.push(u), Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))));
     expect((await uploadQueued(engine(done), item)).ok).toBe(true);
-    expect(urls[0]).toContain("321509350517");
+    expect(urls[0]).toContain("802176721153");
     expect(done).toEqual(["v1"]);
   });
 

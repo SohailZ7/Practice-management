@@ -1,6 +1,6 @@
 // The recorder's bridge to the native side (src-tauri/src/lib.rs). In a plain browser, used for working on the
 // screens, it falls back to clearly labelled fakes so nothing pretends to record or transcribe.
-import type { EnvironmentId } from "./environments";
+import { DEFAULT_ENVIRONMENT, type EnvironmentId } from "./environments";
 
 export type Settings = { environment: EnvironmentId; transcript_copy_dir?: string | null };
 
@@ -72,6 +72,8 @@ export interface Engine {
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
   queueComplete(visitId: string): Promise<void>;
   queueDiscard(visitId: string): Promise<void>;
+  /** Writes the saved transcript to Downloads as plain text and returns the path. The queued copy is kept. */
+  exportQueued(visitId: string): Promise<string>;
   /** Opens the folder chooser. Null if cancelled. */
   chooseTranscriptDir(): Promise<string | null>;
   /** Turns the plain-text transcript copy on (a folder) or off (null). */
@@ -114,6 +116,7 @@ async function nativeEngine(): Promise<Engine> {
     setTranscriptCopyDir: (dir) => invoke<Settings>("set_transcript_copy_dir", { dir }),
     saveTranscriptCopy: (visitId, label) => invoke<boolean>("save_transcript_copy", { visitId, label }),
     queueDiscard: (visitId) => invoke<void>("queue_discard", { visitId }),
+    exportQueued: (visitId) => invoke<string>("export_queued_transcript", { visitId }),
   };
 }
 
@@ -125,9 +128,14 @@ const FAKE_TRANSCRIPT =
 const qaMode = () => typeof location !== "undefined" && location.search.includes("qa=1");
 
 function fakeEngine(): Engine {
-  let environment: EnvironmentId = "localhost";
-  const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token", staging: "qa-token", ...(new URLSearchParams(location.search).has("prod") ? { production: "qa-token" } : {}) } : {};
+  let environment: EnvironmentId = DEFAULT_ENVIRONMENT;
+  const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token", staging: "qa-token", production: "qa-token" } : {};
   const queue = new Map<string, QueueItem>();
+  // `?qa=1&seedqueue=1` (dev only): an old-build queue with one Production and two test-environment items, fake ids.
+  if (qaMode() && new URLSearchParams(location.search).has("seedqueue")) {
+    for (const [id, environment] of [["fake-prod-1", "production"], ["fake-stg-1", "staging"], ["fake-loc-1", "localhost"]] as const)
+      queue.set(id, { visit_id: id, environment, created_at: "2026-11-11T15:00:00Z", duration_seconds: 125, status: "pending" });
+  }
   return {
     kind: "fake",
     status: async () => ({
@@ -162,6 +170,7 @@ function fakeEngine(): Engine {
     queueRelabel: async () => {},
     queueComplete: async (id) => { queue.delete(id); },
     queueDiscard: async (id) => { queue.delete(id); },
+    exportQueued: async (id) => `~/Downloads/Unsent-transcript-${id.slice(0, 8)}.txt`,
     chooseTranscriptDir: async () => null,
     setTranscriptCopyDir: async (dir) => ({ environment, transcript_copy_dir: dir }),
     saveTranscriptCopy: async () => false,

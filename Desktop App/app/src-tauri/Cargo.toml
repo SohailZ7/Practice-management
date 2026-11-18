@@ -1,6 +1,6 @@
 [package]
 name = "practice-notes"
-version = "1.0.20"
+version = "1.0.21"
 description = "Practice Recorder: captures visit audio and transcribes it locally"
 edition = "2021"
 
@@ -39,4 +39,6 @@ cpal = "0.15"
 hound = "3.5"
 
 [features]
+# The separate Staging TEST build (see scripts/build-staging-test.sh). Never installed on staff Macs.
+staging-test = []
 dev-keystore = []

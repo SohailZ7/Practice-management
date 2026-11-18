@@ -10,7 +10,8 @@ pulls the day's visits, records, transcribes here, and pushes back the text. A c
 **No audio is ever saved.** It is captured and transcribed in memory; only the text is kept and sent.
 
 ## How it works
-- **One build, three environments.** Setup has an Environment dropdown: Production (default), Staging, Localhost.
+- **The released app is Production only** (decision 2026-11-18). There is no environment dropdown and no staging or localhost address in it. Agents who need staging build the separate **Practice Recorder (Staging TEST)** app with `scripts/build-staging-test.sh` (own bundle id, own Keychain item and data folder, red banner, no auto-update; never installed on staff Macs).
+- The "Promote to production" button is retired.
   The addresses are built in (no free-text URL). A coloured banner shows on every screen when not on Production.
   Each environment has its own sign-in; the dropdown is locked while a recording runs.
 - **Google sign-in only.** Sign-in opens the system browser (PKCE) and the practice app issues tokens. If the server

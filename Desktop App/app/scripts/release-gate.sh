@@ -7,7 +7,7 @@
 #     folder is still found and a generated test tone transcribes
 #  B. clean profile with NO model: the app reports it missing (so the Download-model banner shows), and a bundled model is
 #     copied into the kept folder
-#  C. staging is up and the app's staging address is the one the feed serves (BBC_STAGING_TOKEN, if set, also lists visits)
+#  C. the released app is Production only: no staging/localhost address inside, the Production one present
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:$HOME/Documents/Repos/Tools/google-cloud-sdk/bin:$PATH"
@@ -59,16 +59,11 @@ else
 fi
 pass "B clean profile: $OUT (a missing model shows the Download banner; download/resume/checksum is covered by cargo tests)"
 
-# C. staging reachable, app points at it
-STG="$(grep -o 'https://practice-mgmt-321509350517[^"]*' src-tauri/src/lib.rs | head -1)"
-[ "$(strings "$BIN" | grep -cF "$STG" || true)" -gt 0 ] || fail "C: the app does not contain the staging address"
-CODE="$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$STG/api/desktop/v1/update/darwin-aarch64/0.0.0")"
-[ "$CODE" = 401 ] || [ "$CODE" = 200 ] || fail "C: staging update feed answered $CODE (expected 401 without a sign-in)"
-if [ -n "${BBC_STAGING_TOKEN:-}" ]; then
-  CODE="$(curl -s -o /dev/null -m 20 -w '%{http_code}' -H "Authorization: Bearer $BBC_STAGING_TOKEN" "$STG/api/desktop/v1/notes/visits?date=$(date +%F)")"
-  [ "$CODE" = 200 ] || fail "C: signed-in call to staging answered $CODE"
-  pass "C staging signed-in call works"
-else
-  pass "C staging is up (feed answers $CODE). Set BBC_STAGING_TOKEN for a signed-in call; the Google sign-in itself needs a person"
-fi
+# C. the released app is PRODUCTION ONLY (Sohail, 2026-11-18): no staging or localhost address, and the Production one is present
+PROD="https://practice-mgmt-802176721153.us-east4.run.app"
+[ "$(strings "$BIN" | grep -cF "$PROD" || true)" -gt 0 ] || fail "C: the app does not contain the Production address"
+[ "$(strings "$BIN" | grep -cF "practice-mgmt-321509350517" || true)" -eq 0 ] || fail "C: the released app contains the staging address (build without --features staging-test)"
+[ "$(strings "$BIN" | grep -cF "localhost:3000" || true)" -eq 0 ] || fail "C: the released app contains the localhost address"
+[ "$(cat dist/assets/*.js 2>/dev/null | grep -cE "321509350517|localhost:3000" || true)" -eq 0 ] || fail "C: the built web bundle (dist/) contains a staging or localhost address"
+pass "C released app is Production only"
 echo "[gate] ALL CHECKS PASSED"

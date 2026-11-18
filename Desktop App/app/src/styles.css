@@ -225,4 +225,5 @@ table.board .acts > .small, table.board .acts > .rec { flex-basis: 100%; text-al
 .status-pill.tone-bad { color: var(--danger); border-color: var(--danger); }
 .status-pill option { color: var(--text); background: var(--card); }
 
-.promote-why { flex-basis: 100%; text-align: right; color: var(--muted); font-size: 11px; line-height: 1.25; }
+.saved-list { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.saved-row { border-top: 1px solid var(--border, rgba(128,128,128,.3)); padding-top: .4rem; display: grid; gap: .25rem; }

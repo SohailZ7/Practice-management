@@ -1,5 +1,7 @@
 # Testing the Practice Recorder on your Mac (staging, fake data only)
 
+> The released app is Production only. To test against staging, build and open the separate **Practice Recorder (Staging TEST)** app (`app/scripts/build-staging-test.sh`, installs to `~/PracticeRecorder-StagingTEST`). In it, Setup shows the Staging/Localhost choice and a red banner; the steps below that say "Set Environment to Staging" apply to that app only. Never install it on a staff Mac.
+
 Use **Staging** and **made-up data only**. Never read real patient details aloud.
 
 ## 1. Open the app (it is unsigned)
@@ -56,3 +58,7 @@ Automated (must pass before any rebuild; fake data only):
 - Signing: `codesign -dr - "Practice Recorder.app"` must show the same `certificate leaf = H"eb350c3c973e6fdf017b65e7dd37dfea151db443"` as the previous release (a different certificate makes macOS ask again for Keychain access on first launch).
 By hand (staging, fake data): install the previous release, record 10 seconds offline so it shows "Saved on this Mac", quit, install the new build over it, open it. The banner must still list the transcript and Retry all must send it after Wi-Fi is back.
 See `docs/update-procedure.md` for the plain-language steps given to users.
+
+## 9. Release check: old queued transcripts after the Production-only update
+- Automated: `cargo test --lib queue::` (items recorded against staging/localhost still list and are kept) and `npx vitest run tests/queue-test-environment.test.ts` (those items are never sent, completed or discarded; Production items still upload; a 404 says "This visit is not in the Production app").
+- By hand (fake data, Staging TEST build then the release build): record offline in the Staging TEST build is a separate data folder, so instead copy a v1.0.19/1.0.20 queue as in section 8. Open the release build: the banner must show "recorded against the test environment" with Export, Keep and Discard (Discard asks to confirm), and Production items must retry as before.
