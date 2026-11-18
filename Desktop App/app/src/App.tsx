@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addedSeparator } from "./lib/append";
 import logo from "./assets/logo.png";
@@ -237,6 +238,7 @@ export function App() {
           <img src={logo} alt="" className="logo" />
           <span className="label">Brain and Behavior Center<small>Practice Recorder</small></span>
         </div>
+        <div className={`envtag ${env}`} data-testid="envtag">{labelFor(env).toUpperCase()}</div>
         {signedIn && (
           <nav className="tabs">
             <button className={tab === "visits" ? "on" : ""} onClick={() => setTab("visits")}>Schedule</button>
@@ -281,6 +283,7 @@ export function App() {
 
         {signedIn && tab === "visits" && (
           <>
+            <div id="rec-stage" />
             <div className="datebar">
               <button className="secondary" aria-label="Previous day" onClick={() => setDate(shift(date, -1))}>&lt;</button>
               <strong>{longDate(date)}</strong>
@@ -629,6 +632,8 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
     }
   }
 
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setSlot(document.getElementById("rec-stage")); }, [state.phase]);
   const mmss = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
 
   return (
@@ -692,12 +697,30 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
         {state.phase === "recording" ? (
           <>
             <span className="rec"><span className="dot" />{mmss}</span>
-            <button onClick={stop} disabled={busy}>Stop</button>
-            <button className="secondary" disabled={busy} onClick={async () => {
-              await engine.cancelRecording();
-              earlier.current = null;
-              onState(visit.id, { phase: "idle" });
-            }}>Discard</button>
+            {slot ? createPortal(
+              <section className="stage" aria-label="Recorder" data-testid="stage">
+                <div className="stage-label">RECORDING</div>
+                <div className="stage-who">{visit.apptTime ? `${visit.apptTime} · ` : ""}{visit.initials}</div>
+                <div className="stage-time" role="timer" aria-live="off">{mmss}</div>
+                <div className="wave" aria-hidden="true">{Array.from({ length: 16 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 8) * 0.12}s` }} />)}</div>
+                <div className="stage-actions">
+                  <button className="ghost" disabled={busy} onClick={async () => {
+                    await engine.cancelRecording();
+                    earlier.current = null;
+                    onState(visit.id, { phase: "idle" });
+                  }}>Discard</button>
+                  <button className="finish" onClick={stop} disabled={busy}>Finish and upload</button>
+                </div>
+              </section>, slot) : (
+              <>
+                <button onClick={stop} disabled={busy}>Stop</button>
+                <button className="secondary" disabled={busy} onClick={async () => {
+                  await engine.cancelRecording();
+                  earlier.current = null;
+                  onState(visit.id, { phase: "idle" });
+                }}>Discard</button>
+              </>
+            )}
           </>
         ) : state.phase === "working" ? (
           <span className="small">Working…</span>

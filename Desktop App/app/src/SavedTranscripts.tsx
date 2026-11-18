@@ -57,17 +57,23 @@ export function SavedTranscripts({ engine, queue, failures, retrying, onRetry, o
   );
 
   return (
-    <div className="banner" role="status" data-testid="saved-banner">
+    <div role="status" data-testid="saved-banner">
       {normal.length > 0 && (
-        <div>
-          {normal.length} transcript{normal.length === 1 ? " is" : "s are"} saved on this Mac and will be sent when the practice app is reachable.{" "}
-          {signInEnvs.map((e) => <button key={e} className="link" onClick={() => onSignIn(e)}>Sign in to {labelFor(e)}</button>)}{" "}
-          <button className="link" disabled={retrying} onClick={onRetry}>{retrying ? "Retrying…" : "Retry all"}</button>
+        <div className="queue-card" data-testid="queue-card">
+          <div className="qhead"><h3>Upload queue</h3><span>{normal.length} waiting</span></div>
+          <div className="qnote">
+            <div>
+              <strong>Saved on this Mac, nothing is lost</strong>
+              {normal.length} transcript{normal.length === 1 ? " is" : "s are"} kept encrypted here and will be sent when the practice app is reachable.{" "}
+              {signInEnvs.map((e) => <button key={e} className="link" onClick={() => onSignIn(e)}>Sign in to {labelFor(e)}</button>)}
+            </div>
+            <button disabled={retrying} onClick={onRetry}>{retrying ? "Retrying…" : "Retry all"}</button>
+          </div>
           <ul className="saved-list">{normal.map((q) => row(q, failures[q.visit_id]?.message, false))}</ul>
         </div>
       )}
       {showOther.length > 0 && (
-        <div data-testid="other-env">
+        <div className="banner" data-testid="other-env">
           {showOther.length} transcript{showOther.length === 1 ? " was" : "s were"} recorded against the test environment. {OTHER_ENV_MESSAGE}
           <ul className="saved-list">{showOther.map((q) => row(q, undefined, true))}</ul>
         </div>

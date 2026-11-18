@@ -2,33 +2,37 @@
    data-theme="dark" or, when the user chose System (no data-theme), the OS preference. The dark block is repeated on purpose. */
 :root {
   color-scheme: light;
-  --bg: #f2f4f8; --card: #ffffff; --text: #17203a; --muted: #667086; --line: #dfe3ec;
-  --accent: #1f3a6e; --accent-text: #ffffff; --danger: #c8372d; --ok: #17803f; --warn: #a8660a;
-  --th-bg: #1f3a6e; --th-text: #ffffff; --side-bg: #ffffff; --side-text: #17203a; --side-muted: #667086; --side-hover: #eef1f7;
-  --shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 6px 18px rgba(20, 30, 60, .06);
-  --flag: #fff3bf;
+  --bg: #f6f5f1; --card: #ffffff; --text: #16201f; --muted: #5b6664; --line: #e4e2da;
+  --accent: #0f6b63; --accent-text: #ffffff; --danger: #b3261e; --ok: #0f6b63; --warn: #8a3f06;
+  --th-bg: #edebe4; --th-text: #3e4a48; --side-bg: #ffffff; --side-text: #16201f; --side-muted: #5b6664; --side-hover: #f3f8f7;
+  --stage: #0f2e2b; --stage-mute: #9fd0c8; --amber-bg: #fbebdd; --amber-text: #5e2c03;
+  --shadow: 0 1px 2px rgba(22, 32, 31, .04), 0 6px 18px rgba(22, 32, 31, .05);
+  --flag: #fbebdd;
+  --font-serif: "Newsreader Variable", Newsreader, Georgia, serif;
   /* old names kept so every existing rule keeps working */
-  --navy: var(--th-bg); --navy-2: var(--accent); --bad: var(--danger);
+  --navy: var(--accent); --navy-2: var(--accent); --bad: var(--danger);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0f1729; --card: #182238; --text: #e8ecf6; --muted: #93a0bb; --line: #28344f;
-    --accent: #4a7bd8; --danger: #f07b6f; --ok: #52c283; --warn: #e0b25a;
-    --th-bg: #24365e; --side-bg: #162038; --side-text: #e8ecf6; --side-muted: #93a0bb; --side-hover: #223152;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25); --flag: #4a3d00;
+    --bg: #0e1a19; --card: #152624; --text: #e8f0ee; --muted: #9db0ac; --line: #25403c;
+    --accent: #3fa79c; --accent-text: #06201d; --danger: #f07b6f; --ok: #52c2b0; --warn: #e0b25a;
+    --th-bg: #1b312e; --th-text: #cfe0dc; --side-bg: #112120; --side-text: #e8f0ee; --side-muted: #9db0ac; --side-hover: #1b312e;
+    --stage: #0a1f1d; --amber-bg: #3a2a14; --amber-text: #f3d9b8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25); --flag: #3a2a14;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1729; --card: #182238; --text: #e8ecf6; --muted: #93a0bb; --line: #28344f;
-  --accent: #4a7bd8; --danger: #f07b6f; --ok: #52c283; --warn: #e0b25a;
-  --th-bg: #24365e; --side-bg: #162038; --side-text: #e8ecf6; --side-muted: #93a0bb; --side-hover: #223152;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25); --flag: #4a3d00;
+  --bg: #0e1a19; --card: #152624; --text: #e8f0ee; --muted: #9db0ac; --line: #25403c;
+  --accent: #3fa79c; --accent-text: #06201d; --danger: #f07b6f; --ok: #52c2b0; --warn: #e0b25a;
+  --th-bg: #1b312e; --th-text: #cfe0dc; --side-bg: #112120; --side-text: #e8f0ee; --side-muted: #9db0ac; --side-hover: #1b312e;
+  --stage: #0a1f1d; --amber-bg: #3a2a14; --amber-text: #f3d9b8;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25); --flag: #3a2a14;
 }
 html { font-size: 13px; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; -webkit-font-smoothing: antialiased; background: var(--bg); color: var(--text); }
+body { margin: 0; font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; -webkit-font-smoothing: antialiased; background: var(--bg); color: var(--text); }
 .grow { flex: 1; }
 .chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.15); }
 .chip.ok { background: #1d7a4b; } .chip.bad { background: #b42318; }
@@ -36,14 +40,14 @@ main { padding: 0; max-width: none; }
 .banner { background: var(--flag); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 1.1rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
 table.board { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); }
-table.board th { background: var(--th-bg); color: var(--th-text); text-align: left; padding: .45rem .75rem; font-size: .85rem; font-weight: 600; }
+table.board th { background: var(--th-bg); color: var(--th-text); font-size: .8rem; letter-spacing: .02em; text-align: left; padding: .45rem .75rem; font-size: .85rem; font-weight: 600; }
 table.board td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: middle; }
 tr.dim td { opacity: .5; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
 .badge.on { color: var(--ok); border-color: var(--ok); }
 button { font: inherit; border: 0; border-radius: 10px; padding: .45rem .9rem; background: var(--accent); color: var(--accent-text); cursor: pointer; font-weight: 500; }
 button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
-button.record { background: #c0262d; } button.dictate { background: #8a5a00; }
+button.record { background: var(--accent); } button.dictate { background: #8a5a00; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .timer { font-size: 38px; font-variant-numeric: tabular-nums; margin: 8px 0; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #c0262d; margin-right: 8px; animation: pulse 1s infinite; }
@@ -172,7 +176,7 @@ body { padding-bottom: 30px; }
 .side nav.tabs { display: flex; flex-direction: column; gap: .3rem; }
 .side nav.tabs button { display: flex; align-items: center; padding: .65rem .8rem; border-radius: 11px; background: transparent; color: var(--side-text); font-size: .92rem; font-weight: 400; text-align: left; width: 100%; }
 .side nav.tabs button:hover { background: var(--side-hover); }
-.side nav.tabs button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.side nav.tabs button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 .content-wrap { flex: 1; min-width: 0; padding-top: 14px; }
 .content { background: var(--bg); border-top-left-radius: 34px; min-height: calc(100vh - 44px); padding: 1.9rem 2.2rem 3rem; }
 .content-inner { max-width: 1400px; margin: 0 auto; }
@@ -227,3 +231,41 @@ table.board .acts > .small, table.board .acts > .rec { flex-basis: 100%; text-al
 
 .saved-list { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .5rem; }
 .saved-row { border-top: 1px solid var(--border, rgba(128,128,128,.3)); padding-top: .4rem; display: grid; gap: .25rem; }
+
+/* ---- Redesign (Recorder board): headings, environment label, recording stage, upload queue ---- */
+.side .brand .label, .datebar strong, .content h2, .content h1 { font-family: var(--font-serif); font-weight: 500; letter-spacing: -0.02em; }
+.datebar strong { font-size: 1.6rem; }
+.envtag { display: flex; align-items: center; gap: 6px; padding: 0 .5rem; margin: -.6rem 0 1rem; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--accent); }
+.envtag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.envtag.staging { color: #a15c00; } .envtag.staging::before { background: #a15c00; }
+.envtag.localhost { color: #6b2fa0; } .envtag.localhost::before { background: #6b2fa0; }
+.buildbar { background: var(--accent); color: var(--accent-text); }
+.buildbar.staging { background: #a15c00; color: #fff; } .buildbar.localhost { background: #6b2fa0; color: #fff; }
+.buildbadge .env { background: var(--accent); color: var(--accent-text); }
+.buildbadge.staging .env { background: #a15c00; color: #fff; } .buildbadge.localhost .env { background: #6b2fa0; color: #fff; }
+.pill.ok, .status-pill.tone-ok { color: var(--ok); }
+table.board { border-radius: 16px; }
+
+.stage { background: var(--stage); color: #fff; border-radius: 20px; padding: 28px 32px; margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.stage .stage-label { font-size: 12px; letter-spacing: .08em; font-weight: 600; color: var(--stage-mute); }
+.stage .stage-who { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 500; }
+.stage .stage-time { font-variant-numeric: tabular-nums; font-size: 56px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+.stage .wave { display: flex; align-items: center; gap: 3px; height: 44px; }
+.stage .wave i { width: 4px; border-radius: 2px; background: #4e8f86; animation: wave 1.1s ease-in-out infinite; }
+.stage .wave i:nth-child(3n) { background: #7fd1c4; }
+@keyframes wave { 0%, 100% { height: 10px; } 50% { height: 38px; } }
+@media (prefers-reduced-motion: reduce) { .stage .wave i { animation: none; height: 22px; } }
+.stage .stage-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.stage .stage-actions button { min-height: 48px; border-radius: 12px; padding: 12px 24px; font-weight: 600; }
+.stage .stage-actions .finish { background: #fff; color: var(--stage); }
+.stage .stage-actions .ghost { background: none; color: #fff; border: 1px solid #3c6a64; font-weight: 500; }
+
+.queue-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; margin-bottom: 1rem; box-shadow: var(--shadow); }
+.queue-card .qhead { display: flex; justify-content: space-between; align-items: center; }
+.queue-card .qhead h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.queue-card .qhead span { font-size: 13px; color: var(--muted); }
+.queue-card .qnote { display: flex; align-items: center; gap: 14px; margin-top: 12px; background: var(--amber-bg); color: var(--amber-text); border-radius: 12px; padding: 12px 14px; }
+.queue-card .qnote strong { display: block; }
+.queue-card .qnote > div { flex: 1; font-size: 13px; }
+.queue-card .qnote button { background: var(--text); color: var(--bg); border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+.queue-card .qnote button.link { background: none; color: inherit; padding: 0; text-decoration: underline; font-weight: 500; }
