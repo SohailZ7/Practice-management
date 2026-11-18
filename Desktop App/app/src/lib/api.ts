@@ -35,7 +35,8 @@ export type Session = {
 
 /** The sign-in is gone and could not be renewed: the UI shows the sign-in screen. */
 export class SignedOutError extends Error {
-  constructor() {
+  /** The server's short reason (no_token, session_expired, session_revoked ...), when it sent one. */
+  constructor(readonly reason: string | null = null) {
     super("Signed out. Sign in again in Setup.");
     this.name = "SignedOutError";
   }
@@ -121,6 +122,13 @@ export class ApiFailure extends Error {
   }
 }
 
+function reasonOf(res: ApiReply): string | null {
+  try {
+    const r = (JSON.parse(res.body) as { reason?: unknown }).reason;
+    return typeof r === "string" && /^[a-z_]{1,40}$/.test(r) ? r : null;
+  } catch { return null; }
+}
+
 function errorCode(res: ApiReply): string | null {
   try {
     const b = JSON.parse(res.body) as { error?: unknown };
@@ -139,8 +147,8 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
     session.accessToken = next;
     res = await send(session, path, init);
   }
-  if (res.status === 401) throw new SignedOutError();
-  if (res.status === 403) throw new ApiFailure(403, errorCode(res), "This account does not have access to Notes.");
+  if (res.status === 401) throw new SignedOutError(reasonOf(res));
+  if (res.status === 403) { const r = reasonOf(res); throw new ApiFailure(403, r ?? errorCode(res), "This account does not have access to Notes."); }
   if (res.status < 200 || res.status > 299) throw new ApiFailure(res.status, errorCode(res));
   try { return JSON.parse(res.body) as T; } catch { throw new Error("The practice app gave an unreadable reply."); }
 }

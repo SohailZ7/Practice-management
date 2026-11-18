@@ -16,7 +16,7 @@ export type UploadResult = { visitId: string; ok: boolean; reason?: string; fail
 export function describeUploadFailure(e: unknown, env: QueueItem["environment"]): UploadFailure {
   const where = labelFor(env);
   const f = (kind: FailureKind, message: string): UploadFailure => ({ kind, message, environment: env });
-  if (e instanceof SignedOutError) return f("signed_out", `Signed out: sign in again to ${where}.`);
+  if (e instanceof SignedOutError) return f("signed_out", `Signed out: sign in again to ${where}.${e.reason ? ` (${e.reason.replace(/_/g, " ")})` : ""}`);
   if (e instanceof ApiFailure) {
     if (e.status === 401) return f("signed_out", `Signed out: sign in again to ${where}.`);
     if (e.status === 403) return f("no_access", "This account does not have Notes edit access.");
