@@ -484,3 +484,8 @@ table.visits td.v-prov select { max-width: 100%; }
 
 /* Phones: the visits table keeps readable columns and scrolls inside its own box, not the page. */
 @media (max-width: 700px) { .visits-wrap { overflow-x: auto; } table.visits { min-width: 60rem; } }
+
+/* Admin "Save all": the bar sits at the top of every Admin tab that has row saves; a changed row is outlined. */
+.bulk-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; position: sticky; top: 0; z-index: 5; padding: .4rem 0; background: var(--bg); }
+.bulk-dirty { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; border-radius: 6px; }
+tr.bulk-dirty { outline-offset: -2px; background: color-mix(in srgb, var(--accent, #2563eb) 8%, transparent); }

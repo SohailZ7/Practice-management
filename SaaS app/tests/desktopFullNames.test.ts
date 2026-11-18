@@ -13,9 +13,9 @@ describe("desktop full names are opt-in per user", () => {
     const audit = src.match(/audit\([^)]*\)/g) ?? [];
     expect(audit.join("")).not.toMatch(/fullName|firstName|lastName/);
   });
-  it("only an admin can change it, via updateUser", () => {
+  it("only an admin can change it, via updateUserCore", () => {
     const src = read("src/app/admin/actions.ts");
     expect(src).toMatch(/showFullNames = form\.get\("showFullNames"\)/);
-    expect(src).toMatch(/export async function updateUser\(form: FormData\) \{\n  const admin = await requireAdmin\(\)/);
+    expect(src).toMatch(/async function updateUserCore\(form: FormData\): Promise<string> \{\n  const admin = await requireAdmin\(\)/);
   });
 });

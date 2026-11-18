@@ -50,7 +50,7 @@ export async function addUser(form: FormData) {
   flash(BACK, "notice", `Added ${email}${linked}. They can open Tasks, Schedule and Employees; change their access below.`);
 }
 
-export async function updateUser(form: FormData) {
+async function updateUserCore(form: FormData): Promise<string> {
   const admin = await requireAdmin();
   const id = str(form, "id");
   const role = str(form, "role");
@@ -93,14 +93,25 @@ export async function updateUser(form: FormData) {
     `${target!.email}: role=${role} active=${active} fullNames=${showFullNames} feedbackApprover=${feedbackApprover}${emailChanged ? ` email -> ${email}` : ""}${name !== target!.name ? " name changed" : ""}`,
   );
   revalidatePath(BACK);
-  flash(BACK, "notice", `Updated ${email}.`);
+  return `Updated ${email}.`;
 }
 
-export async function setAccess(form: FormData) {
+export async function updateUser(form: FormData) {
+  flash(BACK, "notice", await updateUserCore(form));
+}
+
+/** The People row's own Save button: login details, then module access (same two steps Save all runs). */
+export async function updatePerson(form: FormData) {
+  let msg = await updateUserCore(form);
+  if ([...form.keys()].some((k) => k.startsWith("level_"))) msg = await setAccessCore(form);
+  flash(BACK, "notice", msg);
+}
+
+async function setAccessCore(form: FormData): Promise<string> {
   const admin = await requireAdmin();
   const id = str(form, "id");
   const target = await db.user.findUnique({ where: { id } });
-  if (!target) flash("/admin/access", "error", "User not found.");
+  if (!target) flash(BACK, "error", "User not found.");
 
   const changes: string[] = [];
   for (const module of MODULES) {
@@ -114,8 +125,12 @@ export async function setAccess(form: FormData) {
     changes.push(`${module}=${level}`);
   }
   await audit(admin.email, "access.set", `${target!.email}: ${changes.join(", ")}`);
-  revalidatePath("/admin/access");
-  flash("/admin/access", "notice", `Saved access for ${target!.email}.`);
+  revalidatePath(BACK);
+  return `Saved access for ${target!.email}.`;
+}
+
+export async function setAccess(form: FormData) {
+  flash(BACK, "notice", await setAccessCore(form));
 }
 
 /** TSK-59: for each employee tab, sets what this user can do there: none, view (read-only) or edit. */
@@ -123,7 +138,7 @@ export async function setTaskViewers(form: FormData) {
   const admin = await requireAdmin();
   const userId = str(form, "id");
   const target = await db.user.findUnique({ where: { id: userId } });
-  if (!target) flash("/admin/task-access", "error", "User not found.");
+  if (!target) flash("/admin/task-tabs", "error", "User not found.");
   const own = await db.employee.findUnique({ where: { email: target!.email }, select: { id: true } });
   const tabs = await db.employee.findMany({ where: { active: true, taskTab: true }, select: { id: true } });
 
@@ -136,8 +151,8 @@ export async function setTaskViewers(form: FormData) {
   await db.$transaction([db.taskViewer.deleteMany({ where: { userId } }), db.taskViewer.createMany({ data: rows })]);
   const edits = rows.filter((r) => r.level === "edit").length;
   await audit(admin.email, "taskviewers.set", `${target!.email}: ${rows.length - edits} view, ${edits} edit`);
-  revalidatePath("/admin/task-access");
-  flash("/admin/task-access", "notice", `Saved which task tabs ${target!.email} can view and edit.`);
+  revalidatePath("/admin/task-tabs");
+  flash("/admin/task-tabs", "notice", `Saved which task tabs ${target!.email} can view and edit.`);
 }
 
 /** TSK-58: shows an employee as a tab under Tasks, creating the employee first when a new name is given. */

@@ -1,3 +1,4 @@
+import { BulkSave } from "@/components/BulkSave";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
@@ -74,6 +75,7 @@ export default async function Page({ searchParams }: { searchParams: { e?: strin
         <button type="submit" className="secondary">Save default</button>
       </form>
 
+      <BulkSave>
       <form action={addTimesheetEntry} className="card row">
         <input type="hidden" name="employeeId" value={emp.id} />
         <input name="date" type="date" defaultValue={month === thisMonth ? todayISO() : `${month}-01`} aria-label="Date" required />
@@ -103,7 +105,7 @@ export default async function Page({ searchParams }: { searchParams: { e?: strin
               return (
                 <tr key={r.id}>
                   <td>
-                    <form id={f} action={updateTimesheetEntry}>
+                    <form id={f} action={updateTimesheetEntry} data-bulk="tsEntry">
                       <input type="hidden" name="id" value={r.id} />
                     </form>
                     <input form={f} name="date" type="date" defaultValue={r.date} aria-label="Date" />
@@ -179,7 +181,7 @@ export default async function Page({ searchParams }: { searchParams: { e?: strin
               return (
                 <tr key={p.id}>
                   <td>
-                    <form id={f} action={updateTimesheetPayment}>
+                    <form id={f} action={updateTimesheetPayment} data-bulk="tsPayment">
                       <input type="hidden" name="id" value={p.id} />
                       <input type="hidden" name="employeeId" value={emp.id} />
                       <input type="hidden" name="m" value={month} />
@@ -222,6 +224,7 @@ export default async function Page({ searchParams }: { searchParams: { e?: strin
           </tbody>
         </table>
       </div>
+      </BulkSave>
       <p>
         <a href={`/admin/timesheets/export?e=${encodeURIComponent(emp.id)}&m=${month}`}>Download CSV for {emp.name}, {monthLabel(month)}</a>
       </p>

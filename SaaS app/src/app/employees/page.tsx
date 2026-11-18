@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
@@ -22,6 +23,10 @@ export default async function EmployeesPage({
     <>
       <h1>Employees</h1>
       <Banner error={searchParams.error} notice={searchParams.notice} />
+      <p className="muted small">
+        Staff records used on schedules, task tabs and timesheets. Not everyone here can sign in.
+        {isAdmin ? <> Logins, roles and module access are managed under <Link href="/admin">Admin &gt; People</Link>.</> : null}
+      </p>
 
       <div className="table-wrap">
         <table>
@@ -89,7 +94,7 @@ export default async function EmployeesPage({
           </form>
           <p className="muted small">
             Deactivating an employee keeps their history on schedules and tasks. Giving someone a login
-            is done under Access.
+            is done with &quot;Give login&quot; above or under Admin &gt; People.
           </p>
         </>
       )}
