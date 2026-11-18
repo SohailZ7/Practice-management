@@ -20,4 +20,4 @@ Web 1.17 | Feedback items record their release; production marks Approved items 
 Web 1.18 | Promote button checks production is ready before offering sign-in, with clear refusal messages | 422f832 (staging, rev practice-mgmt-00081-voj)
 Web 1.19 | Schedule: sorted by time, time ranges, military time, provider column, full names, print (18pt); Tasks: one-week recurring view; Not B&B tracking-only providers | a7c1799 (staging, rev practice-mgmt-00083-foy)
 Web 1.20 | Ledger API for Claude: ledger token scope, list/create/update/delete, options, totals; refuses patient info and exact duplicates | e0a4ab7 (staging, rev practice-mgmt-00085-ruj)
-Web 1.21 | Admin: People tab (login + module access, one row per person), merged Task tabs, Save all bar on People, Task tabs and Timesheets; old Admin URLs redirect | pending
+Web 1.21 | Admin: People tab (login + module access, one row per person), merged Task tabs, Save all bar on People, Task tabs and Timesheets; old Admin URLs redirect | 30565d5 (staging, rev practice-mgmt-00087-key)
