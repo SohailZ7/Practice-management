@@ -41,6 +41,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
         <select name="scope" defaultValue="tasks" aria-label="Scope">
           <option value="tasks">Tasks</option>
           <option value="feedback">Feedback only</option>
+          <option value="ledger">Ledger</option>
         </select>
         <input name="label" placeholder="Label (e.g. Sohail's Claude)" className="grow" />
         <input name="days" type="number" min={1} max={365} defaultValue={90} aria-label="Days valid" style={{ width: 90 }} />

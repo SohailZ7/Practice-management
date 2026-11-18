@@ -19,3 +19,4 @@ Web 1.16 | Promote to production button on the staging Schedule list (admin, bro
 Web 1.17 | Feedback items record their release; production marks Approved items Shipped itself | 5c26e55 (staging, rev practice-mgmt-00077-gak)
 Web 1.18 | Promote button checks production is ready before offering sign-in, with clear refusal messages | 422f832 (staging, rev practice-mgmt-00081-voj)
 Web 1.19 | Schedule: sorted by time, time ranges, military time, provider column, full names, print (18pt); Tasks: one-week recurring view; Not B&B tracking-only providers | a7c1799 (staging, rev practice-mgmt-00083-foy)
+Web 1.20 | Ledger API for Claude: ledger token scope, list/create/update/delete, options, totals; refuses patient info and exact duplicates | pending
