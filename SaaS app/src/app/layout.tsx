@@ -5,7 +5,13 @@ import { canOpenAdmin } from "@/lib/access";
 import { normalizeTheme, themeAttribute } from "@/lib/theme";
 import { DesktopUpdateBanner } from "@/components/DesktopUpdateBanner";
 import { AppShell } from "@/components/AppShell";
+import { Inter, Newsreader } from "next/font/google";
+import { isStaging } from "@/lib/promote/rules";
 import "./globals.css";
+
+// Self-hosted at build time by Next (no request to Google from the browser).
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", display: "swap", weight: ["500", "600"] });
 
 export const metadata: Metadata = {
   title: { default: "Brain and Behavior Center", template: "%s · Brain and Behavior Center" },
@@ -22,7 +28,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const user = await getCurrentUser();
   const timing = user ? await getSessionTiming() : null;
   return (
-    <html lang="en" data-theme={user ? themeAttribute(normalizeTheme(user.theme)) : undefined}>
+    <html lang="en" className={`${inter.variable} ${newsreader.variable}`} data-theme={user ? themeAttribute(normalizeTheme(user.theme)) : undefined}>
       <body>
         {user ? (
           <AppShell
@@ -30,6 +36,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             email={user.email}
             levels={levels(user)}
             isAdmin={canOpenAdmin(user)}
+            staging={isStaging()}
             timing={timing}
           >
             <DesktopUpdateBanner user={user} />

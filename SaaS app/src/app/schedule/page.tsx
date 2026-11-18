@@ -98,13 +98,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
 
   return (
     <>
-      <div className="row" style={{ marginBottom: ".75rem" }}>
-        <h1 style={{ margin: 0 }}>Schedule</h1>
+      <div className="row" style={{ marginBottom: ".75rem", alignItems: "flex-end" }}>
+        <div>
+          <p className="page-eyebrow">{title}</p>
+          <h1 style={{ margin: 0 }}>Schedule</h1>
+        </div>
         <span className="grow" />
         {hasSchedule && <Link href="/schedule/providers">Providers</Link>}
         {hasSchedule && canEdit && <Link href="/schedule/import">Import</Link>}
         {hasSchedule && canEdit && <Link href="/schedule/settings">Tracks &amp; types</Link>}
       </div>
+
+      {view === "day" && visits.length > 0 && (
+        <div className="stat-row" aria-label="Day summary">
+          <div className="stat"><span className="muted small">Visits</span><strong>{visits.length}</strong></div>
+          <div className="stat"><span className="muted small">Providers</span><strong>{new Set(visits.map((v) => v.providerName)).size}</strong></div>
+        </div>
+      )}
 
       <div className="row" style={{ marginBottom: "1rem" }}>
         <Link className="btn secondary" href={href(prev)}>

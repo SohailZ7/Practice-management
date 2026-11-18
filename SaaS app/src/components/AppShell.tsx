@@ -24,6 +24,7 @@ type Props = {
   email: string;
   levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string; notes: string };
   isAdmin: boolean;
+  staging?: boolean;
   timing: { idleMs: number; absoluteDeadline: number; serverNow: number } | null;
   children: ReactNode;
 };
@@ -38,7 +39,7 @@ const MIN_WIDTH = 200;
 const maxWidth = () => Math.max(MIN_WIDTH, Math.floor(window.innerWidth / 3));
 const clamp = (w: number) => Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(w)));
 
-export function AppShell({ name, email, levels, isAdmin, timing, children }: Props) {
+export function AppShell({ name, email, levels, isAdmin, staging, timing, children }: Props) {
   const path = usePathname();
   const [pinned, setPinned] = useState(true);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -186,6 +187,13 @@ export function AppShell({ name, email, levels, isAdmin, timing, children }: Pro
             items.map((i) => link(i.href, i.label, i.icon, i.locked))
           )}
         </nav>
+        <div className={`env-badge ${staging ? "staging" : ""}`} role="status">
+          <span className="dot" aria-hidden="true" />
+          <span className="txt">
+            <strong>{staging ? "STAGING · TEST ONLY" : "PRODUCTION"}</strong>
+            <span className="sub">{staging ? "Not real patient data" : "Live practice data"}</span>
+          </span>
+        </div>
         <div className="foot">
           {link("/settings", "Settings", "settings")}
           <button onClick={() => signOut({ callbackUrl: "/login" })} title={`Sign out (${email})`}>

@@ -3,30 +3,50 @@
    Palette: navy and white, taken from the practice's ledger spreadsheet (navy header rows). */
 :root {
   color-scheme: light;
-  --bg: #f2f4f8;
+  --bg: #F6F5F1;
   --card: #ffffff;
-  --text: #17203a;
-  --muted: #667086;
-  --line: #dfe3ec;
-  --accent: #1f3a6e;
+  --text: #16201F;
+  --muted: #5B6664;
+  --line: #E4E2DA;
+  --line-strong: #D5D2C8;
+  --accent: #0F6B63;
   --accent-text: #ffffff;
-  --danger: #c8372d;
-  --ok: #17803f;
-  --warn: #a8660a;
-  --th-bg: #1f3a6e;
-  --th-text: #ffffff;
+  --soft: #E3F0ED;
+  --soft-text: #0B514B;
+  --amber: #8A3F06;
+  --amber-bg: #FBEBDD;
+  --neutral-bg: #F1EFE8;
+  --neutral-text: #3E4A48;
+  --danger: #B3261E;
+  --ok: #0B6B3A;
+  --warn: #8A3F06;
+  --th-bg: #FAF9F6;
+  --th-text: #5B6664;
   --side-bg: #ffffff;
-  --side-text: #17203a;
-  --side-muted: #667086;
-  --side-hover: #eef1f7;
-  --logo-bg: #1f3a6e;
-  --shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 6px 18px rgba(20, 30, 60, .06);
+  --side-text: #3E4A48;
+  --side-muted: #5B6664;
+  --side-hover: #EDEBE4;
+  --side-active-bg: #E3F0ED;
+  --side-active-text: #0B514B;
+  --logo-bg: #0F6B63;
+  --shadow: none;
+  --font-body: var(--font-inter), Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: var(--font-newsreader), Newsreader, Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #0f1729;
+    --line-strong: #3a4766;
+    --soft: #1f3a4a;
+    --soft-text: #bfe3dc;
+    --amber: #e0b25a;
+    --amber-bg: #3a2f17;
+    --neutral-bg: #223152;
+    --neutral-text: #c9d3e8;
+    --side-active-bg: #4a7bd8;
+    --side-active-text: #ffffff;
     --card: #182238;
     --text: #e8ecf6;
     --muted: #93a0bb;
@@ -50,6 +70,15 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0f1729;
+  --line-strong: #3a4766;
+  --soft: #1f3a4a;
+  --soft-text: #bfe3dc;
+  --amber: #e0b25a;
+  --amber-bg: #3a2f17;
+  --neutral-bg: #223152;
+  --neutral-text: #c9d3e8;
+  --side-active-bg: #4a7bd8;
+  --side-active-text: #ffffff;
   --card: #182238;
   --text: #e8ecf6;
   --muted: #93a0bb;
@@ -69,13 +98,13 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
 }
 
-html { font-size: 13px; }
+html { font-size: 14px; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; -webkit-font-smoothing: antialiased; }
+body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text); line-height: 1.45; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 1rem; letter-spacing: -.01em; }
-h2 { font-size: 1.05rem; font-weight: 650; margin: 1.5rem 0 .5rem; }
+h1 { font-family: var(--font-head); font-size: 2.2rem; font-weight: 500; line-height: 1.1; margin: 0 0 1rem; letter-spacing: -.02em; }
+h2 { font-family: var(--font-head); font-size: 1.3rem; font-weight: 500; margin: 1.5rem 0 .5rem; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
 
@@ -489,3 +518,59 @@ table.visits td.v-prov select { max-width: 100%; }
 .bulk-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; position: sticky; top: 0; z-index: 5; padding: .4rem 0; background: var(--bg); }
 .bulk-dirty { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; border-radius: 6px; }
 tr.bulk-dirty { outline-offset: -2px; background: color-mix(in srgb, var(--accent, #2563eb) 8%, transparent); }
+
+/* ===== Redesign (Web 1.22): shared components. Restyle only; tokens above. ===== */
+.shell { background: var(--bg); }
+.side { border-right: 1px solid var(--line); }
+.content { border-top-left-radius: 0; padding: 2rem 2.4rem 3rem; background: var(--bg); }
+.content-wrap { padding-top: 0; }
+.content { min-height: 100vh; }
+.logo { border-radius: 9px; }
+.side .brand { font-family: var(--font-head); font-size: 1.2rem; font-weight: 600; letter-spacing: -.01em; }
+.side nav a, .side .foot a, .side .foot button { border-radius: 10px; padding: .6rem .75rem; font-weight: 500; }
+.side nav a.active, .side .foot a.active { background: var(--side-active-bg); color: var(--side-active-text); font-weight: 600; }
+.nav-item > a.active ~ .nav-grip { color: var(--side-active-text); }
+.env-badge { display: flex; gap: .6rem; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: .6rem .75rem; margin: .8rem 0 0; font-size: .85rem; line-height: 1.25; }
+.env-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.env-badge strong { display: block; font-size: .8rem; letter-spacing: .05em; }
+.env-badge span.sub { color: var(--muted); font-size: .8rem; }
+.env-badge.staging { border-color: var(--amber); background: var(--amber-bg); }
+.env-badge.staging .dot { background: var(--amber); }
+.env-badge.staging strong { color: var(--amber); }
+.shell.rail .side:not(:hover) .env-badge { justify-content: center; padding: .6rem 0; }
+.shell.rail .side:not(:hover) .env-badge .txt { display: none; }
+
+.card { border-radius: 14px; box-shadow: none; }
+.table-wrap, .xl-wrap, .month, .todo-section { box-shadow: none; border-radius: 14px; }
+.stat { box-shadow: none; border-radius: 14px; padding: .8rem 1.1rem; }
+.stat strong { font-family: var(--font-head); font-size: 1.8rem; font-weight: 500; line-height: 1.1; }
+th, table.xl th, table.visits th, .month-head div { background: var(--th-bg); color: var(--th-text); font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+th { border-bottom: 1px solid var(--line); }
+tbody tr:hover td { background: color-mix(in srgb, var(--soft) 35%, var(--card)); }
+table.xl th { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+button, .btn { border-radius: 10px; padding: .55rem 1rem; font-weight: 600; }
+button.secondary, .btn.secondary { background: var(--card); border: 1px solid var(--line-strong); color: var(--text); font-weight: 500; }
+button.secondary:hover:not(:disabled), .btn.secondary:hover { background: var(--side-hover); }
+input[type=text], input[type=email], input[type=date], input[type=url], input[type=tel], input:not([type]), select, textarea { background: var(--card); border: 1px solid var(--line-strong); border-radius: 8px; padding: .45rem .6rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pill { padding: .15rem .65rem; border: 0; background: var(--neutral-bg); color: var(--neutral-text); font-weight: 600; font-size: .8rem; }
+.pill.ok { background: var(--soft); color: var(--soft-text); }
+.pill.warn { background: var(--amber-bg); color: var(--amber); }
+.pill.bad { background: color-mix(in srgb, var(--danger) 12%, var(--card)); color: var(--danger); }
+
+.seg { border-color: var(--line-strong); border-radius: 10px; }
+.seg a { padding: .5rem 1rem; font-weight: 500; }
+.seg a.on { background: var(--text); color: var(--card); }
+.tab.on { box-shadow: inset 0 3px 0 var(--accent); }
+.notice { background: var(--soft); border-color: var(--accent); color: var(--soft-text); border-radius: 10px; }
+.error { border-radius: 10px; }
+tr.xl-day td { background: var(--th-bg); font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--th-text); }
+.bulk-bar { box-shadow: 0 -1px 0 var(--line), 0 6px 24px rgba(22, 32, 31, .12); border-radius: 14px; }
+.page-eyebrow { font-size: .93rem; color: var(--muted); font-weight: 500; margin: 0; }
+@media (max-width: 700px) { .content { padding: 1.25rem 1rem 3rem; } h1 { font-size: 1.8rem; } }
+@media (max-width: 700px) {
+  .shell.pinned .side:not(:hover) .env-badge { justify-content: center; padding: .6rem 0; }
+  .shell.pinned .side:not(:hover) .env-badge .txt { display: none; }
+}
