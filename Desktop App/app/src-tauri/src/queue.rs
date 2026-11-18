@@ -395,4 +395,65 @@ mod tests {
         assert_eq!(key_from_hex("zz"), None);
         assert_eq!(rfc3339_utc(1_700_000_000), "2023-11-14T22:13:20Z");
     }
+
+    // ---- queued data survives an app update ------------------------------------------------------------------
+    // tests/fixtures/queue-v1.0 is a queue folder written by the v1.0.19 build's code (the queue and keystore sources
+    // are byte-identical in 1.0.20). It holds a FAKE transcript only. If a future change makes these fail, an update
+    // would strand a user's unsent transcripts: do not ship it.
+    const FIXTURE_KEY: [u8; 32] = [0x42; 32];
+    const FIXTURE_TEXT: &str = "[00:00] Provider: This is a made-up test line one.\n[00:04] Patient: This is a made-up test line two.";
+
+    fn copy_dir(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for e in fs::read_dir(from).unwrap().flatten() {
+            let (src, dst) = (e.path(), to.join(e.file_name()));
+            if src.is_dir() { copy_dir(&src, &dst) } else { fs::copy(&src, &dst).unwrap(); }
+        }
+    }
+
+    fn fixture_copy() -> PathBuf {
+        let dir = tmp();
+        copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/queue-v1.0"), &dir);
+        dir
+    }
+
+    #[test]
+    #[ignore] // run once by hand to (re)create the fixture: cargo test regenerate_queue_fixture -- --ignored
+    fn regenerate_queue_fixture() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/queue-v1.0");
+        let meta = Metadata { version: "1.0".into(), visit_id: "fake-visit-1019".into(), environment: "production".into(),
+            created_at: "2026-11-11T15:00:00Z".into(), duration_seconds: 8.0, status: Status::Pending };
+        let mut a = seg("1", "This is a made-up test line one.", "mic", 0.0); a.speaker = "Provider".into(); a.timestamp = "[00:00]".into();
+        let mut b = seg("2", "This is a made-up test line two.", "system", 4.0); b.speaker = "Patient".into(); b.timestamp = "[00:04]".into();
+        save(&dir, &FIXTURE_KEY, &meta, &[a, b], "").unwrap();
+    }
+
+    #[test]
+    fn a_v1_0_queue_from_the_previous_build_still_opens_lists_and_reads() {
+        let dir = fixture_copy();
+        let items = list(&dir, &FIXTURE_KEY);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].visit_id, "fake-visit-1019");
+        assert_eq!(items[0].environment, "production");
+        assert_eq!(items[0].status, Status::Pending);
+        assert_eq!(read_text(&dir, &FIXTURE_KEY, "fake-visit-1019").unwrap(), FIXTURE_TEXT);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn listing_and_reading_never_delete_or_rewrite_queued_files_even_with_the_wrong_key() {
+        let dir = fixture_copy();
+        let files = ["metadata.json", "transcripts.json"].map(|f| dir.join("queue/fake-visit-1019").join(f));
+        let before: Vec<Vec<u8>> = files.iter().map(|f| fs::read(f).unwrap()).collect();
+        // A missing or replaced Keychain key makes the item unreadable, but never removes it.
+        assert!(list(&dir, &[9u8; 32]).is_empty());
+        assert!(read_text(&dir, &[9u8; 32], "fake-visit-1019").is_err());
+        let _ = list(&dir, &FIXTURE_KEY);
+        let _ = read_text(&dir, &FIXTURE_KEY, "fake-visit-1019");
+        let after: Vec<Vec<u8>> = files.iter().map(|f| fs::read(f).unwrap()).collect();
+        assert_eq!(before, after);
+        // The right key still opens it afterwards.
+        assert_eq!(list(&dir, &FIXTURE_KEY).len(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
