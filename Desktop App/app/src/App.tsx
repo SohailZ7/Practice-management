@@ -17,7 +17,7 @@ import { canShowFullNames, displayVisits, loadShowFull, saveShowFull } from "./l
 import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
-import { sendDiagnostics, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { sendDiagnostics, putInbox, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type ModelProgress, type QueueItem } from "./lib/engine";
 import { DEFAULT_ENVIRONMENT, ENVIRONMENTS, STAGING_TEST, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { UpdateBanner } from "./UpdateBanner";
@@ -28,12 +28,16 @@ import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
 import { isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
 import { SavedTranscripts } from "./SavedTranscripts";
+import { Health } from "./Health";
+import { nextDelay } from "./lib/backoff";
+import { shouldRefresh } from "./lib/tokenKeeper";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
 type RowState =
   | { phase: "idle" }
   | { phase: "recording"; since: number; warning?: string }
   | { phase: "working"; detail: string }
+  | { phase: "uploading" }
   | { phase: "sent"; note?: string }
   | { phase: "saved"; reason: string }
   | { phase: "failed"; message: string };
@@ -46,7 +50,7 @@ export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [tokenState, setTokenState] = useState<ScopedToken>(null);
-  const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "setup">("visits");
+  const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "health" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [showFull, setShowFull] = useState(loadShowFull);
@@ -174,7 +178,8 @@ export function App() {
 
   const loadQueue = useCallback(async () => {
     if (!engine) return;
-    setQueue(await engine.queueList().catch(() => []));
+    // Confirmed copies kept 24 h as a safety net are not "waiting": only pending items are shown.
+    setQueue((await engine.queueList().catch(() => [])).filter((q) => q.status !== "uploaded"));
   }, [engine]);
 
   const retryQueue = useCallback(async () => {
@@ -188,6 +193,46 @@ export function App() {
       setRetrying(false);
     }
   }, [engine, loadQueue, refreshStatus, noteResults]);
+
+  // At launch: turn recordings left by a crash into queue items, and shred safety copies older than 24 h. Then hourly.
+  useEffect(() => {
+    if (!engine) return;
+    const sweep = () => { void engine.queueSweep().catch(() => {}); };
+    void engine.recoverRecordings().catch(() => 0).then(() => { sweep(); return loadQueue(); });
+    const t = setInterval(sweep, 3_600_000);
+    return () => clearInterval(t);
+  }, [engine]);
+
+  // Automatic retry with exponential backoff (5 s, 10 s ... 5 min) for as long as anything waits. No click needed.
+  const attempt = useRef(0);
+  useEffect(() => {
+    if (!engine) return;
+    if (queue.length === 0) { attempt.current = 0; return; }
+    if (retrying) return;
+    const t = setTimeout(() => { attempt.current += 1; void retryQueue(); }, nextDelay(attempt.current));
+    return () => clearTimeout(t);
+  }, [engine, queue, retrying, retryQueue]);
+
+  // Silent sign-in renewal: renew a token that expires within 15 minutes, so the sign-in never lapses mid-day.
+  const lastRefresh = useRef(Date.now());
+  useEffect(() => {
+    if (!engine || !status) return;
+    const tick = async () => {
+      for (const [e, on] of Object.entries(status.signed_in)) {
+        if (!on || !isEnvironment(e)) continue;
+        try {
+          const tok = await engine.accessToken(e);
+          if (tok && shouldRefresh(tok, Date.now() / 1000, lastRefresh.current, Date.now())) {
+            await engine.refreshAccessToken(e, tok);
+            lastRefresh.current = Date.now();
+          }
+        } catch { /* the next tick tries again */ }
+      }
+    };
+    void tick();
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+  }, [engine, status ? JSON.stringify(status.signed_in) : ""]);
 
   // Retry at launch, and again whenever a sign-in becomes available (a different environment or a fresh sign-in).
   const signedInKey = status ? JSON.stringify(status.signed_in) : "";
@@ -245,6 +290,7 @@ export function App() {
             <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>Find a visit</button>
             <button className={tab === "tasks" ? "on" : ""} onClick={() => setTab("tasks")}>My Tasks</button>
             <button className={tab === "feedback" ? "on" : ""} onClick={() => setTab("feedback")}>Feedback</button>
+            <button className={tab === "health" ? "on" : ""} onClick={() => setTab("health")}>Health</button>
             <button className={tab === "setup" ? "on" : ""} onClick={() => setTab("setup")}>Setup</button>
           </nav>
         )}
@@ -267,6 +313,10 @@ export function App() {
         {status && engine && signedIn && tab === "setup" && (
           <Setup engine={engine} status={status} env={env} signedIn session={session} locked={recording}
             onEnvironment={changeEnvironment} onChanged={() => refreshStatus()} />
+        )}
+
+        {signedIn && tab === "health" && engine && status && (
+          <Health engine={engine} status={status} env={env} session={session} queue={queue} failures={failures} retrying={retrying} onRetry={() => void retryQueue()} />
         )}
 
         {signedIn && tab === "search" && session && engine && (
@@ -574,6 +624,26 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
     return () => clearInterval(t);
   }, [since]);
 
+  // While recording: every 30 s the words so far go to the server inbox in the background. Errors are silent:
+  // the encrypted copy on this Mac is the safety net, and Finish needs no network.
+  const recId = useRef<string | null>(null);
+  const recStart = useRef(0);
+  useEffect(() => {
+    if (!since) return;
+    let busyCp = false, seq = 0;
+    const t = setInterval(async () => {
+      if (busyCp) return;
+      busyCp = true;
+      try {
+        const cp = await engine.recordingCheckpoint();
+        if (cp && cp.text.trim() && recId.current) {
+          await putInbox(session, recId.current, { seq: ++seq, final: false, text: cp.text, durationSeconds: cp.seconds, recordedAt: new Date(recStart.current).toISOString(), visitId: null });
+        }
+      } catch { /* silent */ } finally { busyCp = false; }
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [since]);
+
   /** Record on a visit that already has a transcript: read the earlier text first, so adding never loses it. */
   async function startAdding() {
     setAskAppend(false);
@@ -592,7 +662,9 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   async function start() {
     setBusy(true);
     try {
-      const { warning } = await engine.startRecording(true);
+      const { warning, recording_id } = await engine.startRecording(true, { visitId: visit.id, environment: env, append: hasExisting });
+      recId.current = recording_id ?? null;
+      recStart.current = Date.now();
       setSecs(0);
       onState(visit.id, { phase: "recording", since: Date.now(), warning: warning ?? undefined });
     } catch (e) {
@@ -617,13 +689,17 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
         const patient = await askSpeaker(summary.speakers);
         if (patient) await engine.queueRelabel(visit.id, patientChoice(patient, summary.speakers.map((x) => x.label)));
       }
-      onState(visit.id, { phase: "working", detail: "sending to the practice app" });
+      // Saved on this Mac. Sending happens in the background: Finish never waits for the network.
       const item = (await engine.queueList()).find((q) => q.visit_id === visit.id);
       setCopyLabel(visit.id, `${visit.realInitials ?? visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
-      const result = item ? await uploadQueued(engine, item, session) : { ok: false, reason: "missing" };
-      if ("visitId" in result) onResult(result);
-      onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: savedWith("failure" in result ? result.failure : undefined) });
+      if (!item) { onState(visit.id, { phase: "saved", reason: "Saved on this Mac." }); onSent(); return; }
+      onState(visit.id, { phase: "uploading" });
       onSent();
+      void uploadQueued(engine, item, session).then((result) => {
+        if ("visitId" in result) onResult(result);
+        onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: savedWith("failure" in result ? result.failure : undefined) });
+        onSent();
+      }).catch((e) => onState(visit.id, { phase: "saved", reason: e instanceof Error ? e.message : String(e) }));
     } catch (e) {
       onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -778,10 +854,11 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
  *  visit's status itself is the dropdown above it. */
 function pillFor(state: RowState, queued: boolean, _visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } | null {
   if (state.phase === "recording") return { label: "Recording", tone: "bad" };
-  if (state.phase === "working") return { label: "Working…", tone: "warn" };
+  if (state.phase === "working") return { label: "Saving on this Mac…", tone: "warn" };
+  if (state.phase === "uploading") return { label: "Uploading…", tone: "warn" };
   if (state.phase === "failed") return { label: "Failed", tone: "bad" };
   if (state.phase === "saved" || queued) return { label: "Saved on this Mac", tone: "warn" };
-  if (state.phase === "sent") return { label: "Transcript sent", tone: "ok" };
+  if (state.phase === "sent") return { label: "Safe on server", tone: "ok" };
   return null;
 }
 
