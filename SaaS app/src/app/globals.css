@@ -630,3 +630,22 @@ button.sm, .v-actions .row-menu summary { border-radius: 6px; font-size: .85rem;
 .row-menu summary { background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
 .row-menu-list { background: var(--card); }
 @media (max-width: 700px) { .page-head-text { min-width: 0; } .sched-strip { gap: 12px; } }
+
+/* Billing (Web 1.27) */
+.stage-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 4px 0 16px; }
+.stage-card { text-align: left; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; font: inherit; }
+.stage-card.on { border: 2px solid var(--accent); padding: 13px 15px; }
+.stage-top { display: flex; justify-content: space-between; align-items: center; font-size: .92rem; color: var(--muted); }
+.stage-n { font-size: 2.3rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.stage-note { font-size: .85rem; color: var(--muted); }
+.stage-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.stage-dot.plum { background: var(--accent); }
+.stage-dot.amber { background: #B98A3E; }
+.stage-dot.green { background: var(--green); }
+.enc-table th { font-size: .77rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+.enc-table td { vertical-align: middle; }
+.pat-cell { display: flex; align-items: center; gap: 10px; }
+.enc-table .sub { display: block; font-size: .85rem; color: var(--muted); }
+.enc-table .num { font-variant-numeric: tabular-nums; }
+.amber-text { color: var(--p-amber-fg); font-weight: 600; }
+@media (max-width: 700px) { .stage-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

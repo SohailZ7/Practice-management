@@ -27,6 +27,7 @@ export function EncounterList({
   const [rows, setRows] = useState(initialRows);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<"all" | "needs" | "waiting" | "entered">("all");
 
   async function run(next = f) {
     setBusy(true);
@@ -39,6 +40,16 @@ export function EncounterList({
       setBusy(false);
     }
   }
+  const live = rows.filter((r) => !r.deleted);
+  const stages = [
+    { key: "all" as const, label: "All shown", n: rows.length, note: "Every encounter in this search", dot: "plum" },
+    { key: "needs" as const, label: "Needs details", n: live.filter((r) => !r.getixEntered && !r.mrn).length, note: "No MRN yet", dot: "amber" },
+    { key: "waiting" as const, label: "Waiting for GetIX", n: live.filter((r) => !r.getixEntered).length, note: "Ready for manual entry", dot: "plum" },
+    { key: "entered" as const, label: "Entered in GetIX", n: live.filter((r) => r.getixEntered).length, note: "Locked, entered by hand", dot: "green" },
+  ];
+  const shown = rows.filter((r) =>
+    stage === "all" ? true : r.deleted ? false : stage === "needs" ? !r.getixEntered && !r.mrn : stage === "waiting" ? !r.getixEntered : r.getixEntered,
+  );
   const set = <K extends keyof EncounterFilters>(k: K, v: EncounterFilters[K]) => setF((s) => ({ ...s, [k]: v }));
 
   return (
@@ -93,68 +104,73 @@ export function EncounterList({
         <button type="submit" disabled={busy}>
           {busy ? "Searching…" : "Search"}
         </button>
-        {canEdit && (
-          <Link className="btn secondary" href="/billing/new">
-            + New encounter
-          </Link>
-        )}
       </form>
 
       {error && <div className="error">{error}</div>}
 
-      <div className="stat-row" aria-label="Encounter summary">
-        <div className="stat"><span className="muted small">Shown</span><strong>{rows.length}</strong></div>
-        <div className="stat"><span className="muted small">Waiting for GetIX</span><strong>{rows.filter((r) => !r.deleted && !r.getixEntered).length}</strong></div>
-        <div className="stat"><span className="muted small">Entered in GetIX</span><strong>{rows.filter((r) => !r.deleted && r.getixEntered).length}</strong></div>
-      </div>
+      <section className="stage-row" aria-label="Encounter stages">
+        {stages.map((c) => (
+          <button key={c.key} type="button" className={stage === c.key ? "stage-card on" : "stage-card"} aria-pressed={stage === c.key} onClick={() => setStage(c.key)}>
+            <span className="stage-top"><span>{c.label}</span><span className={`stage-dot ${c.dot}`} aria-hidden="true" /></span>
+            <span className="stage-n">{c.n}</span>
+            <span className="stage-note">{c.note}</span>
+          </button>
+        ))}
+      </section>
 
-      <div className="table-wrap">
+      <div className="table-wrap enc-table">
         <table>
           <thead>
             <tr>
-              <th>Date</th>
               <th>Patient</th>
-              <th>MRN</th>
+              <th>Date</th>
               <th>Program</th>
+              <th>Charge code</th>
               <th>ICD-10</th>
-              <th>Charge / note</th>
               <th>Entered by</th>
-              <th>GetIX</th>
+              <th>Stage</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
+            {shown.length === 0 && (
               <tr>
-                <td colSpan={9} className="muted">
+                <td colSpan={8} className="muted">
                   No encounters match.
                 </td>
               </tr>
             )}
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.id} style={r.deleted ? { opacity: 0.6 } : undefined}>
-                <td>{r.date}</td>
                 <td>
-                  <Link href={`/billing/patients/${r.patientId}`}>{r.patientName}</Link>
+                  <span className="pat-cell">
+                    <span className="avatar sm" aria-hidden="true">{r.patientName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("")}</span>
+                    <span>
+                      <Link href={`/billing/patients/${r.patientId}`}><strong>{r.patientName}</strong></Link>
+                      <span className="sub">{r.mrn ?? "No MRN yet"}</span>
+                    </span>
+                  </span>
                 </td>
-                <td>{r.mrn ?? <span className="pill warn">No MRN yet</span>}</td>
-                <td>{r.program}</td>
+                <td className="num">{r.date}</td>
+                <td>
+                  {r.program}
+                  {r.note && <span className="sub">{r.note}</span>}
+                </td>
+                <td>{r.chargeCode ? <strong>{r.chargeCode}</strong> : <span className="amber-text">Needs details</span>}</td>
                 <td>
                   <strong>{r.icd10Codes[0]}</strong>
                   {r.icd10Codes.length > 1 && <span className="muted"> {r.icd10Codes.slice(1).join(", ")}</span>}
-                </td>
-                <td>
-                  {r.chargeCode && <strong>{r.chargeCode} </strong>}
-                  <span className="muted">{r.note}</span>
                 </td>
                 <td>{r.enteredBy}</td>
                 <td>
                   {r.deleted ? (
                     <span className="pill bad">Deleted</span>
                   ) : r.getixEntered ? (
-                    <span className="pill ok" title="Locked">🔒 In GetIX {r.getixEnteredAt}</span>
+                    <span className="pill ok" title="Locked">In GetIX {r.getixEnteredAt}</span>
+                  ) : r.mrn ? (
+                    <span className="pill">Ready to bill</span>
                   ) : (
-                    <span className="pill warn">Waiting</span>
+                    <span className="pill warn">Needs details</span>
                   )}
                 </td>
                 <td>
@@ -173,7 +189,7 @@ export function EncounterList({
           </tbody>
         </table>
       </div>
-      <p className="muted small">Showing up to 300 encounters. {rows.length} shown.</p>
+      <p className="muted small">Entry into GetIX stays a manual step. Showing up to 300 encounters; {shown.length} shown.</p>
     </div>
   );
 }
