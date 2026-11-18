@@ -245,4 +245,87 @@ mod tests {
         assert!(next_window(0, 31 * r).is_some());
         assert!(next_window(31 * r, 40 * r).is_none());
     }
+
+    #[test]
+    fn a_truncated_or_empty_journal_file_is_refused_and_never_panics() {
+        let d = tmp("trunc"); let key = [9u8; 32];
+        let id = new_uuid();
+        sample(&id).save(&d, &key).unwrap();
+        let f = d.join("journal").join(&id).join("journal.json");
+        let raw = fs::read(&f).unwrap();
+        for cut in [0usize, 1, 11, 12, 20, raw.len() / 2, raw.len() - 1] {
+            fs::write(&f, &raw[..cut]).unwrap();
+            assert!(Journal::load(&d, &key, &id).is_err(), "cut at {cut}");
+        }
+        fs::write(&f, b"not even encrypted").unwrap();
+        assert!(Journal::load(&d, &key, &id).is_err());
+    }
+
+    #[test]
+    fn a_journal_that_cannot_be_read_is_left_in_place_by_recovery_not_deleted() {
+        let d = tmp("keepbad"); let key = [7u8; 32];
+        let id = new_uuid();
+        sample(&id).save(&d, &key).unwrap();
+        let f = d.join("journal").join(&id).join("journal.json");
+        let mut raw = fs::read(&f).unwrap(); let n = raw.len(); raw[n - 1] ^= 1; fs::write(&f, raw).unwrap();
+        assert_eq!(recover(&d, &key, None), 0);
+        assert_eq!(leftovers(&d), vec![id], "never destroy what could not be read");
+    }
+
+    #[test]
+    fn saving_twice_replaces_the_checkpoint_and_the_newer_words_win() {
+        let d = tmp("twice"); let key = [3u8; 32];
+        let id = new_uuid();
+        let mut j = sample(&id);
+        j.save(&d, &key).unwrap();
+        j.seq = 3; j.segments[0].text = "newer words".into();
+        j.save(&d, &key).unwrap();
+        let back = Journal::load(&d, &key, &id).unwrap();
+        assert_eq!(back.seq, 3);
+        assert!(back.text().contains("newer words"));
+        assert!(!back.text().contains("made-up"));
+        assert_eq!(leftovers(&d).len(), 1);
+    }
+
+    #[test]
+    fn many_crashed_recordings_all_recover_and_none_are_lost() {
+        let d = tmp("many"); let key = [5u8; 32];
+        let ids: Vec<String> = (0..5).map(|_| new_uuid()).collect();
+        for (i, id) in ids.iter().enumerate() {
+            let mut j = sample(id); j.visit_id = format!("visit-{i}"); j.save(&d, &key).unwrap();
+        }
+        assert_eq!(recover(&d, &key, None), 5);
+        assert!(leftovers(&d).is_empty());
+        for i in 0..5 { assert!(queue::read_metadata(&d, &key, &format!("visit-{i}")).is_ok()); }
+    }
+
+    #[test]
+    fn a_journal_with_a_hostile_visit_id_waits_unlinked_and_cannot_escape_the_folder() {
+        let d = tmp("evil"); let key = [6u8; 32];
+        let id = new_uuid();
+        let mut j = sample(&id); j.visit_id = "../../outside".into(); j.save(&d, &key).unwrap();
+        assert_eq!(recover(&d, &key, None), 1);
+        assert!(!d.parent().unwrap().join("outside").exists());
+        assert_eq!(queue::read_metadata(&d, &key, &id).unwrap().link_visit, None);
+    }
+
+    #[test]
+    fn a_foreign_folder_name_in_the_journal_dir_is_ignored() {
+        let d = tmp("foreign"); let key = [4u8; 32];
+        fs::create_dir_all(d.join("journal").join("not-a-uuid")).unwrap();
+        assert!(leftovers(&d).is_empty());
+        assert_eq!(recover(&d, &key, None), 0);
+    }
+
+    #[test]
+    fn windows_never_overlap_or_skip() {
+        let r = SAMPLE_RATE as usize;
+        let mut done = 0usize; let mut covered = 0usize;
+        for avail in (0..200).map(|s| s * r) {
+            if let Some(w) = next_window(done, avail) { assert_eq!(w.start, done); covered += w.end - w.start; done = w.end; }
+        }
+        assert_eq!(covered, done);
+        assert!(next_window(done, done).is_none());
+        assert!(next_window(10 * r, 5 * r).is_none(), "fewer samples than done must not underflow");
+    }
 }

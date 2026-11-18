@@ -24,3 +24,4 @@ v1.0.21 | 2026-11-17 | built on a22e645 | PRODUCTION ONLY: no staging/localhost 
 v1.0.22 | 2026-11-18 | built on 262bf35 | Restyle to the Recorder redesign: teal tokens, Inter + Newsreader, environment label, recording stage with Finish and upload, upload queue card. No queue, upload or encryption changes.
 v1.0.23 | 2026-11-18 | built on 1ceee02 | Recordings now save every 30 seconds and upload in the background by a permanent ID, with automatic retry, silent sign-in renewal, a safety copy for 24 hours, and a Health screen.
 v1.0.24 | 2026-11-18 | built on 3a56aa3 | When the server ends a session for good, every screen now flips to Signed out with the plain reason, instead of showing Signed in and Sign in again at once.
+v1.0.25 | 2026-11-18 | built on 84580ec | Ivory and plum redesign (shared with the web app), plus more safety tests and a guard on the retry timer.

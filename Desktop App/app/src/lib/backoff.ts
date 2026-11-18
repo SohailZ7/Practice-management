@@ -3,4 +3,7 @@ export const BACKOFF_FIRST_MS = 5_000;
 export const BACKOFF_MAX_MS = 300_000;
 
 /** Delay before retry number `attempt` (0 = the first retry). */
-export const nextDelay = (attempt: number): number => Math.min(BACKOFF_MAX_MS, BACKOFF_FIRST_MS * 2 ** Math.max(0, Math.min(attempt, 20)));
+export const nextDelay = (attempt: number): number => {
+  const n = Number.isFinite(attempt) ? Math.max(0, Math.min(Math.floor(attempt), 20)) : 0; // never NaN: a NaN timer would retry in a tight loop
+  return Math.min(BACKOFF_MAX_MS, BACKOFF_FIRST_MS * 2 ** n);
+};

@@ -1,7 +1,6 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addedSeparator } from "./lib/append";
-import logo from "./assets/logo.png";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { Modal } from "./Modal";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
@@ -27,6 +26,7 @@ import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
 import { isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
+import logo from "./assets/logo.png";
 import { SavedTranscripts } from "./SavedTranscripts";
 import { Health } from "./Health";
 import { nextDelay } from "./lib/backoff";
@@ -288,7 +288,7 @@ export function App() {
       <div className="shell">
       <aside className="side">
         <div className="brand">
-          <img src={logo} alt="" className="logo" />
+          <span className="logo logo-b" aria-hidden="true">B</span>
           <span className="label">Brain and Behavior Center<small>Practice Recorder</small></span>
         </div>
         <div className={`envtag ${env}`} data-testid="envtag">{labelFor(env).toUpperCase()}</div>
@@ -783,17 +783,19 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
             <span className="rec"><span className="dot" />{mmss}</span>
             {slot ? createPortal(
               <section className="stage" aria-label="Recorder" data-testid="stage">
-                <div className="stage-label">RECORDING</div>
-                <div className="stage-who">{visit.apptTime ? `${visit.apptTime} · ` : ""}{visit.initials}</div>
-                <div className="stage-time" role="timer" aria-live="off">{mmss}</div>
-                <div className="wave" aria-hidden="true">{Array.from({ length: 16 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 8) * 0.12}s` }} />)}</div>
+                <div className="stage-top"><span className="rdot" /><span className="stage-label">RECORDING</span><span className="grow" /><span className="stage-soft">Saved on this Mac every 30 seconds</span></div>
+                <div className="stage-row">
+                  <div className="grow"><div className="stage-who">{visit.initials}</div><div className="stage-soft">{[visit.appointmentType, visit.apptTime, visit.program].filter(Boolean).join(" · ")}</div></div>
+                  <div className="stage-time" role="timer" aria-live="off">{mmss}</div>
+                </div>
+                <div className="wave" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 12) * 0.09}s` }} />)}</div>
                 <div className="stage-actions">
                   <button className="ghost" disabled={busy} onClick={async () => {
                     await engine.cancelRecording();
                     earlier.current = null;
                     onState(visit.id, { phase: "idle" });
                   }}>Discard</button>
-                  <button className="finish" onClick={stop} disabled={busy}>Finish and upload</button>
+                  <button className="finish" onClick={stop} disabled={busy}>Stop and save</button>
                 </div>
               </section>, slot) : (
               <>
