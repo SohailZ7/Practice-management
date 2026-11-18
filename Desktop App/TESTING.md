@@ -47,3 +47,12 @@ Open the staging web app, go to Notes, open that visit, press **Generate**. A dr
 
 ## If something fails, send me
 Only the exact **error message text** and which step number. Never send transcript text or anything with names.
+
+## 8. Release check: queued data survives an app update (every Desktop release)
+Automated (must pass before any rebuild; fake data only):
+- `cd app/src-tauri && cargo test --lib queue::` runs `a_v1_0_queue_from_the_previous_build_still_opens_lists_and_reads` and `listing_and_reading_never_delete_or_rewrite_queued_files_even_with_the_wrong_key` against `src-tauri/tests/fixtures/queue-v1.0` (a queue written by the v1.0.19 build, fake text). If you change the queue file format, the encryption, or the Keychain item (`org.practice.notes`, item `vault`), keep these passing or add a migration that keeps the old files readable. Never regenerate the fixture to make a failing test pass.
+- `npx vitest run tests/queue-survives-update.test.ts` checks the retry goes to the environment saved with the item and that nothing is deleted unless the server confirms.
+- `git diff <previous release> HEAD -- app/src-tauri/src/queue.rs app/src-tauri/src/keystore.rs` should be empty, or reviewed line by line.
+- Signing: `codesign -dr - "Practice Recorder.app"` must show the same `certificate leaf = H"eb350c3c973e6fdf017b65e7dd37dfea151db443"` as the previous release (a different certificate makes macOS ask again for Keychain access on first launch).
+By hand (staging, fake data): install the previous release, record 10 seconds offline so it shows "Saved on this Mac", quit, install the new build over it, open it. The banner must still list the transcript and Retry all must send it after Wi-Fi is back.
+See `docs/update-procedure.md` for the plain-language steps given to users.
