@@ -7,19 +7,24 @@ export type EnvironmentId = "production" | "staging" | "localhost";
 
 export const STAGING_TEST: boolean = import.meta.env.VITE_STAGING_TEST === "1";
 
-const ALL: { id: EnvironmentId; label: string; url: string }[] = [
-  { id: "production", label: "Production", url: "https://practice-mgmt-802176721153.us-east4.run.app" },
-  { id: "staging", label: "Staging", url: "https://practice-mgmt-321509350517.us-east4.run.app" },
-  { id: "localhost", label: "Localhost", url: "http://localhost:3000" },
-];
+type Env = { id: EnvironmentId; label: string; url: string };
+const PRODUCTION: Env = { id: "production", label: "Production", url: "https://practice-mgmt-802176721153.us-east4.run.app" };
+// The test addresses sit behind the build flag so the released bundle does not contain them at all.
+const TEST_ENVIRONMENTS: Env[] = STAGING_TEST
+  ? [
+      { id: "staging", label: "Staging", url: "https://practice-mgmt-321509350517.us-east4.run.app" },
+      { id: "localhost", label: "Localhost", url: "http://localhost:3000" },
+    ]
+  : [];
 
 /** What this build may connect to. */
-export const ENVIRONMENTS = ALL.filter((e) => (STAGING_TEST ? e.id !== "production" : e.id === "production"));
+export const ENVIRONMENTS: Env[] = STAGING_TEST ? TEST_ENVIRONMENTS : [PRODUCTION];
 export const DEFAULT_ENVIRONMENT: EnvironmentId = ENVIRONMENTS[0].id;
 
 /** True when this build can connect to the environment. A queued transcript for any other one is never sent. */
 export const isEnvironment = (id: string): id is EnvironmentId => ENVIRONMENTS.some((e) => e.id === id);
-export const labelFor = (id: string): string => ALL.find((e) => e.id === id)?.label ?? "Production";
+/** A name for any environment a saved transcript may carry, including ones this build cannot connect to. */
+export const labelFor = (id: string): string => ({ production: "Production", staging: "Staging", localhost: "Localhost" } as Record<string, string>)[id] ?? "Production";
 /** The address of an environment this build may use. Throws for any other, so a transcript recorded against the test
  *  environment can never be sent to Production by accident. */
 export function urlFor(id: string): string {
