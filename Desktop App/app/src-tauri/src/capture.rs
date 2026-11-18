@@ -151,6 +151,11 @@ impl Recorder {
         }
     }
 
+    /// The buffers the capture threads append to, so a checkpoint can read new audio without stopping.
+    pub fn shared(&self) -> Arc<Mutex<Channels>> {
+        Arc::clone(&self.channels)
+    }
+
     /// Stops both streams and returns what was recorded.
     pub fn stop(mut self) -> Channels {
         self._mic = None;
@@ -176,13 +181,14 @@ pub mod system_tap;
 /// it can sit in a global and be reached from any command.
 pub struct Session {
     stop: std::sync::mpsc::Sender<std::sync::mpsc::Sender<Channels>>,
+    shared: Arc<Mutex<Channels>>,
 }
 
 impl Session {
     /// Starts recording. The warning, when there is one, says system audio could not be captured, so a telehealth
     /// visit would record only the provider.
     pub fn start(with_system_audio: bool) -> Result<(Self, Option<String>), String> {
-        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<Option<String>, String>>();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(Option<String>, Arc<Mutex<Channels>>), String>>();
         let (stop_tx, stop_rx) = std::sync::mpsc::channel::<std::sync::mpsc::Sender<Channels>>();
 
         std::thread::spawn(move || match Recorder::start(with_system_audio) {
@@ -190,7 +196,7 @@ impl Session {
                 let _ = ready_tx.send(Err(e));
             }
             Ok((recorder, warning)) => {
-                let _ = ready_tx.send(Ok(warning));
+                let _ = ready_tx.send(Ok((warning, recorder.shared())));
                 // Hold the streams open until a stop arrives. If the other end goes away, drop them and finish.
                 if let Ok(reply) = stop_rx.recv() {
                     let _ = reply.send(recorder.stop());
@@ -198,10 +204,15 @@ impl Session {
             }
         });
 
-        let warning = ready_rx
+        let (warning, shared) = ready_rx
             .recv_timeout(std::time::Duration::from_secs(20))
             .map_err(|_| "the recorder did not start".to_string())??;
-        Ok((Self { stop: stop_tx }, warning))
+        Ok((Self { stop: stop_tx, shared }, warning))
+    }
+
+    /// The live buffers (read-only use: copy the new audio out, never hold the lock while transcribing).
+    pub fn shared(&self) -> Arc<Mutex<Channels>> {
+        Arc::clone(&self.shared)
     }
 
     pub fn stop(self) -> Result<Channels, String> {
