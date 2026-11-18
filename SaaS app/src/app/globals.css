@@ -407,7 +407,10 @@ table.visits th { background: var(--th-bg); color: var(--th-text); text-align: l
 table.visits td { padding: .35rem .45rem; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.visits td.v-act { overflow: visible; }
 table.visits col.c-pat { width: 4.8rem; }
-table.visits col.c-time { width: 6rem; }
+table.visits col.c-time { width: 9.5rem; }
+table.visits col.c-prog { width: 8rem; }
+table.visits col.c-type { width: 9rem; }
+table.visits col.c-prov { width: 10rem; }
 table.visits col.c-status { width: 7.8rem; }
 table.visits col.c-docs { width: 7.6rem; }
 table.visits col.c-act { width: 8.6rem; }
@@ -434,7 +437,7 @@ span.status-pill { cursor: default; }
 .row-menu-list .menu-item:disabled { opacity: .45; cursor: default; }
 .row-menu-list .menu-item.danger { color: var(--danger); }
 @media (max-width: 1000px) { table.visits { font-size: .82rem; } table.visits th, table.visits td { padding-left: .3rem; padding-right: .3rem; } }
-@media (min-width: 1300px) { table.visits col.c-prog { width: 20%; } table.visits col.c-type { width: 22%; } table.visits col.c-pat { width: 8rem; } table.visits col.c-time { width: 8rem; } table.visits col.c-status { width: 8.5rem; } table.visits col.c-docs { width: 9rem; } table.visits col.c-act { width: 10.5rem; } button.sm, .v-actions .row-menu summary { font-size: .85rem; } }
+@media (min-width: 1300px) { table.visits col.c-prog { width: 20%; } table.visits col.c-type { width: 22%; } table.visits col.c-pat { width: 8rem; } table.visits col.c-time { width: 10rem; } table.visits col.c-status { width: 8.5rem; } table.visits col.c-docs { width: 9rem; } table.visits col.c-act { width: 10.5rem; } button.sm, .v-actions .row-menu summary { font-size: .85rem; } }
 
 /* Admin > Costs */
 .cost-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; margin-top: 1rem; }
@@ -455,3 +458,29 @@ span.status-pill { cursor: default; }
 .fb-notes, .fb-thread { border-left: 3px solid var(--line); padding-left: .75rem; margin: .5rem 0; }
 .fb-actions textarea { width: 100%; margin: .5rem 0; }
 .fb-actions .row { flex-wrap: wrap; }
+
+/* Provider flagged "Not B&B / tracking only": a charcoal row, in both themes. */
+table.visits tr.tracking-row td { background: #36454f; color: #f2f4f5; border-bottom-color: #4b5b66; }
+table.visits tr.tracking-row td input, table.visits tr.tracking-row td select { color: #f2f4f5; }
+table.visits td.v-prov select { max-width: 100%; }
+
+/* Printable day schedule (/schedule/print): 18pt, black on white, no app chrome. */
+.print-sheet { font-size: 18pt; line-height: 1.35; color: #000; background: #fff; padding: 1rem; }
+.print-sheet h1 { font-size: 24pt; margin: 0 0 .5rem; }
+.print-sheet table { width: 100%; border-collapse: collapse; font-size: 18pt; }
+.print-sheet th, .print-sheet td { border-bottom: 1px solid #000; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+.print-sheet tr.tracking td { background: #ddd; }
+.print-bar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1rem; }
+@media print {
+  .print-bar, .side, .side-slot { display: none !important; }
+  .shell { display: block; background: #fff; }
+  .print-sheet { padding: 0; }
+  @page { margin: 0.5in; }
+}
+
+/* Recurring tasks, one week: seven day cards, one column on a phone. */
+.week-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .6rem; }
+.week-day.today { outline: 2px solid var(--accent, #2563eb); }
+
+/* Phones: the visits table keeps readable columns and scrolls inside its own box, not the page. */
+@media (max-width: 700px) { .visits-wrap { overflow-x: auto; } table.visits { min-width: 60rem; } }

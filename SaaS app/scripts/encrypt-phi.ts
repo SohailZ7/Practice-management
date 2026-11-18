@@ -75,7 +75,7 @@ async function main() {
           ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
           orderBy: { id: "asc" },
           select: { id: true, [t.field]: true },
-        })) as ({ id: string } & Record<string, string>)[];
+        })) as unknown as ({ id: string } & Record<string, string>)[];
         if (rows.length === 0) break;
         const todo: { id: string; value: string }[] = [];
         for (const r of rows) {

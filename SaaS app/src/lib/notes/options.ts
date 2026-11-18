@@ -2,6 +2,7 @@
 // one loader. Programs and times accept a typed value too; appointment type and provider are strict.
 
 import { db } from "../db";
+import { TIME_PRESETS } from "./scheduleTime";
 
 export const BASE_APPOINTMENT_TYPES = [
   "Psych Eval",
@@ -52,6 +53,6 @@ export async function loadVisitOptions(): Promise<VisitOptions> {
     programs: mergeOptions(tracks.map((t) => t.name), visits.map((v) => v.program)),
     appointmentTypes: mergeOptions(BASE_APPOINTMENT_TYPES, types.map((t) => t.name), visits.map((v) => v.appointmentType)),
     providers: mergeOptions(providers.map((p) => p.name), visits.map((v) => v.providerName)),
-    times: timeSlots(),
+    times: [...TIME_PRESETS, ...timeSlots()],
   };
 }

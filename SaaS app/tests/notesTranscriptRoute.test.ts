@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = { visit: { findUnique: vi.fn(), update: vi.fn() } };
+const db = { visit: { findUnique: vi.fn(), update: vi.fn() }, provider: { count: vi.fn().mockResolvedValue(0) } };
 vi.mock("../src/lib/db", () => ({ db }));
 const audit = vi.fn();
 vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));

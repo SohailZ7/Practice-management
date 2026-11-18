@@ -18,6 +18,11 @@ export async function syncScheduleForVisit(visitId: string): Promise<"created" |
   const v = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true } });
   if (!v) return "missing";
   const provider = v.providerName ? await db.provider.findFirst({ where: { name: { equals: v.providerName, mode: "insensitive" } } }) : null;
+  // Tracking-only providers never get a Schedule row: that row is what billing and timesheets read.
+  if (provider?.trackingOnly) {
+    await db.scheduleEntry.deleteMany({ where: { visitId: v.id } });
+    return "missing";
+  }
   const f = scheduleFieldsFor(v);
   const clientInfo = `${v.patient.lastName}, ${v.patient.firstName}`.trim();
   const data = {
