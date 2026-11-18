@@ -58,12 +58,32 @@ export const lastUploadAt = (): number | null => lastOk;
 
 const inFlight = new Map<string, Promise<UploadResult>>();
 
+/**
+ * One renewal at a time per environment. The server rotates the sign-in on every renewal, so several uploads that all hit
+ * an expired token must share ONE renewal (a second, parallel one could be refused and look like a sign-out).
+ * A caller holding a token that was already replaced gets the newer one without another round trip.
+ */
+const renewals = new Map<string, { stale: string; result: Promise<string | null> }>();
+const replaced = new Map<string, Map<string, string>>();
+function renewOnce(engine: Engine, env: string, stale: string): Promise<string | null> {
+  const newer = replaced.get(env)?.get(stale);
+  if (newer) return Promise.resolve(newer);
+  const running = renewals.get(env);
+  if (running && running.stale === stale) return running.result;
+  const result = engine.refreshAccessToken(env as QueueItem["environment"], stale).then((t) => {
+    if (t) { const m = replaced.get(env) ?? new Map<string, string>(); m.set(stale, t); if (m.size > 8) m.delete(m.keys().next().value as string); replaced.set(env, m); }
+    return t;
+  }).finally(() => { if (renewals.get(env)?.result === result) renewals.delete(env); });
+  renewals.set(env, { stale, result });
+  return result;
+}
+
 /** A session for an environment, using the stored sign-in; null when not signed in there. */
 export async function sessionFor(engine: Engine, env: QueueItem["environment"]): Promise<Session | null> {
   if (!isEnvironment(env)) return null;
   const token = await engine.accessToken(env);
   if (!token) return null;
-  return { baseUrl: urlFor(env), accessToken: token, refresh: (stale) => engine.refreshAccessToken(env, stale) };
+  return { baseUrl: urlFor(env), accessToken: token, refresh: (stale) => renewOnce(engine, env, stale) };
 }
 
 /** What an upload to the server ended with. */

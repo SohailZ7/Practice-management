@@ -328,4 +328,83 @@ mod tests {
         assert!(next_window(done, done).is_none());
         assert!(next_window(10 * r, 5 * r).is_none(), "fewer samples than done must not underflow");
     }
+
+    #[test]
+    fn power_loss_mid_write_leaves_the_last_good_checkpoint_readable() {
+        let d = tmp("power"); let key = [8u8; 32];
+        let id = new_uuid();
+        let mut j = sample(&id);
+        j.save(&d, &key).unwrap();
+        // a write that died half-way leaves a stray, truncated temp file next to the real one
+        let dir = d.join("journal").join(&id);
+        fs::write(dir.join("journal.tmp"), b"half a checkpoi").unwrap();
+        let back = Journal::load(&d, &key, &id).unwrap();
+        assert_eq!(back.seq, j.seq);
+        assert_eq!(leftovers(&d), vec![id.clone()]);
+        // the next save replaces the stray file cleanly
+        j.seq = 9; j.save(&d, &key).unwrap();
+        assert_eq!(Journal::load(&d, &key, &id).unwrap().seq, 9);
+        assert!(recover(&d, &key, None) == 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn disk_full_or_unwritable_fails_loudly_and_keeps_the_previous_checkpoint() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmp("full"); let key = [2u8; 32];
+        let id = new_uuid();
+        let mut j = sample(&id);
+        j.save(&d, &key).unwrap();
+        let dir = d.join("journal").join(&id);
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+        j.seq = 50; j.segments[0].text = "lost words".into();
+        let r = j.save(&d, &key);
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        if r.is_ok() { return; } // running as a user that ignores permissions (root): nothing to prove
+        let back = Journal::load(&d, &key, &id).unwrap();
+        assert_eq!(back.seq, 2, "the older checkpoint is untouched");
+        assert!(!back.text().contains("lost words"));
+    }
+
+    #[test]
+    fn two_app_instances_never_mix_up_recordings() {
+        let d = tmp("two"); let key = [1u8; 32];
+        let (a, b) = (new_uuid(), new_uuid());
+        let mut ja = sample(&a); ja.visit_id = "visit-a".into();
+        let mut jb = sample(&b); jb.visit_id = "visit-b".into(); jb.segments[0].text = "other instance".into();
+        ja.save(&d, &key).unwrap(); jb.save(&d, &key).unwrap();
+        // instance 1 recovers while instance 2 is still recording b: b is left alone
+        assert_eq!(recover(&d, &key, Some(&b)), 1);
+        assert_eq!(leftovers(&d), vec![b.clone()]);
+        assert!(queue::read_metadata(&d, &key, "visit-a").is_ok());
+        assert!(Journal::load(&d, &key, &b).unwrap().text().contains("other instance"));
+    }
+
+    #[test]
+    fn sleep_and_wake_a_huge_gap_is_one_window_not_a_loop_or_a_skip() {
+        let r = SAMPLE_RATE as usize;
+        // the Mac slept: far more audio is "available" than before, in a single step
+        let w = next_window(0, 3600 * r).expect("a window");
+        assert_eq!(w.start, 0);
+        assert!(w.end <= 3600 * r && w.end > w.start);
+        // working through an hour of backlog terminates and covers it in order
+        let mut done = 0usize; let mut steps = 0;
+        while let Some(w) = next_window(done, 3600 * r) { assert_eq!(w.start, done); done = w.end; steps += 1; assert!(steps < 500); }
+        assert!(3600 * r - done < 31 * r);
+    }
+
+    #[test]
+    fn an_update_restart_during_recording_recovers_everything_saved_so_far() {
+        let d = tmp("update"); let key = [6u8; 32];
+        let id = new_uuid();
+        let mut j = sample(&id);
+        for n in 1..=4 { j.seq = n; j.segments[0].text = format!("words up to checkpoint {n}"); j.save(&d, &key).unwrap(); }
+        // the app is replaced and relaunched: a new process finds the journal and queues it
+        assert_eq!(recover(&d, &key, None), 1);
+        assert!(queue::read_text(&d, &key, "v1").unwrap().contains("words up to checkpoint 4"));
+        assert!(leftovers(&d).is_empty());
+        // relaunching again changes nothing and loses nothing
+        assert_eq!(recover(&d, &key, None), 0);
+        assert!(queue::read_metadata(&d, &key, "v1").is_ok());
+    }
 }

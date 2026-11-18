@@ -538,4 +538,54 @@ mod tests {
         assert!(list(&dir, &key).is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
+
+    fn pending(id: &str, rec: Option<&str>) -> Metadata {
+        Metadata { version: "1.0".into(), visit_id: id.into(), environment: "production".into(), created_at: rfc3339_utc(0),
+            duration_seconds: 1.0, status: Status::Pending, recording_id: rec.map(String::from), link_visit: Some(id.into()), confirmed_at: None }
+    }
+
+    #[test]
+    fn the_safety_copy_window_is_exact_and_never_touches_unsent_items() {
+        let dir = tmp(); let key = [5u8; 32];
+        let t0 = 1_800_000_000u64;
+        save(&dir, &key, &pending("unsent", Some("r1")), &[seg("a", "words", "mic", 0.0)], "").unwrap();
+        save(&dir, &key, &pending("sent", Some("r2")), &[seg("a", "words", "mic", 0.0)], "").unwrap();
+        mark_confirmed(&dir, &key, "sent", &rfc3339_utc(t0)).unwrap();
+        assert_eq!(sweep_confirmed(&dir, &key, t0 + 86_399, 86_400), 0, "one second early: kept");
+        assert_eq!(sweep_confirmed(&dir, &key, t0 + 86_400, 86_400), 1, "exactly 24 h: shredded");
+        // a year later the unsent one is still there, untouched
+        assert_eq!(sweep_confirmed(&dir, &key, t0 + 365 * 86_400, 86_400), 0);
+        assert!(read_text(&dir, &key, "unsent").is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_confirmed_item_with_an_unreadable_date_is_kept_not_shredded() {
+        let dir = tmp(); let key = [5u8; 32];
+        save(&dir, &key, &pending("odd", Some("r")), &[seg("a", "words", "mic", 0.0)], "").unwrap();
+        mark_confirmed(&dir, &key, "odd", "not a date").unwrap();
+        assert_eq!(sweep_confirmed(&dir, &key, u64::MAX / 2, 86_400), 0);
+        assert!(read_text(&dir, &key, "odd").is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_wrong_key_sweep_destroys_nothing() {
+        let dir = tmp();
+        save(&dir, &[5u8; 32], &pending("k", Some("r")), &[seg("a", "words", "mic", 0.0)], "").unwrap();
+        mark_confirmed(&dir, &[5u8; 32], "k", &rfc3339_utc(1)).unwrap();
+        assert_eq!(sweep_confirmed(&dir, &[9u8; 32], 9_000_000_000, 86_400), 0);
+        assert!(read_text(&dir, &[5u8; 32], "k").is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn confirming_twice_is_harmless_and_keeps_the_first_text() {
+        let dir = tmp(); let key = [5u8; 32];
+        save(&dir, &key, &pending("twice", Some("r")), &[seg("a", "same words", "mic", 0.0)], "").unwrap();
+        mark_confirmed(&dir, &key, "twice", &rfc3339_utc(100)).unwrap();
+        mark_confirmed(&dir, &key, "twice", &rfc3339_utc(200)).unwrap();
+        assert!(read_text(&dir, &key, "twice").unwrap().contains("same words"));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

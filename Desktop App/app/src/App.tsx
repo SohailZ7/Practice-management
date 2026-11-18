@@ -862,7 +862,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
 
 /** The recorder's own state for this row (recording, saved on this Mac, ...). Null when there is nothing to say; the
  *  visit's status itself is the dropdown above it. */
-function pillFor(state: RowState, queued: boolean, _visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } | null {
+export function pillFor(state: RowState, queued: boolean, _visit: Visit): { label: string; tone: "ok" | "warn" | "bad" | "" } | null {
   if (state.phase === "recording") return { label: "Recording", tone: "bad" };
   if (state.phase === "working") return { label: "Saving on this Mac…", tone: "warn" };
   if (state.phase === "uploading") return { label: "Uploading…", tone: "warn" };
