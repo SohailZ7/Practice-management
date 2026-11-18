@@ -24,3 +24,4 @@ Web 1.21 | Admin: People tab (login + module access, one row per person), merged
 Web 1.22 | Redesign foundation: new colors and fonts (Inter, Newsreader), sidebar, page headers, tables, pills, buttons; STAGING/PRODUCTION label in the sidebar; Schedule header and day summary | 3f99185 (staging, rev practice-mgmt-00089-pex)
 Web 1.23 | Redesign: Billing (month heading, pill tabs, summary of shown/waiting/entered encounters, restyled list); tab style now shared by all screens | ea5bc42 (staging, rev practice-mgmt-00091-lep)
 Web 1.24 | Desktop transcript inbox: upload by recording ID with no visit needed, idempotent with checksum, link later, list unlinked; 401 and 403 replies now say why | e4b59c6 (staging, rev practice-mgmt-00093-tah)
+Web 1.25 | Schedule board loads faster (reads only the columns it shows); scheduled synthetic upload check route for the Desktop inbox (made-up text, no patient data) | pending

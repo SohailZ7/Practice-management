@@ -80,3 +80,15 @@ describe("401/403 reasons", () => {
     expect(src).toContain('{ error: e.code, reason: e.reason }');
   });
 });
+
+describe("synthetic check", () => {
+  it("round trips with made-up text and reports ok", async () => {
+    (store as unknown as { rows: Map<string, Row> }).rows.clear();
+    const { db } = await import("../src/lib/db");
+    (db as unknown as { recordingInbox: Record<string, unknown> }).recordingInbox.deleteMany = async () => ({ count: 0 });
+    const { runSyntheticCheck } = await import("../src/lib/notes/inboxSynthetic");
+    const r = await runSyntheticCheck();
+    expect(r.ok).toBe(true);
+    expect([...store.rows.values()][0]).toMatchObject({ final: true, seq: 2, createdByEmail: "synthetic-check@bbc.invalid" });
+  });
+});

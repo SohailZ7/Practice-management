@@ -29,7 +29,13 @@ export async function visitsForDate(date: string, opts: { fullNames?: boolean } 
   const tracking = await trackingOnlyNames();
   const visits = await db.visit.findMany({
     where: { visitDate: date },
-    include: { patient: true, documents: { orderBy: { label: "asc" } } },
+    // Only the columns the board shows. Whole documents (their encrypted markdown) and the whole patient row are
+    // not needed here, and decrypting them for every visit was most of the cost of this query.
+    select: {
+      id: true, patientId: true, visitDate: true, appointmentType: true, program: true, apptTime: true, providerName: true, status: true, transcript: true,
+      patient: { select: { lastName: true, firstName: true } },
+      documents: { select: { id: true, kind: true, label: true, draft: true, updatedAt: true }, orderBy: { label: "asc" } },
+    },
     orderBy: { createdAt: "asc" },
   });
   const rows = visits.map((v) => ({
