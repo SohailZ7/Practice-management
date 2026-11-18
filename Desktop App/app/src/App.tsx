@@ -26,7 +26,7 @@ import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
-import { retryAll, sessionFor, setCopyLabel, uploadQueued } from "./lib/queue";
+import { retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
 type RowState =
@@ -38,6 +38,8 @@ type RowState =
   | { phase: "failed"; message: string };
 
 const SAVED_MESSAGE = "Saved on this Mac, will retry";
+/** The real reason (when known) followed by the reassurance. */
+const savedWith = (f?: UploadFailure) => (f ? `${f.message} ${SAVED_MESSAGE}.` : SAVED_MESSAGE);
 
 export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
@@ -67,6 +69,15 @@ export function App() {
     });
   }, [visits]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  /** Why each saved transcript has not gone yet (by visit id), from the latest attempt. Memory only. */
+  const [failures, setFailures] = useState<Record<string, UploadFailure>>({});
+  const noteResults = useCallback((results: UploadResult[]) => {
+    setFailures((prev) => {
+      const next = { ...prev };
+      for (const r of results) { if (r.failure) next[r.visitId] = r.failure; else delete next[r.visitId]; }
+      return next;
+    });
+  }, []);
   const [retrying, setRetrying] = useState(false);
 
   const env: EnvironmentId = status && isEnvironment(status.settings.environment) ? status.settings.environment : "production";
@@ -169,13 +180,13 @@ export function App() {
     if (!engine) return;
     setRetrying(true);
     try {
-      await retryAll(engine);
+      noteResults(await retryAll(engine));
       await loadQueue();
       await refreshStatus();
     } finally {
       setRetrying(false);
     }
-  }, [engine, loadQueue, refreshStatus]);
+  }, [engine, loadQueue, refreshStatus, noteResults]);
 
   // Retry at launch, and again whenever a sign-in becomes available (a different environment or a fresh sign-in).
   const signedInKey = status ? JSON.stringify(status.signed_in) : "";
@@ -189,6 +200,20 @@ export function App() {
 
   const missing: string[] = [];
   const queuedIds = new Set(queue.map((q) => q.visit_id));
+  const queueFailures = queue.map((q) => failures[q.visit_id]).filter((f): f is UploadFailure => !!f);
+  const reasons = [...new Set(queueFailures.map((f) => f.message))];
+  const signInEnvs = [...new Set(queueFailures.filter((f) => f.kind === "signed_out").map((f) => f.environment))];
+  // Opens the sign-in for the environment the transcript is waiting on (it may not be the one selected now).
+  const signInTo = async (target: EnvironmentId) => {
+    if (!engine) return;
+    try {
+      if (target !== env) await engine.setEnvironment(target);
+      await refreshStatus();
+      setTab("setup");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const changeEnvironment = async (next: EnvironmentId) => {
     if (!engine || next === env) return;
@@ -234,6 +259,10 @@ export function App() {
           <div className="banner" role="status">
             {queue.length} transcript{queue.length === 1 ? " is" : "s are"} saved on this Mac and will be sent when the
             practice app is reachable.{" "}
+            {reasons.length > 0 && <span className="err" data-testid="queue-reason">Why: {reasons.join(" ")} </span>}
+            {signInEnvs.map((e) => (
+              <button key={e} className="link" onClick={() => void signInTo(e)}>Sign in to {labelFor(e)}</button>
+            ))}{" "}
             <button className="link" disabled={retrying} onClick={() => void retryQueue()}>{retrying ? "Retrying…" : "Retry all"}</button>
           </div>
         )}
@@ -363,7 +392,7 @@ export function App() {
                     <Row key={v.id} visit={v} date={date} selecting={selecting} prodSignedIn={!!status?.signed_in.production}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
-                      queued={queuedIds.has(v.id)} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
+                      queued={queuedIds.has(v.id)} failure={failures[v.id]} onResult={(r) => noteResults([r])} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
                       onState={setRow} engine={engine!} session={session}
                       onSent={() => { void load(); void loadQueue(); }} />
                   ))}
@@ -519,8 +548,8 @@ function ModelBanner({ engine, onDone, compact }: { engine: Engine; onDone: () =
   );
 }
 
-function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSelect, state, ready, queued, env, onState, engine, session, onSent }: {
-  visit: Visit; date: string; selecting: boolean; prodSignedIn: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; env: EnvironmentId;
+function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSelect, state, ready, queued, failure, onResult, env, onState, engine, session, onSent }: {
+  visit: Visit; date: string; selecting: boolean; prodSignedIn: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; failure?: UploadFailure; onResult: (r: UploadResult) => void; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void;
 }) {
@@ -622,7 +651,8 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
       const item = (await engine.queueList()).find((q) => q.visit_id === visit.id);
       setCopyLabel(visit.id, `${visit.realInitials ?? visit.initials}_${date}_${(visit.apptTime ?? "").replace(/[^0-9apmAPM]/g, "") || "notime"}`);
       const result = item ? await uploadQueued(engine, item, session) : { ok: false, reason: "missing" };
-      onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: SAVED_MESSAGE });
+      if ("visitId" in result) onResult(result);
+      onState(visit.id, result.ok ? { phase: "sent", note: result.reason } : { phase: "saved", reason: savedWith("failure" in result ? result.failure : undefined) });
       onSent();
     } catch (e) {
       onState(visit.id, { phase: "failed", message: e instanceof Error ? e.message : String(e) });
@@ -670,7 +700,7 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
         {gen?.phase === "failed" && <div className="err">{gen.message}</div>}
         {gen?.phase === "done" && <div>{gen.documents.length ? "Documents ready." : ""}{gen.failedTypes.length > 0 && <span className="err"> Could not write: {gen.failedTypes.join(", ")}.</span>}</div>}
         {state.phase === "sent" && <>Transcript sent{state.note && <span className="err"> ({state.note})</span>}</>}
-        {state.phase === "idle" && queued && <span className="err">{SAVED_MESSAGE}</span>}
+        {state.phase === "idle" && queued && <span className="err" data-testid="saved-reason">{savedWith(failure)}</span>}
       </td>
       <td className="docs"><div className="docs-cell"><DocumentIcons visit={visit} session={session} refreshKey={gen?.phase === "done" ? "done" : ""} />
       <button className="secondary gen-btn" disabled={!canGenerate || visit.documentCount > 0 || gen?.phase === "done" || gen?.phase === "running" || state.phase === "recording" || state.phase === "working"}
