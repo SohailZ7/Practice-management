@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://practice-mgmt-802176721153.us-east4.run.app https://practice-mgmt-321509350517.us-east4.run.app http://localhost:3000"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://practice-mgmt-802176721153.us-east4.run.app"
     }
   },
   "plugins": {

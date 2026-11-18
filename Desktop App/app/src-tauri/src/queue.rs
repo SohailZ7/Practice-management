@@ -456,4 +456,22 @@ mod tests {
         assert_eq!(list(&dir, &FIXTURE_KEY).len(), 1);
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn items_recorded_against_other_environments_are_listed_and_kept() {
+        // The released app only talks to Production, but an older build's staging or localhost items must still list
+        // (so the banner can offer Export / Keep / Discard) and must never be removed by listing.
+        let dir = tmp();
+        let key = [6u8; 32];
+        for (id, env) in [("fake-stg", "staging"), ("fake-loc", "localhost"), ("fake-prod", "production")] {
+            let meta = Metadata { version: "1.0".into(), visit_id: id.into(), environment: env.into(),
+                created_at: rfc3339_utc(0), duration_seconds: 3.0, status: Status::Pending };
+            save(&dir, &key, &meta, &[seg("a", "made-up", "mic", 0.0)], "").unwrap();
+        }
+        let envs: Vec<String> = list(&dir, &key).into_iter().map(|m| m.environment).collect();
+        assert_eq!(envs.len(), 3);
+        for e in ["staging", "localhost", "production"] { assert!(envs.iter().any(|x| x == e)); }
+        assert!(dir.join("queue/fake-stg/transcripts.json").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

@@ -1,10 +1,10 @@
 // Uploading the transcripts saved on this Mac. A queued transcript is uploaded to the environment recorded when it
 // was saved (not the one currently selected) and is deleted only after the server confirms.
 import { ApiFailure, pushTranscript, SignedOutError, type Session } from "./api";
-import { labelFor, urlFor } from "./environments";
+import { isEnvironment, labelFor, urlFor } from "./environments";
 import type { Engine, QueueItem } from "./engine";
 
-export type FailureKind = "signed_out" | "no_access" | "not_found" | "unreachable" | "server" | "refused" | "local";
+export type FailureKind = "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "server" | "refused" | "local";
 
 /** Why an upload failed, in plain words. Built only from the error kind, status and short code: never from the
  *  transcript, a patient name or the server's free text, so it is safe to show and to log. */
@@ -20,13 +20,19 @@ export function describeUploadFailure(e: unknown, env: QueueItem["environment"])
   if (e instanceof ApiFailure) {
     if (e.status === 401) return f("signed_out", `Signed out: sign in again to ${where}.`);
     if (e.status === 403) return f("no_access", "This account does not have Notes edit access.");
-    if (e.status === 404) return f("not_found", `That visit is not in ${where} (it may belong to another environment).`);
+    if (e.status === 404) return f("not_found", `This visit is not in the ${where} app. Add it on the ${where} website.`);
     if (e.status >= 500) return f("server", `The practice app had a problem (HTTP ${e.status}).`);
     return f("refused", `The practice app refused the transcript (HTTP ${e.status}${/^[a-z_]{1,40}$/.test(e.code ?? "") ? " " + e.code : ""}).`);
   }
   // Anything else from the send itself is the network: offline, DNS, timeout, blocked.
   return f("unreachable", "Cannot reach the practice app.");
 }
+
+/** True for a saved transcript recorded against an environment this build does not connect to (the old staging or
+ *  localhost switch). It is kept, never sent anywhere, and the provider chooses Export, Keep or Discard. */
+export const isOtherEnvironment = (item: QueueItem): boolean => !isEnvironment(item.environment);
+
+export const OTHER_ENV_MESSAGE = "Recorded against the test environment. It is kept on this Mac and is not sent to Production. Export it, keep it, or discard it.";
 
 /** Marks a reason as already mapped (so a local failure is not mistaken for a network one). */
 class LocalReadFailure extends Error {}
@@ -39,6 +45,7 @@ const inFlight = new Map<string, Promise<UploadResult>>();
 
 /** A session for an environment, using the stored sign-in; null when not signed in there. */
 export async function sessionFor(engine: Engine, env: QueueItem["environment"]): Promise<Session | null> {
+  if (!isEnvironment(env)) return null;
   const token = await engine.accessToken(env);
   if (!token) return null;
   return { baseUrl: urlFor(env), accessToken: token, refresh: (stale) => engine.refreshAccessToken(env, stale) };
@@ -50,6 +57,10 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
   if (running) return running;
   const p = (async (): Promise<UploadResult> => {
     try {
+      if (isOtherEnvironment(item)) {
+        const failure: UploadFailure = { kind: "other_env", message: OTHER_ENV_MESSAGE, environment: item.environment };
+        return { visitId: item.visit_id, ok: false, reason: failure.message, failure };
+      }
       if (item.status !== "uploaded") {
         const s = session ?? (await sessionFor(engine, item.environment));
         if (!s) {

@@ -3,7 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(feature = "staging-test"))]
 const SERVICE: &str = "org.practice.notes";
+#[cfg(feature = "staging-test")]
+const SERVICE: &str = "org.practice.notes.stagingtest";
 
 /// The pair the practice app issues for one environment.
 #[derive(Serialize, Deserialize, Clone)]

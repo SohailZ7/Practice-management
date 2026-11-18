@@ -35,7 +35,8 @@ fn home() -> PathBuf {
 fn support_dir() -> PathBuf {
     let dir = match std::env::var("PRACTICE_APP_DIR") {
         Ok(d) => PathBuf::from(d),
-        Err(_) => home().join("Library/Application Support/PracticeNotes"),
+        // The staging TEST build keeps everything (queue, settings, key) apart from the real app.
+        Err(_) => home().join(if cfg!(feature = "staging-test") { "Library/Application Support/PracticeNotesStagingTest" } else { "Library/Application Support/PracticeNotes" }),
     };
     let _ = fs::create_dir_all(&dir);
     dir
@@ -45,12 +46,19 @@ fn settings_path() -> PathBuf {
     support_dir().join("settings.json")
 }
 
-/// The three servers the app can talk to. There is deliberately no free-text address.
-pub const ENVIRONMENTS: [(&str, &str); 3] = [
+/// The servers this build can talk to. There is deliberately no free-text address. The released app talks to
+/// PRODUCTION ONLY (Sohail, 2026-11-18); staging and localhost exist only in the separate "Staging TEST" build
+/// (`--features staging-test`), which has its own bundle id, Keychain item and data folder.
+#[cfg(not(feature = "staging-test"))]
+pub const ENVIRONMENTS: [(&str, &str); 1] = [
     ("production", "https://practice-mgmt-802176721153.us-east4.run.app"),
+];
+#[cfg(feature = "staging-test")]
+pub const ENVIRONMENTS: [(&str, &str); 2] = [
     ("staging", "https://practice-mgmt-321509350517.us-east4.run.app"),
     ("localhost", "http://localhost:3000"),
 ];
+pub const DEFAULT_ENV: &str = ENVIRONMENTS[0].0;
 
 pub fn env_url(env: &str) -> Result<&'static str, String> {
     ENVIRONMENTS.iter().find(|(k, _)| *k == env).map(|(_, u)| *u).ok_or_else(|| "unknown environment".to_string())
@@ -68,7 +76,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { environment: "production".into(), transcript_copy_dir: None }
+        Self { environment: DEFAULT_ENV.into(), transcript_copy_dir: None }
     }
 }
 
@@ -90,7 +98,7 @@ fn parse_settings(v: &serde_json::Value) -> (Settings, Option<Legacy>, bool) {
         .map(|(k, _)| k.to_string());
     let environment = {
         let e = text("environment");
-        if env_url(&e).is_ok() { e } else { url_env.clone().unwrap_or_else(|| "production".into()) }
+        if env_url(&e).is_ok() { e } else { url_env.clone().unwrap_or_else(|| DEFAULT_ENV.into()) }
     };
     let transcript_copy_dir = v.get("transcript_copy_dir").and_then(|x| x.as_str()).filter(|d| !d.is_empty()).map(String::from);
     let (access, refresh) = (text("access_token"), text("refresh_token"));
@@ -677,6 +685,31 @@ async fn save_transcript_copy(visit_id: String, label: String) -> Result<bool, S
     Ok(true)
 }
 
+/// Writes one saved (unsent) transcript to the Downloads folder as plain text so it can never be stranded, and returns
+/// the file's path. The queued copy is left exactly as it was. The file name carries no patient information.
+#[tauri::command]
+async fn export_queued_transcript(visit_id: String) -> Result<String, String> {
+    let text = queue::read_text(&support_dir(), &keystore::queue_key()?, &visit_id)?;
+    let dir = home().join("Downloads");
+    if !dir.is_dir() {
+        return Err("The Downloads folder was not found.".into());
+    }
+    let stem = clean_file_stem(&format!("Unsent-transcript-{}", visit_id.chars().take(8).collect::<String>()));
+    let mut out = dir.join(format!("{stem}.txt"));
+    let mut n = 2;
+    while out.exists() {
+        out = dir.join(format!("{stem}-{n}.txt"));
+        n += 1;
+    }
+    fs::write(&out, text).map_err(|_| "Could not save the transcript file.".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&out, fs::Permissions::from_mode(0o600));
+    }
+    Ok(out.to_string_lossy().into_owned())
+}
+
 /// Saves a document's PDF (the latest version, as the practice app renders it) into the Downloads folder and returns
 /// the file's path. Nothing is logged; the file is a document the provider is entitled to keep.
 #[tauri::command]
@@ -752,7 +785,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, download_document_pdf,
+            queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context
         ])
         .run(tauri::generate_context!())
@@ -789,13 +822,34 @@ mod tests {
     #[test]
     fn settings_round_trip_and_default_to_production() {
         with_temp_root(|| {
-            assert_eq!(load_settings().environment, "production");
-            store_settings(&Settings { environment: "staging".into(), transcript_copy_dir: None }).unwrap();
-            assert_eq!(load_settings().environment, "staging");
+            assert_eq!(load_settings().environment, DEFAULT_ENV);
+            store_settings(&Settings { environment: DEFAULT_ENV.into(), transcript_copy_dir: None }).unwrap();
+            assert_eq!(load_settings().environment, DEFAULT_ENV);
+            // An environment this build does not have (a settings file from a build that had a staging switch) falls
+            // back to the default; it never selects another server.
+            store_settings(&Settings { environment: "elsewhere".into(), transcript_copy_dir: None }).unwrap();
+            assert_eq!(load_settings().environment, DEFAULT_ENV);
             assert!(!fs::read_to_string(settings_path()).unwrap().contains("token"));
         })
     }
 
+    #[cfg(not(feature = "staging-test"))]
+    #[test]
+    fn the_release_build_knows_only_production() {
+        assert_eq!(ENVIRONMENTS.len(), 1);
+        assert_eq!(ENVIRONMENTS[0].0, "production");
+        assert!(env_url("staging").is_err() && env_url("localhost").is_err());
+        // A settings file left by the old build that pointed at staging or this Mac now means production.
+        for old in ["staging", "localhost"] {
+            let (s, _, _) = parse_settings(&serde_json::json!({ "environment": old }));
+            assert_eq!(s.environment, "production");
+        }
+        let (s, legacy, _) = parse_settings(&serde_json::json!({ "practice_url": "https://practice-mgmt-321509350517.us-east4.run.app", "access_token": "a" }));
+        assert_eq!(s.environment, "production");
+        assert!(legacy.is_none());
+    }
+
+    #[cfg(feature = "staging-test")]
     #[test]
     fn old_settings_files_are_read_and_their_tokens_found() {
         let old = serde_json::json!({
@@ -809,7 +863,7 @@ mod tests {
         assert_eq!((l.env.as_str(), l.access.as_str(), l.refresh.as_str()), ("staging", "a", "r"));
         // A custom address maps to no environment: tokens are dropped, the default is production.
         let (s, legacy, dirty) = parse_settings(&serde_json::json!({ "practice_url": "https://other.example", "access_token": "a" }));
-        assert_eq!(s.environment, "production");
+        assert_eq!(s.environment, DEFAULT_ENV);
         assert!(legacy.is_none() && dirty);
         let (_, _, dirty) = parse_settings(&serde_json::json!({ "environment": "localhost" }));
         assert!(!dirty);

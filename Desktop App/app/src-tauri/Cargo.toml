@@ -39,4 +39,6 @@ cpal = "0.15"
 hound = "3.5"
 
 [features]
+# The separate Staging TEST build (see scripts/build-staging-test.sh). Never installed on staff Macs.
+staging-test = []
 dev-keystore = []

@@ -12,21 +12,21 @@ import { Mfa } from "./Mfa";
 import { clearGeneration, generationFor, startGenerate, subscribe } from "./lib/generate";
 import { Feedback } from "./Feedback";
 import { longDate, practiceToday, shiftDate as shift } from "./lib/dates";
-import { isPromoted, markPromoted, promoteBlocker, promoteVisit } from "./lib/promote";
 import { canShowFullNames, displayVisits, loadShowFull, saveShowFull } from "./lib/names";
 import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
 import { sendDiagnostics, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type ModelProgress, type QueueItem } from "./lib/engine";
-import { ENVIRONMENTS, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
+import { DEFAULT_ENVIRONMENT, ENVIRONMENTS, STAGING_TEST, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { UpdateBanner } from "./UpdateBanner";
 import { SpeakerDialog } from "./SpeakerDialog";
 import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
-import { retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
+import { isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
+import { SavedTranscripts } from "./SavedTranscripts";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
 type RowState =
@@ -80,7 +80,7 @@ export function App() {
   }, []);
   const [retrying, setRetrying] = useState(false);
 
-  const env: EnvironmentId = status && isEnvironment(status.settings.environment) ? status.settings.environment : "production";
+  const env: EnvironmentId = status && isEnvironment(status.settings.environment) ? status.settings.environment : DEFAULT_ENVIRONMENT;
   const signedIn = !!status?.signed_in[env];
   // The token is only valid for the environment it was fetched for: right after a switch there is none until the new one loads.
   const token = tokenFor(tokenState, env);
@@ -200,9 +200,6 @@ export function App() {
 
   const missing: string[] = [];
   const queuedIds = new Set(queue.map((q) => q.visit_id));
-  const queueFailures = queue.map((q) => failures[q.visit_id]).filter((f): f is UploadFailure => !!f);
-  const reasons = [...new Set(queueFailures.map((f) => f.message))];
-  const signInEnvs = [...new Set(queueFailures.filter((f) => f.kind === "signed_out").map((f) => f.environment))];
   // Opens the sign-in for the environment the transcript is waiting on (it may not be the one selected now).
   const signInTo = async (target: EnvironmentId) => {
     if (!engine) return;
@@ -229,9 +226,9 @@ export function App() {
 
   return (
     <>
-      {env !== "production" && (
-        <div className={`envbar ${env}`} role="status">
-          {labelFor(env).toUpperCase()} {env === "localhost" ? "(this Mac)" : "(test server)"}: not the production practice app
+      {STAGING_TEST && (
+        <div className={`envbar ${env}`} role="status" data-testid="test-build-banner">
+          STAGING TEST BUILD ({labelFor(env).toUpperCase()}): not the production practice app. For testing only. Never install on a staff Mac.
         </div>
       )}
       <div className="shell">
@@ -255,16 +252,9 @@ export function App() {
         <UpdateBanner session={session} busy={busy} />
         {message && <div className="banner" role="status">{message} <button className="link" onClick={() => setMessage("")}>Dismiss</button></div>}
 
-        {queue.length > 0 && (
-          <div className="banner" role="status">
-            {queue.length} transcript{queue.length === 1 ? " is" : "s are"} saved on this Mac and will be sent when the
-            practice app is reachable.{" "}
-            {reasons.length > 0 && <span className="err" data-testid="queue-reason">Why: {reasons.join(" ")} </span>}
-            {signInEnvs.map((e) => (
-              <button key={e} className="link" onClick={() => void signInTo(e)}>Sign in to {labelFor(e)}</button>
-            ))}{" "}
-            <button className="link" disabled={retrying} onClick={() => void retryQueue()}>{retrying ? "Retrying…" : "Retry all"}</button>
-          </div>
+        {engine && queue.length > 0 && (
+          <SavedTranscripts engine={engine} queue={queue} failures={failures} retrying={retrying}
+            onRetry={() => void retryQueue()} onSignIn={(e) => void signInTo(e)} onChanged={() => void loadQueue()} />
         )}
 
         {status && engine && !signedIn && (
@@ -389,7 +379,7 @@ export function App() {
                 <thead><tr>{selecting && <th><input type="checkbox" aria-label="Select all visits" checked={visits.length > 0 && selected.size === visits.length} onChange={(e) => setSelected(e.target.checked ? new Set(visits.map((v) => v.id)) : new Set())} /></th>}<th>Patient</th><th>Time</th><th>Program</th><th>Type</th><th>Status</th><th>Documents</th><th>Actions</th></tr></thead>
                 <tbody>
                   {displayVisits(visits, showFull && canShowFullNames(visits)).map((v) => (
-                    <Row key={v.id} visit={v} date={date} selecting={selecting} prodSignedIn={!!status?.signed_in.production}
+                    <Row key={v.id} visit={v} date={date} selecting={selecting}
                       selected={selected.has(v.id)}
                       onSelect={(on) => setSelected((cur) => { const n = new Set(cur); if (on) n.add(v.id); else n.delete(v.id); return n; })} state={rows[v.id] ?? { phase: "idle" }} ready={ready && !!session}
                       queued={queuedIds.has(v.id)} failure={failures[v.id]} onResult={(r) => noteResults([r])} queueItem={queue.find((q) => q.visit_id === v.id)} env={env}
@@ -548,20 +538,15 @@ function ModelBanner({ engine, onDone, compact }: { engine: Engine; onDone: () =
   );
 }
 
-function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSelect, state, ready, queued, failure, onResult, env, onState, engine, session, onSent }: {
-  visit: Visit; date: string; selecting: boolean; prodSignedIn: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; failure?: UploadFailure; onResult: (r: UploadResult) => void; env: EnvironmentId;
+function Row({ visit, date, selecting, queueItem, selected, onSelect, state, ready, queued, failure, onResult, env, onState, engine, session, onSent }: {
+  visit: Visit; date: string; selecting: boolean; queueItem: QueueItem | undefined; selected: boolean; onSelect: (on: boolean) => void; state: RowState; ready: boolean; queued: boolean; failure?: UploadFailure; onResult: (r: UploadResult) => void; env: EnvironmentId;
   onState: (id: string, s: RowState) => void;
   engine: Engine; session: Session; onSent: () => void;
 }) {
   const [secs, setSecs] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [promoteAsk, setPromoteAsk] = useState(false);
-  const [promoting, setPromoting] = useState(false);
-  const [promoteMsg, setPromoteMsg] = useState("");
-  const [promoted, setPromoted] = useState(() => isPromoted(visit.id));
-  const promoteWhyNot = state.phase === "recording" || state.phase === "working" ? "Finish the recording first."
-    : !prodSignedIn ? "Sign in to Production first (Setup)." : promoteBlocker(visit);
+
   const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
   useEffect(() => { setLocalStatus(undefined); }, [visit.status]);
   const shownStatus = localStatus ?? visit.status;
@@ -613,24 +598,6 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
     } finally {
       setBusy(false);
     }
-  }
-
-  async function promote() {
-    setPromoting(true); setPromoteMsg("");
-    try {
-      const prod = await sessionFor(engine, "production");
-      if (!prod) { setPromoteMsg("Sign in to Production first (Setup tab, choose Production). Nothing was changed."); return; }
-      const r = await promoteVisit(visit, date, {
-        readTranscript: async () => (await fetchTranscript(session, visit.id)).transcript,
-        listProduction: async (d) => (await fetchVisits(prod, d)).visits,
-        createProduction: (d, v) => createVisit(prod, d, v),
-        pushProduction: (id, text) => pushTranscript(prod, id, text),
-      });
-      if (r.ok) { markPromoted(visit.id, r.productionId); setPromoted(true); setPromoteMsg(r.already ? "Already in Production." : "Promoted to Production."); }
-      else setPromoteMsg(r.message);
-    } catch (e) {
-      setPromoteMsg(e instanceof Error ? e.message : "Promote failed. Nothing was lost.");
-    } finally { setPromoting(false); setPromoteAsk(false); }
   }
 
   async function stop() {
@@ -750,20 +717,6 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
           )}
           </>
         )}
-        {env === "staging" && state.phase !== "recording" && state.phase !== "working" && (
-          <>
-            {promoteAsk && (
-              <Modal title="Promote to production?" onClose={() => setPromoteAsk(false)} width={480}
-                footer={<>
-                  <button className="secondary" onClick={() => setPromoteAsk(false)}>Cancel</button>
-                  <button disabled={promoting} onClick={() => void promote()}>{promoting ? "Promoting…" : "Yes, promote"}</button>
-                </>}>
-                <p style={{ marginTop: 0 }}>This copies the visit for <strong>{visit.fullName}</strong>{visit.apptTime ? ` at ${visit.apptTime}` : ""} and its transcript to the <strong>real Production app</strong>. After that this button stays off for this visit.</p>
-              </Modal>
-            )}
-          </>
-        )}
-        {promoteMsg && <div className="small" role="status" style={{ flexBasis: "100%", textAlign: "right" }}>{promoteMsg}</div>}
         {state.phase !== "recording" && state.phase !== "working" && (
           <>
             {confirmDelete && (
@@ -789,12 +742,6 @@ function Row({ visit, date, selecting, prodSignedIn, queueItem, selected, onSele
             )}
           </>
         )}
-        {env === "staging" && (
-          <button className="secondary promote-btn" data-testid="promote-btn" disabled={!!promoteWhyNot || promoted || promoting}
-            title={promoted ? "Already promoted to Production" : promoteWhyNot || "Copy this visit and its transcript to the real Production app"}
-            onClick={() => setPromoteAsk(true)}>{promoted ? "Promoted" : promoting ? "Promoting…" : "Promote"}</button>
-        )}
-        {env === "staging" && !promoted && promoteWhyNot && <div className="small promote-why" data-testid="promote-why">{promoteWhyNot}</div>}
         <RowMenu items={[
           { label: "Transcript", title: "View the transcript (read-only)", onClick: () => setViewing(true) },
           { label: "Delete", danger: true, disabled: busy || state.phase === "recording" || state.phase === "working", title: "Remove this row from the day's list", onClick: () => setConfirmDelete(true) },
@@ -857,6 +804,7 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
         <span className="small">({__APP_COMMIT__}) · {urlFor(env).replace(/^https?:\/\//, "")}</span>
       </div>
 
+      {ENVIRONMENTS.length > 1 && (
       <label className="field">
         <span>Environment</span>
         <select value={env} disabled={locked} onChange={(e) => onEnvironment(e.target.value as EnvironmentId)}>
@@ -866,6 +814,7 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
           {locked ? "Locked while a recording is running. " : ""}Each environment has its own sign-in.
         </span>
       </label>
+      )}
 
       <fieldset className="theme-options" aria-label="Appearance">
         <legend className="small"><strong>Appearance</strong></legend>

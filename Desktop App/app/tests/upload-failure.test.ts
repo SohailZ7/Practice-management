@@ -18,7 +18,7 @@ describe("why a saved transcript has not been sent", () => {
   it("404 says the visit is not in that environment", () => {
     const f = describeUploadFailure(new ApiFailure(404, "not_found"), "production");
     expect(f.kind).toBe("not_found");
-    expect(f.message).toBe("That visit is not in Production (it may belong to another environment).");
+    expect(f.message).toBe("This visit is not in the Production app. Add it on the Production website.");
   });
   it("a network error says the practice app cannot be reached", () => {
     expect(describeUploadFailure(new TypeError("Failed to fetch"), "production").message).toBe("Cannot reach the practice app.");

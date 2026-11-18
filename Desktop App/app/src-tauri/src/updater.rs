@@ -28,6 +28,8 @@ fn updater(app: &tauri::AppHandle, base_url: &str, token: &str) -> Result<tauri_
 /// Asks the feed whether another version is published. Ok(None) = up to date.
 #[tauri::command]
 pub async fn check_update(app: tauri::AppHandle, base_url: String, token: String) -> Result<Option<UpdateInfo>, String> {
+    // The Staging TEST build never updates itself: the staging feed would replace it with the real app.
+    if cfg!(feature = "staging-test") { return Ok(None); }
     let u = updater(&app, &base_url, &token)?;
     match u.check().await {
         Ok(Some(up)) => Ok(Some(UpdateInfo { version: up.version.clone(), notes: up.body.clone().unwrap_or_default() })),
@@ -39,6 +41,7 @@ pub async fn check_update(app: tauri::AppHandle, base_url: String, token: String
 /// Downloads, verifies the signature, installs, and relaunches. The frontend only calls this when nothing is recording.
 #[tauri::command]
 pub async fn install_update(app: tauri::AppHandle, base_url: String, token: String) -> Result<(), String> {
+    if cfg!(feature = "staging-test") { return Err("The Staging TEST build does not update itself.".into()); }
     let u = updater(&app, &base_url, &token)?;
     let Some(up) = u.check().await.map_err(|e| short(&e.to_string()))? else { return Ok(()) };
     up.download_and_install(|_, _| {}, || {}).await.map_err(|e| short(&e.to_string()))?;
