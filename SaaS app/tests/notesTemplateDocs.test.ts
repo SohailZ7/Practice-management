@@ -10,6 +10,7 @@ const lazy = <T,>(fn: () => T) => ({ then: (res: any, rej: any) => Promise.resol
 const dupe = () => Object.assign(new Error("unique"), { code: "P2002" });
 
 const db = {
+  provider: { count: vi.fn(async () => 0) },
   visit: {
     findUnique: vi.fn(async ({ where, include }: any) => {
       const v = state.visits.find((x) => x.id === where.id);

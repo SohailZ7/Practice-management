@@ -4,6 +4,7 @@
 // Versions are insert-only. (documentId, version) is unique in the database, so two saves that start from the same
 // base version cannot both succeed: the loser gets stale_version.
 
+import { isTrackingOnlyName } from "./trackingOnly";
 import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../desktop/api";
@@ -66,6 +67,7 @@ export type GenerateDeps = { llm?: Llm };
 export async function generateDocs(actor: Actor, visitId: string, requested: unknown, deps: GenerateDeps = {}) {
   const visit = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true, documents: true } });
   if (!visit) throw new ApiError(404, "not_found");
+  if (await isTrackingOnlyName(visit.providerName)) throw new ApiError(409, "tracking_only");
   if (!visit.transcript.trim()) throw new ApiError(409, "no_transcript");
   if (!modelConfigured()) throw new ApiError(409, "model_not_configured");
 

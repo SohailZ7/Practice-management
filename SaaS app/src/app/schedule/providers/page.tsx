@@ -47,6 +47,9 @@ export default async function ProvidersPage({
               <input name="zoomLink" defaultValue={p.zoomLink} placeholder="Zoom link" className="grow" />
               <input name="zoomPassword" defaultValue={p.zoomPassword} placeholder="Zoom password" autoComplete="off" />
               <input name="notes" defaultValue={p.notes} placeholder="Notes" className="grow" />
+              <label className="small" title="Counted for patients seen and revenue left on the table. Never reaches billing, documents, invoices or timesheets.">
+                <input type="checkbox" name="trackingOnly" defaultChecked={p.trackingOnly} /> Not B&amp;B (tracking only)
+              </label>
               <button type="submit">Save</button>
             </div>
           </form>

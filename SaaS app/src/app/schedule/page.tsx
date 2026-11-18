@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { requireAccess, requireUser } from "@/lib/session";
 import { redirect } from "next/navigation";
@@ -65,7 +66,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
     hasSchedule ? db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }) : Promise.resolve([]),
   ]);
   const providerName = providers.find((p) => p.id === providerFilter)?.name;
-  const visits = visitsDay ? (await visitsForDate(date)).filter((v) => !providerFilter || !providerName || v.providerName === providerName) : [];
+  const isProviderish = user.role === "ADMIN" || user.role === "PROVIDER";
+  const military = cookies().get("bbc_clock")?.value === "24";
+  const visits = visitsDay ? (await visitsForDate(date, { fullNames: isProviderish && user.showFullNames })).filter((v) => !providerFilter || !providerName || v.providerName === providerName) : [];
   const entries = await entryDTOs(rows);
   // One entry per page load: view, date range, provider filter id and a count. Never client names.
   const providerId = !providerFilter ? "all" : providers.some((p) => p.id === providerFilter) ? providerFilter : "unknown";
@@ -140,7 +143,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
       </div>
 
       {visitsDay && (
-        <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded promote={promoteFor(user)} />
+        <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded promote={promoteFor(user)} military={military} showProvider={isProviderish} providerOptions={providers.map((p) => p.name)} providerFilter={providerFilter} />
       )}
 
       {visitsDay && entries.length > 0 && <h2 style={{ marginTop: "1.5rem" }}>Other schedule entries (not linked to a visit)</h2>}

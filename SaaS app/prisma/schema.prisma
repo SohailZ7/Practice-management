@@ -71,6 +71,8 @@ model Provider {
   notes        String          @default("")
   employeeId   String?         @unique
   employee     Employee?       @relation(fields: [employeeId], references: [id])
+  // Tracked for volume and revenue only: never flows to billing, documents, invoices or timesheets.
+  trackingOnly Boolean         @default(false)
   entries      ScheduleEntry[]
 }
 

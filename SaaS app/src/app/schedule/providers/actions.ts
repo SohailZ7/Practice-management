@@ -17,7 +17,7 @@ export async function addProvider(form: FormData) {
   if (employeeId && (await db.provider.findUnique({ where: { employeeId } }))) {
     flash(BACK, "error", "That employee is already linked to a provider.");
   }
-  const created = await db.provider.create({ data: { name, employeeId } });
+  const created = await db.provider.create({ data: { name, employeeId, trackingOnly: form.get("trackingOnly") === "on" } });
   await audit(user.email, "provider.add", `provider ${created.id}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Added ${name}.`);
@@ -40,9 +40,15 @@ export async function saveProvider(form: FormData) {
       zoomPassword: str(form, "zoomPassword"),
       hours: str(form, "hours"),
       notes: str(form, "notes"),
+      trackingOnly: form.get("trackingOnly") === "on",
     },
   });
-  await audit(user.email, "provider.update", `provider ${id}`);
+  if (form.get("trackingOnly") === "on") {
+    // Flagging a provider pulls their existing visits out of Schedule rows, which billing and timesheets read.
+    const theirs = await db.visit.findMany({ where: { providerName: { equals: name, mode: "insensitive" } }, select: { id: true } });
+    await db.scheduleEntry.deleteMany({ where: { visitId: { in: theirs.map((v) => v.id) } } });
+  }
+  await audit(user.email, "provider.update", `provider ${id} trackingOnly=${form.get("trackingOnly") === "on"}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved ${name}.`);
 }

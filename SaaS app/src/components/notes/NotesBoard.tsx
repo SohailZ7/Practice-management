@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
 import type { VisitOptions } from "@/lib/notes/options";
-import { getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { setClockStyle, getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
@@ -13,6 +13,8 @@ import { GenerateDialog } from "./GenerateDialog";
 import { Modal } from "../Modal";
 import { VisitsTable } from "./VisitsTable";
 import { PromoteDialog } from "./PromoteDialog";
+import { normalizeTyped, formatTimeText, TIME_PRESETS } from "@/lib/notes/scheduleTime";
+import Link from "next/link";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -22,8 +24,12 @@ const shift = (iso: string, days: number) => {
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = false, promote = null }: {
+export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = false, promote = null, military = false, showProvider = false, providerOptions = [], providerFilter = "" }: {
   date: string; visits: VisitRow[]; canEdit: boolean; defaultProvider: string; embedded?: boolean;
+  /** Show times as 0900-1200 (a per-person choice kept in a cookie). */
+  military?: boolean;
+  /** Provider column, editable: providers and admins only. */
+  showProvider?: boolean; providerOptions?: string[]; providerFilter?: string;
   /** Set only for an admin on staging with Promote configured (and whether their full names are on). */
   promote?: { prodUrl: string; clientId: string; fullNames: boolean } | null;
 }) {
@@ -54,6 +60,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
       <div className="row" style={{ marginBottom: ".75rem" }}>
         {!embedded && <h1 style={{ margin: 0 }}>Schedule</h1>}
         <span className="grow" />
+        <button className="secondary" aria-pressed={military} title="Show times as 0900-1200" disabled={pending} onClick={() => start(async () => { await setClockStyle(!military); router.refresh(); })}>{military ? "12-hour time" : "Military time"}</button>
+        <Link className="btn secondary" href={`/schedule/print?date=${date}${providerFilter ? `&provider=${encodeURIComponent(providerFilter)}` : ""}`} target="_blank">Print</Link>
         {canEdit && <button className="secondary" onClick={() => setAdding((v) => !v)}>{adding ? "Cancel" : "Add a visit"}</button>}
         {canEdit && <button className="secondary" onClick={() => setPasting((v) => !v)}>{pasting ? "Cancel" : "Paste a schedule"}</button>}
       </div>
@@ -65,6 +73,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
         <strong style={{ margin: "0 .5rem" }}>{longDate(date)}</strong>
         <input type="date" value={date} aria-label="Pick a date" onChange={(e) => e.target.value && go(e.target.value)} />
       </div>}
+
+      <datalist id="visit-time-presets">{TIME_PRESETS.map((t) => <option key={t} value={t} />)}</datalist>
 
       {note && <div className="card" role="status">{note} <button className="link" onClick={() => setNote("")}>Dismiss</button></div>}
 
@@ -117,6 +127,14 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
           onPasteTranscript={(v) => setPasteFor(v)}
           onPromote={promote ? (v) => setPromoting(v) : undefined}
           promoteReason={promote ? (v) => (!v.hasTranscript ? "no transcript yet" : !promote.fullNames ? "full names are off for you" : "") : undefined}
+          military={military}
+          showProvider={showProvider}
+          providerOptions={providerOptions}
+          onProvider={showProvider && canEdit ? (v, name) => start(async () => {
+            const r = await updateVisitAction(v.id, { providerName: name });
+            if (!r.ok) setNote(r.error);
+            router.refresh();
+          }) : undefined}
           onDelete={(v) => {
             const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
             if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
@@ -126,7 +144,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
               router.refresh();
             });
           }}
-          renderTime={(v) => (canEdit ? <EditableTime visitId={v.id} value={v.apptTime} onError={setNote} onSaved={() => router.refresh()} /> : v.apptTime)}
+          renderTime={(v) => (canEdit ? <EditableTime key={`${v.id}-${v.apptTime}-${military}`} visitId={v.id} value={v.apptTime} military={military} onError={setNote} onSaved={() => router.refresh()} /> : v.apptTime)}
         />
       )}
 
@@ -211,21 +229,23 @@ function PasteSchedule({ date, defaultProvider, onDone }: { date: string; defaul
   );
 }
 
-function EditableTime({ visitId, value, onSaved, onError }: { visitId: string; value: string; onSaved: () => void; onError: (m: string) => void }) {
-  const [v, setV] = useState(value);
+function EditableTime({ visitId, value, military, onSaved, onError }: { visitId: string; value: string; military: boolean; onSaved: () => void; onError: (m: string) => void }) {
+  const [v, setV] = useState(formatTimeText(value, military));
   return (
     <input
+      list="visit-time-presets"
       value={v}
       aria-label="Appointment time"
-      placeholder="2:00 PM"
+      placeholder={military ? "1400" : "2:00 PM"}
       onChange={(e) => setV(e.target.value)}
       onBlur={async () => {
-        if (v.trim() === value) return;
-        const r = await updateVisitAction(visitId, { apptTime: v });
+        const typed = normalizeTyped(v.trim());
+        if (typed === value || v.trim() === formatTimeText(value, military)) return;
+        const r = await updateVisitAction(visitId, { apptTime: typed });
         if (r.ok) onSaved();
         else {
           onError(r.error);
-          setV(value);
+          setV(formatTimeText(value, military));
         }
       }}
     />
@@ -233,6 +253,7 @@ function EditableTime({ visitId, value, onSaved, onError }: { visitId: string; v
 }
 
 function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProvider: string; onDone: (m: string) => void }) {
+  // (times may be typed as 0900 or 0900-1200 too)
   const [f, setF] = useState({ patient: "", apptTime: "", program: "", appointmentType: "", providerName: defaultProvider });
   const [opts, setOpts] = useState<VisitOptions | null>(null);
   const [busy, setBusy] = useState(false);
@@ -241,7 +262,7 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
     void visitOptions().then(setOpts);
   }, []);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
-  const timeOk = !f.apptTime.trim() || /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(f.apptTime.trim()) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(f.apptTime.trim());
+  const timeOk = !f.apptTime.trim() || /^\d{4}(-\d{4})?$/.test(f.apptTime.trim()) || /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(f.apptTime.trim()) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(f.apptTime.trim());
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>
@@ -278,7 +299,7 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
         setBusy(true);
         setErr("");
         try {
-          const r = await addVisitAction({ date, ...f });
+          const r = await addVisitAction({ date, ...f, apptTime: normalizeTyped(f.apptTime.trim()) });
           if (r.ok) onDone("Visit added.");
           else setErr(r.error);
         } catch {

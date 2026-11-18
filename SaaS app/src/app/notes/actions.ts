@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
@@ -12,6 +13,7 @@ import { makeLlm, modelConfigured, warmModel } from "@/lib/notes/model";
 import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
 import { loadVisitOptions } from "@/lib/notes/options";
+import { assertBillableVisit, isTrackingOnlyName, TRACKING_ONLY_MESSAGE } from "@/lib/notes/trackingOnly";
 import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
 // Audit entries hold ids and counts only, never patient names or note text.
@@ -31,6 +33,7 @@ export async function loadPastedSchedule(date: string, pasted: string, provider:
 /** Stores the transcript the recorder produced. The audio itself never reaches the server. */
 export async function saveTranscript(visitId: string, transcript: string) {
   const user = await requireAccess("notes", "edit");
+  await assertBillableVisit(visitId);
   await db.visit.update({ where: { id: visitId }, data: { transcript: transcript.slice(0, MAX_TRANSCRIPT), transcriptAt: new Date() } });
   await audit(user.email, "notes.transcript.save", `visit ${visitId} chars=${transcript.length}`);
   revalidatePath("/notes"); revalidatePath("/schedule");
@@ -41,6 +44,7 @@ export async function generateForVisit(visitId: string) {
   const user = await requireAccess("notes", "edit");
   const visit = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true, documents: true } });
   if (!visit) throw new Error("Visit not found");
+  await assertBillableVisit(visitId);
   if (!visit.transcript.trim()) throw new Error("This visit has no transcript yet.");
   // Returned, not thrown: Next.js hides thrown messages in production, and this one is meant to be read.
   if (!modelConfigured()) {
@@ -116,8 +120,19 @@ export async function addVisitAction(input: { date: string; patient: string } & 
   return r.ok ? { ok: true as const } : r;
 }
 
+/** Per-person choice: schedule times as 0900-1200. A plain cookie; it holds no patient data. */
+export async function setClockStyle(military: boolean) {
+  await requireAccess("notes", "view");
+  cookies().set("bbc_clock", military ? "24" : "12", { sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+  revalidatePath("/schedule");
+}
+
 export async function updateVisitAction(id: string, patch: VisitPatch) {
   const user = await requireAccess("notes", "edit");
+  // The provider column is for providers and admins; staff cannot reassign a visit.
+  if (patch.providerName !== undefined && user.role !== "ADMIN" && user.role !== "PROVIDER") {
+    return { ok: false as const, error: "Only a provider or admin can change the provider.", code: "forbidden" };
+  }
   const r = await guard(() => updateVisit(user, id, patch));
   revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const } : r;
@@ -163,6 +178,7 @@ export async function getPromoteSource(visitId: string) {
   if (!user.showFullNames) return { ok: false as const, error: "Full names are off for your account (production needs the name)." };
   const v = await db.visit.findUnique({ where: { id: visitId }, include: { patient: true } });
   if (!v) return { ok: false as const, error: "Visit not found." };
+  if (await isTrackingOnlyName(v.providerName)) return { ok: false as const, error: TRACKING_ONLY_MESSAGE };
   if (!v.transcript.trim()) return { ok: false as const, error: "Record the visit first: there is no transcript to promote." };
   await audit(user.email, "notes.promote.read", `visit ${visitId} chars=${v.transcript.length}`);
   return {
