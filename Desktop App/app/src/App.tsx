@@ -48,6 +48,8 @@ const savedWith = (f?: UploadFailure) => (f ? `${f.message} ${SAVED_MESSAGE}.` :
 
 export function App() {
   const [engine, setEngine] = useState<Engine | null>(null);
+  const engineRef = useRef<Engine | null>(null);
+  engineRef.current = engine;
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [tokenState, setTokenState] = useState<ScopedToken>(null);
   const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "health" | "setup">("visits");
@@ -82,6 +84,12 @@ export function App() {
       for (const r of results) { if (r.failure) next[r.visitId] = r.failure; else delete next[r.visitId]; }
       return next;
     });
+    // The server ended the session for good: make every screen agree that this environment is signed out.
+    const ended = results.find((r) => r.failure?.serverEnded);
+    if (ended?.failure && engineRef.current) {
+      const en = engineRef.current, e = ended.failure.environment;
+      void en.signOut(e).catch(() => {}).then(() => en.status()).then(setStatus).catch(() => {});
+    }
   }, []);
   const [retrying, setRetrying] = useState(false);
 

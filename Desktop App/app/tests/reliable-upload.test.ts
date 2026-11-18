@@ -106,3 +106,13 @@ describe("confirmed upload", () => {
     await expect(sendConfirmed(session(), item({ link_visit: null }), "x")).rejects.toBeInstanceOf(ApiFailure);
   });
 });
+
+describe("sign-out wording", () => {
+  it("a server-ended session says why and is flagged so every screen can flip to signed out", async () => {
+    const { describeUploadFailure } = await import("../src/lib/queue");
+    const f = describeUploadFailure(new SignedOutError("session_expired"), "production");
+    expect(f.message).toBe("Signed out of Production: the session expired. Sign in in Setup; recordings stay safe on this Mac.");
+    expect(f.serverEnded).toBe(true);
+    expect(describeUploadFailure(new SignedOutError(), "production").serverEnded).toBeUndefined();
+  });
+});

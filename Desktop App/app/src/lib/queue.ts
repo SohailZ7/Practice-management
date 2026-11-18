@@ -8,15 +8,24 @@ export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" 
 
 /** Why an upload failed, in plain words. Built only from the error kind, status and short code: never from the
  *  transcript, a patient name or the server's free text, so it is safe to show and to log. */
-export type UploadFailure = { kind: FailureKind; message: string; environment: QueueItem["environment"] };
+export type UploadFailure = { kind: FailureKind; message: string; environment: QueueItem["environment"]; /** The server ended this session for good (revoked, expired, user inactive). */ serverEnded?: boolean };
 
 export type UploadResult = { visitId: string; ok: boolean; reason?: string; failure?: UploadFailure };
+
+const REASONS: Record<string, string> = {
+  session_revoked: "this session was ended", session_expired: "the session expired", unknown_session: "the server no longer knows this session",
+  user_inactive: "this account is inactive", no_token: "no sign-in",
+};
 
 /** Maps an upload error to a plain-words reason. `item.environment` is where the transcript is going. */
 export function describeUploadFailure(e: unknown, env: QueueItem["environment"]): UploadFailure {
   const where = labelFor(env);
   const f = (kind: FailureKind, message: string): UploadFailure => ({ kind, message, environment: env });
-  if (e instanceof SignedOutError) return f("signed_out", `Signed out: sign in again to ${where}.${e.reason ? ` (${e.reason.replace(/_/g, " ")})` : ""}`);
+  if (e instanceof SignedOutError) {
+    const out = f("signed_out", e.reason ? `Signed out of ${where}: ${REASONS[e.reason] ?? e.reason.replace(/_/g, " ")}. Sign in in Setup; recordings stay safe on this Mac.` : `Signed out: sign in again to ${where}.`);
+    if (e.reason && e.reason !== "no_token") out.serverEnded = true;
+    return out;
+  }
   if (e instanceof ApiFailure) {
     if (e.status === 401) return f("signed_out", `Signed out: sign in again to ${where}.`);
     if (e.status === 403) return f("no_access", "This account does not have Notes edit access.");
