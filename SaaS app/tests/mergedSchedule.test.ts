@@ -35,6 +35,6 @@ describe("merged Schedule tab", () => {
   });
   it("the table has the agreed columns and a single row menu", () => {
     const t = readFileSync("src/components/notes/VisitsTable.tsx", "utf8");
-    for (const c of ["Patient", "Time", "Program", "Type", "Status", "Documents", "Generate docs", "row-menu"]) expect(t).toContain(c);
+    for (const c of ["Patient", "Time", "Visit and program", "Status", "Documents", "Generate docs", "row-menu"]) expect(t).toContain(c);
   });
 });

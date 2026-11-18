@@ -108,6 +108,13 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
       {visits.length === 0 ? (
         <p className="muted">No visits for this day. {canEdit && "Use “Add a visit” or “Paste a schedule” to add some."}</p>
       ) : (
+        <section className="sched-card" aria-label="Visits">
+        <div className="sched-strip">
+          <span className="sdot"><i className="d plum" />{visits.length} visit{visits.length === 1 ? "" : "s"}</span>
+          <span className="sdot"><i className="d green" />{visits.filter((v) => v.status === "seen" || v.status === "note_signed").length} seen</span>
+          <span className="sdot"><i className="d blue" />{visits.filter((v) => v.status === "scheduled").length} scheduled</span>
+          <span className="sdot"><i className="d amber" />{visits.filter((v) => v.documents.some((d) => d.draft)).length} documents to review</span>
+        </div>
         <VisitsTable
           visits={visits}
           docsOf={docsOf}
@@ -146,6 +153,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
           }}
           renderTime={(v) => (canEdit ? <EditableTime key={`${v.id}-${v.apptTime}-${military}`} visitId={v.id} value={v.apptTime} military={military} onError={setNote} onSaved={() => router.refresh()} /> : v.apptTime)}
         />
+        <div className="sched-foot">{visits.length} visit{visits.length === 1 ? "" : "s"} · Timed visits first, then time blocks</div>
+        </section>
       )}
 
       {pasteFor && <TranscriptPaste visitId={pasteFor.id} onClose={() => setPasteFor(null)} onSaved={() => { setPasteFor(null); router.refresh(); }} />}

@@ -12,6 +12,13 @@ import { formatTimeText } from "@/lib/notes/scheduleTime";
  * the same markup is rendered on the Schedule page and in the layout check. Text columns shorten with "…" rather than wrap
  * or scroll sideways; the full text is in the tooltip.
  */
+/** The Documents column's state: derived from what is stored (no documents, a draft that still needs a look, or all final). */
+function docPill(v: VisitRow, count: number): { label: string; tone: string } {
+  if (v.status === "cancelled") return { label: "None", tone: "grey" };
+  if (count === 0) return { label: "Not started", tone: "grey" };
+  return v.documents.some((d) => d.draft) ? { label: "Needs review", tone: "amber" } : { label: "Ready", tone: "green" };
+}
+
 export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSelect, onSelectAll, onStatus, onOpenDoc, onGenerate, onTranscript, onPasteTranscript, onDelete, onPromote, promoteReason, renderTime, military = false, showProvider = false, providerOptions = [], onProvider }: {
   visits: VisitRow[];
   docsOf: (v: VisitRow) => DocSummary[];
@@ -43,8 +50,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
         <colgroup>
           <col className="c-pat" />
           <col className="c-time" />
-          <col className="c-prog" />
-          <col className="c-type" />
+          <col className="c-visit" />
           {showProvider && <col className="c-prov" />}
           <col className="c-status" />
           <col className="c-docs" />
@@ -59,8 +65,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
               </span>
             </th>
             <th>Time</th>
-            <th>Program</th>
-            <th>Type</th>
+            <th>Visit and program</th>
             {showProvider && <th>Provider</th>}
             <th>Status</th>
             <th>Documents</th>
@@ -75,12 +80,15 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                 <td className="v-pat" title={v.fullName ? "Full name" : "Shown as initials"}>
                   <span className="v-pat-wrap">
                     {canEdit && <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => onSelect(v.id, e.target.checked)} />}
-                    {v.fullName ?? v.initials}
+                    <span className="avatar sm" aria-hidden="true">{(v.fullName ?? v.initials).replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}</span>
+                    <span className="v-name">{v.fullName ?? v.initials}</span>
                   </span>
                 </td>
                 <td className="v-time">{renderTime ? renderTime(v) : formatTimeText(v.apptTime, military)}</td>
-                <td className="v-text" title={v.program}>{v.program}</td>
-                <td className="v-text" title={v.appointmentType}>{v.appointmentType}</td>
+                <td className="v-text" title={`${v.appointmentType} · ${v.program}`}>
+                  <span className="v-main">{v.appointmentType || "Visit"}</span>
+                  <span className="v-sub">{v.program}</span>
+                </td>
                 {showProvider && (
                   <td className="v-text" title={v.providerName}>
                     {onProvider ? (
@@ -105,9 +113,8 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                 </td>
                 <td>
                   <span className="v-docs">
-                    {docs.length === 0 ? (
-                      <span className="muted small" title="No documents yet">—</span>
-                    ) : (
+                    <span className={`mini-pill ${docPill(v, docs.length).tone}`}>{docPill(v, docs.length).label}</span>
+                    {docs.length === 0 ? null : (
                       docs.map((d) => {
                         const tip = `${d.title}${d.latestVersion ? ` · version ${d.latestVersion}` : ""}`;
                         return (

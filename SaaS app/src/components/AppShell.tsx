@@ -16,7 +16,7 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
-import { Icon, Logo, type IconName } from "./Icons";
+import { Icon, type IconName } from "./Icons";
 import { IdleLogoff } from "./IdleLogoff";
 
 type Props = {
@@ -25,6 +25,7 @@ type Props = {
   levels: { schedule: string; tasks: string; employees: string; billing: string; ledger: string; notes: string };
   isAdmin: boolean;
   staging?: boolean;
+  roleLabel?: string;
   timing: { idleMs: number; absoluteDeadline: number; serverNow: number } | null;
   children: ReactNode;
 };
@@ -39,7 +40,7 @@ const MIN_WIDTH = 200;
 const maxWidth = () => Math.max(MIN_WIDTH, Math.floor(window.innerWidth / 3));
 const clamp = (w: number) => Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(w)));
 
-export function AppShell({ name, email, levels, isAdmin, staging, timing, children }: Props) {
+export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, timing, children }: Props) {
   const path = usePathname();
   const [pinned, setPinned] = useState(true);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -113,10 +114,12 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
   items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" });
   items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing", locked: levels.billing === "none" });
   items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" });
-  // Feedback is open to every signed-in user.
-  items.push({ id: "/feedback", href: "/feedback", label: "Feedback", icon: "flag" });
-  // Visible to everyone; anyone but the Admin who opens it sees the "no access" page (AUTH-13).
-  items.push({ id: "/admin", href: "/admin", label: "Admin", icon: "shield" });
+  // MANAGE group. Feedback is open to every signed-in user. Admin is visible to everyone; anyone but the Admin who opens
+  // it sees the "no access" page (AUTH-13).
+  const manage: { href: string; label: string; icon: IconName }[] = [
+    { href: "/feedback", label: "Feedback", icon: "flag" },
+    { href: "/admin", label: "Administration", icon: "shield" },
+  ];
 
   const [order, setOrder] = useState<string[]>([]);
   useEffect(() => setOrder(readOrder(ORDER_KEY)), []);
@@ -154,8 +157,11 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
       <aside className="side" aria-label="Main navigation">
         <div className="brand-row">
           <Link href="/" className="brand" title="Home">
-            <Logo />
-            <span className="label">Brain and Behavior Center</span>
+            <span className="brand-tile" aria-hidden="true">B</span>
+            <span className="label brand-text">
+              <span className="brand-name">Brain &amp; Behavior</span>
+              <span className="brand-sub">PRACTICE STUDIO</span>
+            </span>
           </Link>
           <button
             type="button"
@@ -169,9 +175,10 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
           </button>
         </div>
         <nav>
+          <div className="nav-label label">WORKSPACE</div>
           <Link href="/" title="Home" className={path === "/" ? "active" : ""}>
             <Icon name="home" />
-            <span className="label">Home</span>
+            <span className="label">Overview</span>
           </Link>
           {isAdmin ? (
             <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
@@ -184,8 +191,10 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
               </SortableContext>
             </DndContext>
           ) : (
-            items.map((i) => link(i.href, i.label, i.icon, i.locked))
+            orderedItems.map((i) => link(i.href, i.label, i.icon, i.locked))
           )}
+          <div className="nav-label label">MANAGE</div>
+          {manage.map((m) => link(m.href, m.label, m.icon))}
         </nav>
         <div className={`env-badge ${staging ? "staging" : ""}`} role="status">
           <span className="dot" aria-hidden="true" />
@@ -196,9 +205,16 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
         </div>
         <div className="foot">
           {link("/settings", "Settings", "settings")}
+          <div className="user-card" title={email}>
+            <span className="avatar" aria-hidden="true">{initialsOf(name)}</span>
+            <span className="label user-text">
+              <span className="user-name">{name}</span>
+              <span className="user-role">{roleLabel ?? ""}</span>
+            </span>
+          </div>
           <button onClick={() => signOut({ callbackUrl: "/login" })} title={`Sign out (${email})`}>
             <Icon name="logout" />
-            <span className="label">Sign out · {name}</span>
+            <span className="label">Sign out</span>
           </button>
         </div>
         <div
@@ -211,6 +227,10 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
         />
       </aside>
       <div className="content-wrap">
+        <header className="topbar">
+          <div className="crumbs">Workspace <span>/</span> <b>{crumb(path)}</b></div>
+          <span className={`env-pill ${staging ? "staging" : ""}`}>{staging ? "STAGING · TEST ONLY" : "PRODUCTION"}</span>
+        </header>
         <div className="content">
           <div className="content-inner">{children}</div>
         </div>
@@ -218,6 +238,10 @@ export function AppShell({ name, email, levels, isAdmin, staging, timing, childr
     </div>
   );
 }
+
+const initialsOf = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
+const CRUMBS: [string, string][] = [["/schedule", "Schedule"], ["/tasks", "Tasks"], ["/employees", "Employees"], ["/billing", "Billing"], ["/ledger", "Ledger"], ["/feedback", "Feedback"], ["/admin", "Administration"], ["/settings", "Settings"]];
+const crumb = (path: string) => CRUMBS.find(([p]) => path.startsWith(p))?.[1] ?? "Overview";
 
 function SortableNavItem({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });

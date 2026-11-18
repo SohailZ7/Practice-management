@@ -98,35 +98,28 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
 
   return (
     <>
-      <div className="row" style={{ marginBottom: ".75rem", alignItems: "flex-end" }}>
-        <div>
-          <p className="page-eyebrow">{title}</p>
-          <h1 style={{ margin: 0 }}>Schedule</h1>
+      <div className="page-head">
+        <div className="page-head-text">
+          <div className="eyebrow">THE RHYTHM OF YOUR PRACTICE</div>
+          <h1>Schedule</h1>
+          <p className="page-sub">Every visit, from arrival to follow-through.</p>
         </div>
-        <span className="grow" />
-        {hasSchedule && <Link href="/schedule/providers">Providers</Link>}
-        {hasSchedule && canEdit && <Link href="/schedule/import">Import</Link>}
-        {hasSchedule && canEdit && <Link href="/schedule/settings">Tracks &amp; types</Link>}
+        {hasSchedule && <Link className="btn secondary" href="/schedule/providers">Providers</Link>}
+        {hasSchedule && canEdit && <Link className="btn secondary" href="/schedule/import">Import</Link>}
+        {hasSchedule && canEdit && <Link className="btn secondary" href="/schedule/settings">Tracks &amp; types</Link>}
       </div>
 
-      {view === "day" && visits.length > 0 && (
-        <div className="stat-row" aria-label="Day summary">
-          <div className="stat"><span className="muted small">Visits</span><strong>{visits.length}</strong></div>
-          <div className="stat"><span className="muted small">Providers</span><strong>{new Set(visits.map((v) => v.providerName)).size}</strong></div>
-        </div>
-      )}
-
-      <div className="row" style={{ marginBottom: "1rem" }}>
-        <Link className="btn secondary" href={href(prev)}>
-          ←
-        </Link>
+      <div className="row toolbar" style={{ marginBottom: "1rem" }}>
         <Link className="btn secondary" href={href(today)}>
           Today
         </Link>
-        <Link className="btn secondary" href={href(next)}>
-          →
+        <Link className="btn secondary icon-sq" href={href(prev)} aria-label="Previous">
+          ‹
         </Link>
-        <strong style={{ margin: "0 .5rem" }}>{title}</strong>
+        <Link className="btn secondary icon-sq" href={href(next)} aria-label="Next">
+          ›
+        </Link>
+        <strong className="toolbar-date">{title}</strong>
         <span className="grow" />
         <div className="seg" role="tablist" aria-label="View">
           {(["day", "week", "month"] as const).map((v) => (

@@ -5,13 +5,13 @@ import { canOpenAdmin } from "@/lib/access";
 import { normalizeTheme, themeAttribute } from "@/lib/theme";
 import { DesktopUpdateBanner } from "@/components/DesktopUpdateBanner";
 import { AppShell } from "@/components/AppShell";
-import { Inter, Newsreader } from "next/font/google";
+import { DM_Sans, Instrument_Serif } from "next/font/google";
 import { isStaging } from "@/lib/promote/rules";
 import "./globals.css";
 
 // Self-hosted at build time by Next (no request to Google from the browser).
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", display: "swap", weight: ["500", "600"] });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm", display: "swap", weight: ["400", "500", "600"] });
+const instrumentSerif = Instrument_Serif({ subsets: ["latin"], variable: "--font-serif", display: "swap", weight: "400" });
 
 export const metadata: Metadata = {
   title: { default: "Brain and Behavior Center", template: "%s · Brain and Behavior Center" },
@@ -28,7 +28,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const user = await getCurrentUser();
   const timing = user ? await getSessionTiming() : null;
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable}`} data-theme={user ? themeAttribute(normalizeTheme(user.theme)) : undefined}>
+    <html lang="en" className={`${dmSans.variable} ${instrumentSerif.variable}`} data-theme={user ? themeAttribute(normalizeTheme(user.theme)) : undefined}>
       <body>
         {user ? (
           <AppShell
@@ -37,6 +37,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             levels={levels(user)}
             isAdmin={canOpenAdmin(user)}
             staging={isStaging()}
+            roleLabel={user.role === "ADMIN" ? "Practice administrator" : user.role === "PROVIDER" ? "Provider" : "Staff"}
             timing={timing}
           >
             <DesktopUpdateBanner user={user} />
