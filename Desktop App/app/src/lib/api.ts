@@ -170,6 +170,36 @@ export const pushTranscript = (session: Session, visitId: string, transcript: st
     body: JSON.stringify({ transcript }),
   });
 
+// ----------------------------------------------------------------------------- the inbox (docs/inbox-upload-contract.md)
+
+/** Lower-case hex SHA-256 of the UTF-8 bytes of `text`: what the server must echo back before the local copy may go. */
+export async function sha256Hex(text: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** The final request's seq: above any checkpoint the recording could have sent. */
+export const FINAL_SEQ = 1_000_000;
+
+export type InboxReply = { ok: true; uuid: string; seq: number; sha256: string; final: boolean; visitId: string | null; stale?: boolean };
+export type InboxBody = { seq: number; final: boolean; text: string; durationSeconds: number; recordedAt: string; visitId?: string | null };
+
+/** Sends (or updates) a recording by its UUID. Retrying the same call can never create a second copy. */
+export async function putInbox(session: Session, uuid: string, b: InboxBody): Promise<InboxReply> {
+  const sha256 = await sha256Hex(b.text);
+  return call<InboxReply>(session, `/notes/inbox/${encodeURIComponent(uuid)}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...b, sha256, ...(b.visitId ? { visitId: b.visitId } : {}) }),
+  });
+}
+
+export const linkInbox = (session: Session, uuid: string, visitId: string) =>
+  call<{ ok: true; visitId: string }>(session, `/notes/inbox/${encodeURIComponent(uuid)}/link`, { method: "POST", body: JSON.stringify({ visitId }) });
+
+export type InboxItem = { uuid: string; recordedAt: string; durationSeconds: number; final: boolean; seq: number; visitId: string | null };
+export const listInbox = (session: Session, linked = false) =>
+  call<{ items: InboxItem[] }>(session, `/notes/inbox?linked=${linked}`);
+
 // ----------------------------------------------------------------------------- feedback
 
 export type FeedbackKind = "FEEDBACK" | "BUG";

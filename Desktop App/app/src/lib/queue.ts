@@ -1,10 +1,10 @@
 // Uploading the transcripts saved on this Mac. A queued transcript is uploaded to the environment recorded when it
 // was saved (not the one currently selected) and is deleted only after the server confirms.
-import { ApiFailure, pushTranscript, SignedOutError, type Session } from "./api";
+import { ApiFailure, FINAL_SEQ, linkInbox, pushTranscript, putInbox, sha256Hex, SignedOutError, type Session } from "./api";
 import { isEnvironment, labelFor, urlFor } from "./environments";
 import type { Engine, QueueItem } from "./engine";
 
-export type FailureKind = "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "server" | "refused" | "local";
+export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "server" | "refused" | "local";
 
 /** Why an upload failed, in plain words. Built only from the error kind, status and short code: never from the
  *  transcript, a patient name or the server's free text, so it is safe to show and to log. */
@@ -20,6 +20,8 @@ export function describeUploadFailure(e: unknown, env: QueueItem["environment"])
   if (e instanceof ApiFailure) {
     if (e.status === 401) return f("signed_out", `Signed out: sign in again to ${where}.`);
     if (e.status === 403) return f("no_access", "This account does not have Notes edit access.");
+    if (e.status === 422 && e.code === "checksum_mismatch") return f("checksum", "The server received damaged text, so it will be sent again.");
+    if (e.status === 404 && e.code === "inbox_pending") return f("server", "The practice app has not been updated to receive this yet.");
     if (e.status === 404) return f("not_found", `This visit is not in the ${where} app. Add it on the ${where} website.`);
     if (e.status >= 500) return f("server", `The practice app had a problem (HTTP ${e.status}).`);
     return f("refused", `The practice app refused the transcript (HTTP ${e.status}${/^[a-z_]{1,40}$/.test(e.code ?? "") ? " " + e.code : ""}).`);
@@ -41,6 +43,10 @@ class LocalReadFailure extends Error {}
 const labels = new Map<string, string>();
 export const setCopyLabel = (visitId: string, label: string) => { labels.set(visitId, label); };
 
+let lastOk: number | null = null;
+/** When the server last confirmed an upload in this session (for the Health screen). */
+export const lastUploadAt = (): number | null => lastOk;
+
 const inFlight = new Map<string, Promise<UploadResult>>();
 
 /** A session for an environment, using the stored sign-in; null when not signed in there. */
@@ -51,11 +57,43 @@ export async function sessionFor(engine: Engine, env: QueueItem["environment"]):
   return { baseUrl: urlFor(env), accessToken: token, refresh: (stale) => engine.refreshAccessToken(env, stale) };
 }
 
+/** What an upload to the server ended with. */
+export type Delivery = { via: "inbox" | "visit"; linked: boolean };
+
+/**
+ * Sends the saved transcript and returns only when the server has CONFIRMED it. With a recording id it goes to the inbox
+ * (never needs the visit to exist; retrying cannot duplicate) and the server must echo the SHA-256 of what it stored.
+ * Until the inbox exists on the server (404) the old per-visit upload is used for items that name a visit.
+ */
+export async function sendConfirmed(s: Session, item: QueueItem, text: string): Promise<Delivery> {
+  const id = item.recording_id;
+  if (!id) { await pushTranscript(s, item.visit_id, text); return { via: "visit", linked: true }; }
+  const want = await sha256Hex(text);
+  let reply;
+  try {
+    reply = await putInbox(s, id, { seq: FINAL_SEQ, final: true, text, durationSeconds: item.duration_seconds, recordedAt: item.created_at, visitId: item.link_visit ?? null });
+  } catch (e) {
+    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text); return { via: "visit", linked: true }; }
+    if (e instanceof ApiFailure && e.status === 404) throw new ApiFailure(404, "inbox_pending");
+    throw e;
+  }
+  if (!reply.final || reply.sha256 !== want) throw new ApiFailure(422, "checksum_mismatch");
+  let linked = !!reply.visitId;
+  if (!linked && item.link_visit) {
+    try { await linkInbox(s, id, item.link_visit); linked = true; } catch (e) {
+      // Safe on the server already; it just waits to be linked to a visit ("Needs link"). Sign-in problems still retry.
+      if (e instanceof SignedOutError || (e instanceof ApiFailure && e.status === 401)) throw e;
+    }
+  }
+  return { via: "inbox", linked };
+}
+
 /** Uploads one queued transcript. On any failure the saved copy is kept. Never logs the text. */
 export function uploadQueued(engine: Engine, item: QueueItem, session?: Session | null): Promise<UploadResult> {
   const running = inFlight.get(item.visit_id);
   if (running) return running;
   const p = (async (): Promise<UploadResult> => {
+    let delivered: Delivery | undefined;
     try {
       if (isOtherEnvironment(item)) {
         const failure: UploadFailure = { kind: "other_env", message: OTHER_ENV_MESSAGE, environment: item.environment };
@@ -69,9 +107,10 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
         }
         let text: string;
         try { text = await engine.queueText(item.visit_id); } catch { throw new LocalReadFailure(); }
-        await pushTranscript(s, item.visit_id, text);
+        delivered = await sendConfirmed(s, item, text);
       }
       let warning: string | undefined;
+      if (delivered && !delivered.linked && item.recording_id) warning = "Safe on the server. Link it to a visit under Needs link.";
       try {
         // The queue copy is shredded next, so the optional plain-text copy is written first.
         await engine.saveTranscriptCopy(item.visit_id, labels.get(item.visit_id) ?? `visit_${item.created_at.slice(0, 16)}_${item.visit_id.slice(0, 8)}`);
@@ -80,6 +119,7 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
       }
       await engine.queueComplete(item.visit_id);
       labels.delete(item.visit_id);
+      lastOk = Date.now();
       return { visitId: item.visit_id, ok: true, reason: warning };
     } catch (e) {
       const failure: UploadFailure = e instanceof LocalReadFailure
@@ -96,6 +136,6 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
 
 /** Retries everything in the queue, each against its own environment. */
 export async function retryAll(engine: Engine): Promise<UploadResult[]> {
-  const items = await engine.queueList();
+  const items = (await engine.queueList()).filter((i) => i.status !== "uploaded");
   return Promise.all(items.map((i) => uploadQueued(engine, i)));
 }

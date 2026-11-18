@@ -31,7 +31,16 @@ export type QueueItem = {
   created_at: string;
   duration_seconds: number;
   status: "pending" | "uploaded";
+  /** The recording's permanent id (absent on items saved by older builds, which use the per-visit upload). */
+  recording_id?: string | null;
+  /** The visit to link on the server; null means it waits in the inbox under "Needs link". */
+  link_visit?: string | null;
+  /** When the server confirmed the checksum (the encrypted copy is then kept 24 h more). */
+  confirmed_at?: string | null;
 };
+
+export type Checkpoint = { recording_id: string; seq: number; text: string; seconds: number };
+export type RecordingContext = { visitId: string; environment: EnvironmentId; append: boolean };
 
 /** `mfa` is set when a two-factor step is still to do; `mfaToken` is its single-use step token (memory only). */
 export type SignInOutcome = { mfa: "enroll" | "verify" | null; mfaToken: string | null };
@@ -56,7 +65,13 @@ export interface Engine {
   /** Renews the sign-in after a 401. Null when the server refused the refresh token. */
   refreshAccessToken(environment: EnvironmentId, stale: string): Promise<string | null>;
   /** Records the microphone and, for a telehealth visit, the system audio. */
-  startRecording(withSystemAudio: boolean): Promise<{ warning: string | null }>;
+  startRecording(withSystemAudio: boolean, ctx?: RecordingContext): Promise<{ warning: string | null; recording_id?: string | null }>;
+  /** The words so far of the recording in progress (from memory), or null. */
+  recordingCheckpoint(): Promise<Checkpoint | null>;
+  /** Shreds confirmed safety copies older than 24 h. */
+  queueSweep(): Promise<number>;
+  /** Turns recordings left by a crash into queue items. Returns how many. */
+  recoverRecordings(): Promise<number>;
   /** Stops, transcribes on this Mac, and saves the transcript in the encrypted queue under the visit id. */
   /** `previous` is earlier text for the same visit to keep in front of this recording, after `separator`. */
   stopRecording(visitId: string, environment: EnvironmentId, previous?: string, separator?: string): Promise<StopResult>;
@@ -102,7 +117,11 @@ async function nativeEngine(): Promise<Engine> {
     signOut: (environment) => invoke<void>("sign_out", { environment }),
     accessToken: (environment) => invoke<string | null>("get_access_token", { environment }),
     refreshAccessToken: (environment, stale) => invoke<string | null>("refresh_access_token", { environment, stale }),
-    startRecording: (withSystemAudio) => invoke<{ warning: string | null }>("start_recording", { withSystemAudio }),
+    startRecording: (withSystemAudio, ctx) =>
+      invoke<{ warning: string | null; recording_id?: string | null }>("start_recording", { withSystemAudio, visitId: ctx?.visitId ?? null, environment: ctx?.environment ?? null, append: ctx?.append ?? false }),
+    recordingCheckpoint: () => invoke<Checkpoint | null>("recording_checkpoint"),
+    queueSweep: () => invoke<number>("queue_sweep"),
+    recoverRecordings: () => invoke<number>("recover_recordings"),
     stopRecording: (visitId, environment, previous, separator) =>
       invoke<StopResult>("stop_recording", { visitId, environment, previous: previous ?? null, separator: separator ?? null }),
     cancelRecording: () => invoke<void>("cancel_recording"),
@@ -153,7 +172,10 @@ function fakeEngine(): Engine {
     signOut: async (e) => { delete tokens[e]; },
     accessToken: async (e) => tokens[e] ?? null,
     refreshAccessToken: async () => null,
-    startRecording: async () => ({ warning: "Fake engines: nothing is being recorded." }),
+    startRecording: async () => ({ warning: "Fake engines: nothing is being recorded.", recording_id: "00000000-0000-4000-8000-000000000000" }),
+    recordingCheckpoint: async () => null,
+    queueSweep: async () => 0,
+    recoverRecordings: async () => 0,
     stopRecording: async (visitId, env, previous, separator) => {
       queue.set(visitId, { visit_id: visitId, environment: env, created_at: new Date().toISOString(), duration_seconds: 12, status: "pending" });
       const two = typeof location !== "undefined" && new URLSearchParams(location.search).has("speakers");

@@ -111,6 +111,16 @@ pub fn merge_channels(mut all: Vec<Segment>) -> Vec<Segment> {
 pub fn transcribe_channel(
     channel: &str,
     samples: &[i16],
+    run_chunk: impl FnMut(&[i16]) -> Result<Vec<RawSegment>, String>,
+) -> Result<Vec<Segment>, String> {
+    transcribe_channel_at(channel, samples, 0, run_chunk)
+}
+
+/// Like `transcribe_channel`, for samples that start `base` samples into the recording (times stay absolute).
+pub fn transcribe_channel_at(
+    channel: &str,
+    samples: &[i16],
+    base: usize,
     mut run_chunk: impl FnMut(&[i16]) -> Result<Vec<RawSegment>, String>,
 ) -> Result<Vec<Segment>, String> {
     let mut out = Vec::new();
@@ -119,22 +129,30 @@ pub fn transcribe_channel(
         if is_silent(chunk) {
             continue;
         }
-        out.extend(assemble_chunk(channel, r.start, &run_chunk(chunk)?));
+        out.extend(assemble_chunk(channel, base + r.start, &run_chunk(chunk)?));
     }
     Ok(out)
 }
 
-/// Loads the model and transcribes both channels.
-pub fn transcribe(model: &Path, mic: &[i16], system: &[i16]) -> Result<Vec<Segment>, String> {
-    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-    let ctx = WhisperContext::new_with_params(
-        model.to_str().ok_or("the transcription model path is invalid")?,
-        WhisperContextParameters::default(),
-    )
-    .map_err(|_| "could not load the transcription model".to_string())?;
-    let mut state = ctx.create_state().map_err(|_| "could not start the transcriber".to_string())?;
+/// A loaded whisper model, reused for several chunks.
+pub struct Engine {
+    state: whisper_rs::WhisperState,
+}
 
-    let mut run = |chunk: &[i16]| -> Result<Vec<RawSegment>, String> {
+impl Engine {
+    pub fn load(model: &Path) -> Result<Self, String> {
+        use whisper_rs::{WhisperContext, WhisperContextParameters};
+        let ctx = WhisperContext::new_with_params(
+            model.to_str().ok_or("the transcription model path is invalid")?,
+            WhisperContextParameters::default(),
+        )
+        .map_err(|_| "could not load the transcription model".to_string())?;
+        let state = ctx.create_state().map_err(|_| "could not start the transcriber".to_string())?;
+        Ok(Self { state })
+    }
+
+    pub fn run(&mut self, chunk: &[i16]) -> Result<Vec<RawSegment>, String> {
+        use whisper_rs::{FullParams, SamplingStrategy};
         let floats: Vec<f32> = chunk.iter().map(|s| *s as f32 / 32768.0).collect();
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_language(Some("en"));
@@ -144,16 +162,35 @@ pub fn transcribe(model: &Path, mic: &[i16], system: &[i16]) -> Result<Vec<Segme
         params.set_print_timestamps(false);
         params.set_no_context(true);
         params.set_suppress_blank(true);
-        state.full(params, &floats).map_err(|_| "transcription failed".to_string())?;
-        Ok(state
+        self.state.full(params, &floats).map_err(|_| "transcription failed".to_string())?;
+        Ok(self
+            .state
             .as_iter()
             .map(|seg| (seg.start_timestamp(), seg.end_timestamp(), seg.to_str_lossy().map(|c| c.into_owned()).unwrap_or_default()))
             .collect())
-    };
+    }
+}
 
-    let mut all = transcribe_channel("mic", mic, &mut run)?;
-    all.extend(transcribe_channel("system", system, &mut run)?);
+/// Loads the model and transcribes both channels.
+pub fn transcribe(model: &Path, mic: &[i16], system: &[i16]) -> Result<Vec<Segment>, String> {
+    let mut eng = Engine::load(model)?;
+    let mut all = transcribe_channel("mic", mic, |c| eng.run(c))?;
+    all.extend(transcribe_channel("system", system, |c| eng.run(c))?);
     Ok(merge_channels(all))
+}
+
+/// Transcribes the part of each channel after what a checkpoint already covered (`mic_from`, `system_from` in samples).
+/// Returns unmerged segments with absolute times.
+pub fn transcribe_tail(model: &Path, mic: &[i16], mic_from: usize, system: &[i16], system_from: usize) -> Result<Vec<Segment>, String> {
+    let mut eng = Engine::load(model)?;
+    let mut all = Vec::new();
+    if mic_from < mic.len() {
+        all.extend(transcribe_channel_at("mic", &mic[mic_from..], mic_from, |c| eng.run(c))?);
+    }
+    if system_from < system.len() {
+        all.extend(transcribe_channel_at("system", &system[system_from..], system_from, |c| eng.run(c))?);
+    }
+    Ok(all)
 }
 
 #[cfg(test)]

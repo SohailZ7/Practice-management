@@ -58,6 +58,16 @@ pub struct Metadata {
     pub created_at: String,
     pub duration_seconds: f64,
     pub status: Status,
+    /// Version 4 UUID made when the recording started: its identity on the server (idempotent uploads). Absent on items
+    /// saved by older builds, which keep using the per-visit upload.
+    #[serde(default)]
+    pub recording_id: Option<String>,
+    /// The visit to link on the server. None for a recovered recording that must be linked by hand ("Needs link").
+    #[serde(default)]
+    pub link_visit: Option<String>,
+    /// When the server confirmed the checksum. The encrypted copy is kept 24 hours after this, then shredded.
+    #[serde(default)]
+    pub confirmed_at: Option<String>,
 }
 
 pub fn key_to_hex(k: &[u8; 32]) -> String {
@@ -109,7 +119,7 @@ fn visit_dir(support: &Path, visit_id: &str) -> Result<PathBuf, String> {
     Ok(queue_dir(support).join(visit_id))
 }
 
-fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, bytes).map_err(|_| "could not save the transcript on this Mac".to_string())?;
     #[cfg(unix)]
@@ -182,6 +192,43 @@ pub fn mark_uploaded(support: &Path, key: &[u8; 32], visit_id: &str) -> Result<(
     let dir = visit_dir(support, visit_id)?;
     let bytes = serde_json::to_vec_pretty(&m).map_err(|_| "could not update the transcript".to_string())?;
     write_private(&dir.join("metadata.json"), &encrypt(key, &bytes)?)
+}
+
+/// The server confirmed the checksum: keep the encrypted copy (marked uploaded, with the time) for the safety window.
+pub fn mark_confirmed(support: &Path, key: &[u8; 32], visit_id: &str, when: &str) -> Result<(), String> {
+    let mut m = read_metadata(support, key, visit_id)?;
+    m.status = Status::Uploaded;
+    m.confirmed_at = Some(when.to_string());
+    let dir = visit_dir(support, visit_id)?;
+    let bytes = serde_json::to_vec_pretty(&m).map_err(|_| "could not update the transcript".to_string())?;
+    write_private(&dir.join("metadata.json"), &encrypt(key, &bytes)?)
+}
+
+fn parse_rfc3339_utc(s: &str) -> Option<u64> {
+    // "YYYY-MM-DDTHH:MM:SSZ" as written by rfc3339_utc
+    let b = s.as_bytes();
+    if b.len() < 19 { return None; }
+    let n = |a: usize, z: usize| s.get(a..z)?.parse::<u64>().ok();
+    let (y, mo, d, h, mi, se) = (n(0, 4)?, n(5, 7)?, n(8, 10)?, n(11, 13)?, n(14, 16)?, n(17, 19)?);
+    // days from civil
+    let (y2, m2) = if mo <= 2 { (y as i64 - 1, mo as i64 + 9) } else { (y as i64, mo as i64 - 3) };
+    let era = y2.div_euclid(400);
+    let yoe = y2 - era * 400;
+    let doy = (153 * m2 + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    Some((days as u64) * 86400 + h * 3600 + mi * 60 + se)
+}
+
+/// Shreds uploaded items whose confirmation is older than `max_age` seconds. Returns how many.
+pub fn sweep_confirmed(support: &Path, key: &[u8; 32], now: u64, max_age: u64) -> usize {
+    let mut n = 0;
+    for m in list(support, key) {
+        if m.status != Status::Uploaded { continue; }
+        let Some(t) = m.confirmed_at.as_deref().and_then(parse_rfc3339_utc) else { continue };
+        if now >= t + max_age && shred_folder(support, &m.visit_id).is_ok() { n += 1; }
+    }
+    n
 }
 
 /// Overwrites each file with zeros, then removes the folder.
@@ -327,7 +374,7 @@ mod tests {
         let key = [4u8; 32];
         let meta = Metadata {
             version: "1.0".into(), visit_id: "v2".into(), environment: "staging".into(),
-            created_at: rfc3339_utc(0), duration_seconds: 1.0, status: Status::Pending,
+            created_at: rfc3339_utc(0), duration_seconds: 1.0, status: Status::Pending, recording_id: None, link_visit: None, confirmed_at: None,
         };
         save(&dir, &key, &meta, &[seg("a", "second part", "mic", 0.0)], "first part\n\n--- added ---\n\n").unwrap();
         assert_eq!(read_text(&dir, &key, "v2").unwrap(), "first part\n\n--- added ---\n\nsecond part");
@@ -342,7 +389,7 @@ mod tests {
         let key = [3u8; 32];
         let meta = Metadata {
             version: "1.0".into(), visit_id: "v1".into(), environment: "staging".into(),
-            created_at: rfc3339_utc(0), duration_seconds: 12.5, status: Status::Pending,
+            created_at: rfc3339_utc(0), duration_seconds: 12.5, status: Status::Pending, recording_id: None, link_visit: None, confirmed_at: None,
         };
         save(&dir, &key, &meta, &[seg("a", "secret words", "mic", 0.0)], "").unwrap();
         let raw = fs::read(dir.join("queue/v1/transcripts.json")).unwrap();
@@ -373,7 +420,7 @@ mod tests {
         let key = [5u8; 32];
         let meta = Metadata {
             version: "1.0".into(), visit_id: "v9".into(), environment: "staging".into(),
-            created_at: rfc3339_utc(0), duration_seconds: 5.0, status: Status::Pending,
+            created_at: rfc3339_utc(0), duration_seconds: 5.0, status: Status::Pending, recording_id: None, link_visit: None, confirmed_at: None,
         };
         let mut a = seg("1", "Hello.", "mic", 0.0); a.speaker = "Speaker 1".into(); a.timestamp = "[00:03]".into();
         let mut b = seg("2", "Hi.", "mic", 3.0); b.speaker = "Speaker 2".into(); b.timestamp = "[00:07]".into();
@@ -422,7 +469,7 @@ mod tests {
     fn regenerate_queue_fixture() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/queue-v1.0");
         let meta = Metadata { version: "1.0".into(), visit_id: "fake-visit-1019".into(), environment: "production".into(),
-            created_at: "2026-11-11T15:00:00Z".into(), duration_seconds: 8.0, status: Status::Pending };
+            created_at: "2026-11-11T15:00:00Z".into(), duration_seconds: 8.0, status: Status::Pending, recording_id: None, link_visit: None, confirmed_at: None };
         let mut a = seg("1", "This is a made-up test line one.", "mic", 0.0); a.speaker = "Provider".into(); a.timestamp = "[00:00]".into();
         let mut b = seg("2", "This is a made-up test line two.", "system", 4.0); b.speaker = "Patient".into(); b.timestamp = "[00:04]".into();
         save(&dir, &FIXTURE_KEY, &meta, &[a, b], "").unwrap();
@@ -465,13 +512,30 @@ mod tests {
         let key = [6u8; 32];
         for (id, env) in [("fake-stg", "staging"), ("fake-loc", "localhost"), ("fake-prod", "production")] {
             let meta = Metadata { version: "1.0".into(), visit_id: id.into(), environment: env.into(),
-                created_at: rfc3339_utc(0), duration_seconds: 3.0, status: Status::Pending };
+                created_at: rfc3339_utc(0), duration_seconds: 3.0, status: Status::Pending, recording_id: None, link_visit: None, confirmed_at: None };
             save(&dir, &key, &meta, &[seg("a", "made-up", "mic", 0.0)], "").unwrap();
         }
         let envs: Vec<String> = list(&dir, &key).into_iter().map(|m| m.environment).collect();
         assert_eq!(envs.len(), 3);
         for e in ["staging", "localhost", "production"] { assert!(envs.iter().any(|x| x == e)); }
         assert!(dir.join("queue/fake-stg/transcripts.json").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn confirmed_copies_are_shredded_after_the_safety_window_only() {
+        let dir = tmp();
+        let key = [5u8; 32];
+        let meta = Metadata { version: "1.0".into(), visit_id: "vs".into(), environment: "production".into(), created_at: rfc3339_utc(0),
+            duration_seconds: 1.0, status: Status::Pending, recording_id: Some("r".into()), link_visit: Some("vs".into()), confirmed_at: None };
+        save(&dir, &key, &meta, &[seg("a", "made-up", "mic", 0.0)], "").unwrap();
+        assert_eq!(sweep_confirmed(&dir, &key, 10_000_000, 86_400), 0, "not confirmed yet: kept");
+        let t0 = 1_800_000_000u64;
+        mark_confirmed(&dir, &key, "vs", &rfc3339_utc(t0)).unwrap();
+        assert_eq!(parse_rfc3339_utc(&rfc3339_utc(t0)), Some(t0));
+        assert_eq!(sweep_confirmed(&dir, &key, t0 + 3600, 86_400), 0, "one hour later: still kept");
+        assert_eq!(sweep_confirmed(&dir, &key, t0 + 86_401, 86_400), 1, "after 24 h: shredded");
+        assert!(list(&dir, &key).is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 }

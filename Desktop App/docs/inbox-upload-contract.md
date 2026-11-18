@@ -9,7 +9,7 @@ Production only. All routes are under `/api/desktop/v1`, bearer token as today, 
 
 ## 1. Send (or update) a recording: `PUT /notes/inbox/:uuid`
 Body: `{ "seq": 3, "final": false, "text": "<whole transcript so far>", "sha256": "<hex>", "durationSeconds": 612.4, "recordedAt": "2026-11-18T14:03:00Z", "visitId": "<optional>" }`
-- Each request carries the WHOLE transcript so far (transcripts are a few KB), so any request can be lost or repeated safely. `seq` starts at 1 and grows by 1 per checkpoint.
+- Each request carries the WHOLE transcript so far (transcripts are a few KB), so any request can be lost or repeated safely. `seq` starts at 1 and grows by 1 per checkpoint. The final request (`final:true`) uses `seq` 1000000 (the Desktop's `FINAL_SEQ`), so "final seq equals its last" means the server echoes `final:true` and the same `sha256`; accept any seq at least the stored one for a final.
 - Server: verify `sha256` of `text` (mismatch: `422 {"error":"checksum_mismatch"}`, the Desktop resends). Store if `seq` is higher than the stored one.
 - Reply `200 {"ok":true,"uuid":"...","seq":3,"sha256":"<hex of the text the server now holds>","final":false,"visitId":null|"<id>"}`.
 - Idempotent: same `uuid`+`seq`+`sha256` again returns the same 200. A lower `seq` than stored returns 200 with `"stale":true` and the stored `seq`/`sha256` (no change). Same `seq` with a different `sha256`: `409 {"error":"seq_conflict"}`.
@@ -17,7 +17,7 @@ Body: `{ "seq": 3, "final": false, "text": "<whole transcript so far>", "sha256"
 - `visitId` is optional. If given and the visit exists, link it. If the visit does not exist, STILL ACCEPT (200, `visitId:null`); never 404/403 because of the visit. 403 only for missing Notes access, 401 for an expired token.
 - Limits: `text` up to 2 MB (`413 too_large`), `uuid` must be a v4 UUID (`400 bad_uuid`).
 
-The Desktop deletes its local copy only after a 200 whose `final:true`, `seq` equal to its last, and `sha256` equal to its own. It then keeps the encrypted copy 24 hours more.
+The Desktop deletes its local copy only after a 200 whose `final:true` and `sha256` equal to its own. It then keeps the encrypted copy 24 hours more.
 
 ## 2. Link to a visit: `POST /notes/inbox/:uuid/link`
 Body `{ "visitId": "..." }`. 200 `{"ok":true,"visitId":"..."}` (idempotent for the same visit). `404 visit_not_found` leaves it in the inbox. `409 already_linked` if linked to a different visit. Linking writes the transcript to the visit exactly as `POST /notes/visits/:id/transcript` does today.

@@ -18,6 +18,7 @@ pub mod capture;
 pub mod google;
 mod updater;
 mod model;
+mod journal;
 mod diarize;
 pub mod keystore;
 pub mod queue;
@@ -245,6 +246,17 @@ async fn get_settings() -> Settings { load_settings() }
 
 /// The recording in progress, if there is one. Only one visit is recorded at a time.
 static RECORDER: std::sync::Mutex<Option<capture::Session>> = std::sync::Mutex::new(None);
+/// The background checkpoint of the recording in progress (None for a dictation).
+static LIVE: std::sync::Mutex<Option<(std::sync::Arc<journal::Live>, std::thread::JoinHandle<()>)>> = std::sync::Mutex::new(None);
+
+/// Stops the checkpoint thread and returns the journal it kept.
+fn finish_live() -> Option<journal::Journal> {
+    let (live, handle) = LIVE.lock().ok()?.take()?;
+    live.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let _ = handle.join();
+    let j = live.journal.lock().ok().map(|j| j.clone());
+    j
+}
 
 fn recording_running() -> bool {
     RECORDER.lock().map(|s| s.is_some()).unwrap_or(true)
@@ -414,18 +426,55 @@ async fn refresh_access_token(environment: String, stale: String) -> Result<Opti
 pub struct StartResult {
     /// Set when system audio could not be captured, so the UI can say the patient may not be recorded.
     warning: Option<String>,
+    /// The recording's permanent id (None for a dictation).
+    recording_id: Option<String>,
 }
 
 /// Begins recording the microphone and, for a telehealth visit, the system audio.
 #[tauri::command]
-async fn start_recording(with_system_audio: bool) -> Result<StartResult, String> {
+async fn start_recording(
+    app: tauri::AppHandle, with_system_audio: bool, visit_id: Option<String>, environment: Option<String>, append: Option<bool>,
+) -> Result<StartResult, String> {
     let mut slot = RECORDER.lock().map_err(|_| "the recorder is busy".to_string())?;
     if slot.is_some() {
         return Err("a recording is already running".into());
     }
     let (recorder, warning) = capture::Session::start(with_system_audio)?;
+    let mut recording_id = None;
+    // A visit recording keeps a local journal (checkpoints every ~30 s); a dictation keeps nothing.
+    if let (Some(v), Some(e)) = (visit_id, environment) {
+        if safe_component(&v).is_ok() && env_url(&e).is_ok() {
+            if let (Some(model), Ok(key)) = (find_model(&app), keystore::queue_key()) {
+                let id = journal::new_uuid();
+                let live = std::sync::Arc::new(journal::Live {
+                    journal: std::sync::Mutex::new(journal::Journal {
+                        recording_id: id.clone(), visit_id: v, environment: e, created_at: queue::rfc3339_utc(now_unix()),
+                        append: append.unwrap_or(false), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0,
+                    }),
+                    stop: std::sync::atomic::AtomicBool::new(false),
+                });
+                let h = journal::start(model, support_dir(), key, recorder.shared(), std::sync::Arc::clone(&live));
+                if let Ok(mut l) = LIVE.lock() { *l = Some((live, h)); }
+                recording_id = Some(id);
+            }
+        }
+    }
     *slot = Some(recorder);
-    Ok(StartResult { warning })
+    Ok(StartResult { warning, recording_id })
+}
+
+/// What the app can send to the server while still recording: the words so far (decrypted from memory only).
+#[derive(Serialize)]
+pub struct Checkpoint { recording_id: String, seq: u32, text: String, seconds: f64 }
+
+#[tauri::command]
+async fn recording_checkpoint() -> Option<Checkpoint> {
+    let g = LIVE.lock().ok()?;
+    let (live, _) = g.as_ref()?;
+    let j = live.journal.lock().ok()?;
+    if j.seq == 0 { return None; }
+    let seconds = j.segments.iter().filter_map(|s| s.audio_end_time).fold(0.0, f64::max);
+    Some(Checkpoint { recording_id: j.recording_id.clone(), seq: j.seq, text: j.text(), seconds })
 }
 
 #[derive(Serialize)]
@@ -471,7 +520,9 @@ async fn stop_recording(
         .take()
         .ok_or("no recording is running")?;
     let channels = recorder.stop()?;
+    let journal = finish_live();
     if !channels.has_sound() {
+        if let Some(j) = &journal { journal::Journal::remove(&support_dir(), &j.recording_id); }
         return Err("the recording is silent; check the microphone and try again".into());
     }
     let seconds = channels.mic.len().max(channels.system.len()) as f32 / capture::SAMPLE_RATE as f32;
@@ -479,8 +530,11 @@ async fn stop_recording(
     let model = find_model(&app).ok_or("the transcription model is missing")?;
     // Two channels (a video call: the mic is the provider, the call audio is the patient) are labelled by channel. One
     // microphone (in person, or on speaker) is separated into two voices here on the Mac; those labels are unconfirmed.
+    // Whatever the checkpoints already transcribed is kept; only the tail after them is transcribed now.
+    let (prior, done_mic, done_sys) = journal.as_ref().map(|j| (j.segments.clone(), j.done_mic, j.done_sys)).unwrap_or_default();
     let (segments, voices) = tauri::async_runtime::spawn_blocking(move || {
-        let mut segs = transcribe::transcribe(&model, &channels.mic, &channels.system)?;
+        let tail = transcribe::transcribe_tail(&model, &channels.mic, done_mic.min(channels.mic.len()), &channels.system, done_sys.min(channels.system.len()))?;
+        let mut segs = transcribe::merge_channels(prior.into_iter().chain(tail).collect());
         let loud = |v: &Vec<i16>| v.iter().any(|s| s.unsigned_abs() > 300);
         let voices = if loud(&channels.system) {
             for s in segs.iter_mut() {
@@ -507,13 +561,14 @@ async fn stop_recording(
         Vec::new()
     };
     let summary = StopResult { voices, needs_speaker_choice: needs_choice, speakers, ..summary };
+    let recording_id = journal.as_ref().map(|j| j.recording_id.clone());
     let meta = queue::Metadata {
         version: "1.0".into(),
-        visit_id,
+        visit_id: visit_id.clone(),
         environment,
         created_at: queue::rfc3339_utc(now_unix()),
         duration_seconds: seconds as f64,
-        status: queue::Status::Pending,
+        status: queue::Status::Pending, link_visit: recording_id.as_ref().map(|_| visit_id), recording_id: recording_id.clone(), confirmed_at: None,
     };
     // Adding to an earlier transcript: the earlier text (held by the app until now) goes in front, with a time line.
     let preface = match previous.as_deref().map(str::trim_end).filter(|p| !p.is_empty()) {
@@ -521,6 +576,8 @@ async fn stop_recording(
         None => String::new(),
     };
     queue::save(&support_dir(), &keystore::queue_key()?, &meta, &segments, &preface)?;
+    // The queue copy is safely on disk: the journal has done its job.
+    if let Some(id) = recording_id { journal::Journal::remove(&support_dir(), &id); }
     Ok(summary)
 }
 
@@ -555,6 +612,7 @@ async fn cancel_recording() -> Result<(), String> {
     if let Ok(mut slot) = RECORDER.lock() {
         slot.take();
     }
+    if let Some(j) = finish_live() { journal::Journal::remove(&support_dir(), &j.recording_id); }
     Ok(())
 }
 
@@ -563,6 +621,10 @@ async fn cancel_recording() -> Result<(), String> {
 #[derive(Serialize)]
 pub struct QueueItem {
     visit_id: String,
+    recording_id: Option<String>,
+    /// The visit to link on the server; None means "Needs link" (the recording is safe in the inbox either way).
+    link_visit: Option<String>,
+    confirmed_at: Option<String>,
     environment: String,
     created_at: String,
     duration_seconds: f64,
@@ -577,6 +639,8 @@ async fn queue_list() -> Result<Vec<QueueItem>, String> {
         .map(|m| QueueItem {
             visit_id: m.visit_id, environment: m.environment, created_at: m.created_at,
             duration_seconds: m.duration_seconds, status: m.status,
+            // Items saved before recording ids existed link to their own visit through the old upload.
+            recording_id: m.recording_id, link_visit: m.link_visit, confirmed_at: m.confirmed_at,
         })
         .collect())
 }
@@ -597,7 +661,7 @@ async fn queue_set_text(visit_id: String, environment: String, text: String) -> 
         environment,
         created_at: queue::rfc3339_utc(now_unix()),
         duration_seconds: 0.0,
-        status: queue::Status::Pending,
+        status: queue::Status::Pending, recording_id: None, link_visit: None, confirmed_at: None,
     };
     queue::save(&support_dir(), &keystore::queue_key()?, &meta, &[], &text)
 }
@@ -616,8 +680,29 @@ async fn queue_relabel(visit_id: String, mapping: std::collections::HashMap<Stri
 #[tauri::command]
 async fn queue_complete(visit_id: String) -> Result<(), String> {
     let support = support_dir();
-    let _ = queue::mark_uploaded(&support, &keystore::queue_key()?, &visit_id);
-    queue::shred_folder(&support, &visit_id)
+    let key = keystore::queue_key()?;
+    // A recording with an id keeps its encrypted copy 24 hours after the server confirmed the checksum (a safety net);
+    // `queue_sweep` shreds it then. Older items are shredded now, as before.
+    match queue::read_metadata(&support, &key, &visit_id) {
+        Ok(m) if m.recording_id.is_some() => queue::mark_confirmed(&support, &key, &visit_id, &queue::rfc3339_utc(now_unix())),
+        _ => {
+            let _ = queue::mark_uploaded(&support, &key, &visit_id);
+            queue::shred_folder(&support, &visit_id)
+        }
+    }
+}
+
+/// Shreds confirmed copies older than 24 hours. Called at launch and now and then.
+#[tauri::command]
+async fn queue_sweep() -> Result<usize, String> {
+    Ok(queue::sweep_confirmed(&support_dir(), &keystore::queue_key()?, now_unix(), 24 * 3600))
+}
+
+/// Writes a recovered recording from a crash into the queue (called at launch).
+#[tauri::command]
+async fn recover_recordings() -> Result<usize, String> {
+    let active = LIVE.lock().ok().and_then(|g| g.as_ref().and_then(|(l, _)| l.journal.lock().ok().map(|j| j.recording_id.clone())));
+    Ok(journal::recover(&support_dir(), &keystore::queue_key()?, active.as_deref()))
 }
 
 /// Opens the macOS folder chooser and returns the chosen folder, or None if cancelled.
@@ -783,7 +868,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
+            engine_status_cmd, recording_checkpoint, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context
