@@ -22,3 +22,4 @@ Web 1.19 | Schedule: sorted by time, time ranges, military time, provider column
 Web 1.20 | Ledger API for Claude: ledger token scope, list/create/update/delete, options, totals; refuses patient info and exact duplicates | e0a4ab7 (staging, rev practice-mgmt-00085-ruj)
 Web 1.21 | Admin: People tab (login + module access, one row per person), merged Task tabs, Save all bar on People, Task tabs and Timesheets; old Admin URLs redirect | 30565d5 (staging, rev practice-mgmt-00087-key)
 Web 1.22 | Redesign foundation: new colors and fonts (Inter, Newsreader), sidebar, page headers, tables, pills, buttons; STAGING/PRODUCTION label in the sidebar; Schedule header and day summary | 3f99185 (staging, rev practice-mgmt-00089-pex)
+Web 1.23 | Redesign: Billing (month heading, pill tabs, summary of shown/waiting/entered encounters, restyled list); tab style now shared by all screens | pending

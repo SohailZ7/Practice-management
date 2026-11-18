@@ -574,3 +574,12 @@ tr.xl-day td { background: var(--th-bg); font-size: .78rem; font-weight: 600; le
   .shell.pinned .side:not(:hover) .env-badge { justify-content: center; padding: .6rem 0; }
   .shell.pinned .side:not(:hover) .env-badge .txt { display: none; }
 }
+
+/* Billing (Web 1.23) */
+.tabs { gap: .4rem; border-bottom: 0; margin-bottom: 1.1rem; }
+.tab { border: 1px solid var(--line-strong); border-radius: 999px; padding: .4rem 1rem; background: var(--card); color: var(--neutral-text); font-weight: 500; }
+.tab:hover { background: var(--side-hover); }
+.tab.on { background: var(--text); color: var(--card); border-color: var(--text); margin-bottom: 0; box-shadow: none; font-weight: 500; }
+.tab .count { background: var(--neutral-bg); color: var(--neutral-text); }
+.card.row { border-radius: 14px; padding: .8rem 1rem; }
+.table-wrap td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }

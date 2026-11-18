@@ -102,6 +102,12 @@ export function EncounterList({
 
       {error && <div className="error">{error}</div>}
 
+      <div className="stat-row" aria-label="Encounter summary">
+        <div className="stat"><span className="muted small">Shown</span><strong>{rows.length}</strong></div>
+        <div className="stat"><span className="muted small">Waiting for GetIX</span><strong>{rows.filter((r) => !r.deleted && !r.getixEntered).length}</strong></div>
+        <div className="stat"><span className="muted small">Entered in GetIX</span><strong>{rows.filter((r) => !r.deleted && r.getixEntered).length}</strong></div>
+      </div>
+
       <div className="table-wrap">
         <table>
           <thead>
