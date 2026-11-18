@@ -15,6 +15,7 @@ export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   ImportDraft: ["payload"],
   PatientConsent: ["note"],
   Visit: ["transcript"],
+  RecordingInbox: ["text"],
   VisitDocument: ["markdown", "attention"],
   VisitDocumentVersion: ["markdown"],
 };

@@ -626,3 +626,22 @@ model DesktopDiagnostic {
   @@index([receivedAt])
   @@index([userId, receivedAt])
 }
+
+// A recording's transcript as the Desktop app uploads it, keyed by the Desktop's own UUID. It exists before (and
+// without) any visit link, so an upload never fails because the visit is missing. `text` is encrypted at rest.
+model RecordingInbox {
+  id              String   @id
+  seq             Int
+  final           Boolean  @default(false)
+  text            String   @default("")
+  sha256          String
+  durationSeconds Float    @default(0)
+  recordedAt      DateTime
+  visitId         String?
+  createdByEmail  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([visitId])
+  @@index([createdAt])
+}

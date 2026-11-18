@@ -115,6 +115,7 @@ describe("applying the cipher to Prisma data", () => {
       ImportDraft: ["payload"],
       PatientConsent: ["note"],
       Visit: ["transcript"],
+      RecordingInbox: ["text"],
       VisitDocument: ["markdown", "attention"],
       VisitDocumentVersion: ["markdown"],
     });
