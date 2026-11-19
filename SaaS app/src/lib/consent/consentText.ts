@@ -3,7 +3,7 @@
 // DRAFT: the attorney has not signed off.
 
 export const RECORDING_CONSENT = {
-  version: "2026-11-19-draft-1",
+  version: "2026-11-19-draft-2",
   title: "Before recording",
   text:
     "Before recording: have you told everyone present that this visit will be transcribed by an AI tool to help write the note, that no audio is saved, and that they can say no? Patient and all other participants consented.",
