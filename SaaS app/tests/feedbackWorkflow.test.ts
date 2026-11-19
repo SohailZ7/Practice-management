@@ -103,10 +103,12 @@ describe("migration mapping (old words read as the new states)", () => {
 
 describe("feedback API shape", () => {
   const row = { id: "1", kind: "BUG", title: "t", description: "d", authorId: "u", createdAt: new Date(), updatedAt: new Date(), author: { name: "Someone" }, status: "triaged", triageOutcome: "accepted", scope: "ui_small", testNotes: "n" };
-  it("never exposes author or email", () => {
+  it("exposes the submitter name but never an email or author id", () => {
     const s = feedbackShape(toFeedbackOut(row, ""));
+    expect(s.submitter).toBe("Someone");
     expect(Object.keys(s)).not.toContain("authorName");
-    expect(JSON.stringify(s)).not.toContain("Someone");
+    expect(Object.keys(s)).not.toContain("authorId");
+    expect(Object.keys(s)).not.toContain("email");
     expect(s.status).toBe("triaged");
     expect(s.triage).toBe("accepted");
   });
