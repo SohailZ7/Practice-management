@@ -2,6 +2,7 @@
 export const ADMIN_PAGES = [
   { href: "/admin", label: "People" },
   { href: "/admin/task-tabs", label: "Task tabs" },
+  { href: "/admin/lists", label: "Lists" },
   { href: "/admin/timesheets", label: "Timesheets" },
   { href: "/admin/api-tokens", label: "Claude tokens" },
   { href: "/admin/activity", label: "Recent activity" },

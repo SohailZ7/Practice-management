@@ -216,6 +216,23 @@ model Program {
   encounters Encounter[]
 }
 
+// Editable reference lists (Administration > Lists): visit types, charge codes, documentation types, order types.
+// One new table, additive only. Rows store the list value as text elsewhere, so renaming an item never rewrites old days.
+model RefItem {
+  id          String   @id @default(cuid())
+  kind        String // visit_type | charge_code | doc_type | order_type
+  value       String
+  docType     String? // charge_code only: the documentation type this code goes with
+  nonBillable Boolean  @default(false) // charge_code only
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([kind, value])
+  @@index([kind, active, sortOrder])
+}
+
 // MRN is optional; an admin can add it later. mergedIntoId keeps merged records instead of erasing them.
 model Patient {
   id              String           @id @default(cuid())
