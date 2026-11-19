@@ -953,16 +953,16 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
       {signedIn ? (
         <>
           <p className="small"><strong>Signed in to {labelFor(env)}.</strong></p>
-          <p className="small">
+          <div className="row wrap">
             <button className="secondary" disabled={!session} onClick={() => {
               if (!session) return;
               setDiagMsg("Sending…");
               sendDiagnostics(session, true, env)
                 .then((n) => setDiagMsg(`Sent. ${n} recent event${n === 1 ? "" : "s"} (app version, errors and status codes only; no patient information).`))
                 .catch(() => setDiagMsg("Could not send. Try again in a minute."));
-            }}>Send diagnostics</button>{" "}
-            <span className="small">{diagMsg || "Sends app version, errors and status codes to Sohail. No patient names, transcripts or audio."}</span>
-          </p>
+            }}>Send diagnostics</button>
+            <span className="small helper">{diagMsg || "Sends app version, errors and status codes to Sohail. No patient names, transcripts or audio."}</span>
+          </div>
         </>
       ) : (
         <p className="small">Sign in with your Google account to use the recorder. Nothing works until you do.</p>
@@ -988,9 +988,10 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
           onDone={() => { setMfa(null); void onChanged(); }}
           onRestart={(m) => { setMfa(null); setError(m); }} />
       )}
-      <div className="row" style={{ marginBottom: ".8rem", display: mfa ? "none" : undefined }}>
+      <div className="row wrap" style={{ marginBottom: ".8rem", display: mfa ? "none" : undefined }}>
         {googleAvailable !== false && (
           <button
+            className={signedIn ? "secondary" : undefined}
             disabled={signingIn || googleAvailable !== true}
             onClick={async () => {
               setSigningIn(true);
