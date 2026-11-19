@@ -19,19 +19,21 @@ export default async function PatientChart({ params }: { params: { id: string } 
     notFound();
   }
   const billing = canAccess(user, "billing", "view");
-  const [visits, entries, encounters] = await Promise.all([
+  const [visits, allEntries, encounters] = await Promise.all([
     db.visit.findMany({
       where: { ...LIVE_VISITS, patientId: patient.id },
       orderBy: [{ visitDate: "desc" }, { createdAt: "desc" }],
-      select: { id: true, visitDate: true, providerName: true, status: true, appointmentType: true, program: true, documents: { select: { id: true, kind: true, label: true, draft: true, updatedAt: true }, orderBy: { createdAt: "asc" } } },
+      select: { id: true, legacyScheduleEntryId: true, visitDate: true, providerName: true, status: true, appointmentType: true, program: true, documents: { select: { id: true, kind: true, label: true, draft: true, updatedAt: true }, orderBy: { createdAt: "asc" } } },
     }),
     db.scheduleEntry.findMany({ where: { patientId: patient.id, visitId: null }, orderBy: { date: "desc" }, select: { id: true, date: true, providerName: true, trackName: true, typeName: true, completed: true, absent: true, canceled: true, missed: true } }),
     billing ? db.encounter.findMany({ where: { patientId: patient.id, deletedAt: null }, orderBy: { encounterDate: "desc" }, select: { id: true, encounterDate: true, chargeCode: true, getixEntered: true, program: { select: { name: true } } } }) : Promise.resolve([]),
   ]);
+  const legacy = new Set(visits.map((v) => v.legacyScheduleEntryId).filter((x): x is string => !!x));
+  const entries = allEntries.filter((e) => !legacy.has(e.id));
   await audit(user.email, "patients.chart.view", `patient ${patient.id}`);
   const name = `${patient.lastName}, ${patient.firstName}`;
   const full = canSeeFullNames(user);
-  const flag = (e: (typeof entries)[number]) => (e.canceled ? "Cancelled" : e.absent ? "No-show" : e.missed ? "Missed" : e.completed ? "Seen" : "Scheduled");
+  const flag = (e: (typeof allEntries)[number]) => (e.canceled ? "Cancelled" : e.absent ? "No-show" : e.missed ? "Missed" : e.completed ? "Seen" : "Scheduled");
   return (
     <>
       <p><Link href="/patients">← Patients</Link></p>

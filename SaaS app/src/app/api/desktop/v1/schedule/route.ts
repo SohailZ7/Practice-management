@@ -4,6 +4,7 @@ import { isISODate, todayISO } from "@/lib/dates";
 import { ApiError, authenticate, handle, json } from "@/lib/desktop/api";
 import { programOf } from "@/lib/desktop/policy";
 import { entryDTOs } from "@/lib/patients";
+import { byTime, stagingOnly, trackingOnlyNames, visitAsEntry } from "@/lib/schedule/rows";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,15 @@ export const GET = handle(async (req) => {
   const date = q ?? todayISO();
   if (!isISODate(date)) throw new ApiError(400, "bad_date");
 
-  const rows = await db.scheduleEntry.findMany({ where: { date }, orderBy: [{ createdAt: "asc" }] });
+  // Release B1: appointments are Visits; rows with no patient yet still come from ScheduleEntry. Same response shape as before.
+  const visits = await db.visit.findMany({ where: { visitDate: date }, include: { patient: { select: { lastName: true, firstName: true } } } });
+  const hidden = new Set(await trackingOnlyNames());
+  const shown = visits.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort(byTime);
+  const legacy = new Set(visits.map((v) => v.legacyScheduleEntryId).filter((x): x is string => !!x));
+  const staging = stagingOnly(await db.scheduleEntry.findMany({ where: { date }, orderBy: [{ createdAt: "asc" }] }), legacy, new Set(visits.map((v) => v.id)));
+  // The entry id stays the old ScheduleEntry id where the Visit came from one, so recorder ids do not change.
+  const apiId = new Map(shown.map((v) => [v.id, v.legacyScheduleEntryId ?? v.id]));
+  const rows = [...shown.map(visitAsEntry), ...staging];
   const dtos = await entryDTOs(rows);
   const ids = [...new Set(dtos.map((d) => d.patientId).filter((x): x is string => !!x))];
   const patients = ids.length ? await db.patient.findMany({ where: { id: { in: ids } }, select: { id: true, lastName: true, firstName: true } }) : [];
@@ -27,7 +36,7 @@ export const GET = handle(async (req) => {
       const d = dtos[i];
       const p = d.patientId ? byId.get(d.patientId) : undefined;
       return {
-        id: r.id,
+        id: apiId.get(r.id) ?? r.id,
         time: r.timeLabel,
         program: programOf(r),
         type: r.typeName,

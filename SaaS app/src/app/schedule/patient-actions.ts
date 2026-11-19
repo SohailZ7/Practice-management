@@ -6,11 +6,13 @@ import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { setPatientConsent, withdrawPatientConsent, type ConsentResult } from "@/lib/consentService";
-import { makeDedupeKey } from "@/lib/import/outpatientBoard";
 import { patientSearch } from "@/lib/billing/scope";
 import { validatePatient } from "@/lib/billing/validate";
 import { entryDTO, survivingPatientId } from "@/lib/patients";
 import type { EntryDTO } from "@/lib/scheduleTypes";
+import { visitAsEntry } from "@/lib/schedule/rows";
+import { timeColumns, statusFromFlags } from "@/lib/unify/plan";
+import { syncScheduleForVisit } from "@/lib/notes/visitSchedule";
 
 // Audit details hold record ids and dates only, never patient names or MRNs (PAT-5, CON-3).
 
@@ -52,6 +54,12 @@ export async function createPatient(input: { lastName: string; firstName: string
 /** PAT-1, PAT-2: link (or unlink with null) an entry to a patient; linking also sets the visible client text. */
 export async function linkPatient(entryId: string, patientId: string | null): Promise<EntryDTO> {
   const user = await requireAccess("schedule", "edit");
+  // Release B1: a Visit row already has its patient; changing it would re-point a transcript, so it is refused here.
+  const asVisit = await db.visit.findUnique({ where: { id: entryId }, select: { id: true, patientId: true } });
+  if (asVisit) {
+    if (patientId === asVisit.patientId) return entryDTO(visitAsEntry(await loadVisit(entryId)));
+    throw new Error("This appointment already has a patient. Remove it and add it again for someone else.");
+  }
   const entry = await db.scheduleEntry.findUnique({ where: { id: entryId } });
   if (!entry) throw new Error("Entry not found");
 
@@ -66,17 +74,37 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
   const patient = resolved ? await db.patient.findUnique({ where: { id: resolved } }) : null;
   if (!patient) throw new Error("Patient not found");
   const clientInfo = `${patient.lastName}, ${patient.firstName}`;
-  const updated = await db.scheduleEntry.update({
-    where: { id: entryId },
+  // Release B1: linking a patient turns the staging row into a Visit (the entry stays as the rollback mirror).
+  const t = timeColumns(entry.timeLabel);
+  const visit = await db.visit.create({
     data: {
       patientId: patient.id,
-      clientInfo,
-      dedupeKey: makeDedupeKey({ date: entry.date, section: entry.section, timeLabel: entry.timeLabel, providerName: entry.providerName, clientInfo }),
+      visitDate: entry.date,
+      appointmentType: entry.typeName,
+      program: entry.section === "TRACK" ? entry.timeLabel : "",
+      apptTime: entry.section === "TRACK" ? "" : entry.timeLabel,
+      providerName: entry.providerName,
+      status: statusFromFlags(entry).status,
+      createdByEmail: user.email,
+      legacyScheduleEntryId: entry.id,
+      timeLabel: entry.timeLabel,
+      startTime: t.startTime,
+      endTime: t.endTime,
+      section: entry.section,
+      trackName: entry.trackName,
+      providerId: entry.providerId,
     },
   });
-  await audit(user.email, "schedule.patient.link", `entry ${entryId} patient ${patient.id}`);
+  // Point the staging row at its new Visit first, so the mirror sync updates it instead of adding a second row.
+  await db.scheduleEntry.update({ where: { id: entry.id }, data: { visitId: visit.id, patientId: patient.id, clientInfo } });
+  await syncScheduleForVisit(visit.id);
+  await audit(user.email, "schedule.patient.link", `entry ${entryId} visit ${visit.id} patient ${patient.id}`);
   revalidatePath("/schedule");
-  return entryDTO(updated);
+  return entryDTO(visitAsEntry(await loadVisit(visit.id)));
+}
+
+async function loadVisit(id: string) {
+  return db.visit.findUniqueOrThrow({ where: { id }, include: { patient: { select: { lastName: true, firstName: true } } } });
 }
 
 export type { ConsentResult } from "@/lib/consentService";

@@ -128,14 +128,10 @@ CREATE INDEX "Visit_providerId_idx" ON "Visit"("providerId");
 ALTER TABLE "Visit" ADD CONSTRAINT "Visit_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "Provider"("id") ON DELETE SET NULL ON UPDATE CASCADE;`;
     expect(gateSchemaSql(sql)).toEqual([]);
   });
-  it("migration-inserted Visits are hidden from every Visit list reader", () => {
-    for (const f of ["src/lib/notes/queries.ts", "src/lib/notes/visitSearch.ts", "src/lib/notes/options.ts", "src/lib/notes/loadSchedule.ts", "src/app/api/desktop/v1/notes/visits/route.ts"]) {
-      expect(readFileSync(f, "utf8")).toContain("LIVE_VISITS");
-    }
-  });
-  it("the app still reads ScheduleEntry for the schedule (Release A switches no reader)", () => {
-    expect(readFileSync("src/app/schedule/page.tsx", "utf8")).toContain("db.scheduleEntry.findMany");
-    expect(readFileSync("src/app/api/desktop/v1/schedule/route.ts", "utf8")).toContain("db.scheduleEntry.findMany");
+  it("Release B1: no Visit list filter remains, and the schedule readers read Visits", () => {
+    expect(readFileSync("src/lib/unify/visible.ts", "utf8")).toContain("LIVE_VISITS = {}");
+    expect(readFileSync("src/app/schedule/page.tsx", "utf8")).toContain("scheduleRows(");
+    expect(readFileSync("src/app/api/desktop/v1/schedule/route.ts", "utf8")).toContain("db.visit.findMany");
   });
 });
 

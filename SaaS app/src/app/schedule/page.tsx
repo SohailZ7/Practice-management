@@ -20,10 +20,9 @@ import {
   startOfWeek,
   todayISO,
 } from "@/lib/dates";
-import { entryDTOs } from "@/lib/patients";
+import { scheduleRows } from "@/lib/schedule/rows";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { MonthGrid } from "@/components/MonthGrid";
-import type { Prisma } from "@prisma/client";
 
 type View = "day" | "week" | "month";
 type Search = { date?: string; view?: string; provider?: string };
@@ -55,21 +54,20 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
     to = addDays(startOfWeek(endOfMonth(date)), 6);
   }
 
-  const where: Prisma.ScheduleEntryWhereInput = { date: { gte: from, lte: to } };
-  if (providerFilter) where.providerId = providerFilter;
-  if (visitsDay) where.visitId = null;
-
-  const [providers, tracks, types, rows] = await Promise.all([
+  const [providers, tracks, types, sched] = await Promise.all([
     db.provider.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.trackDef.findMany({ orderBy: { sortOrder: "asc" } }),
     db.entryType.findMany({ orderBy: { name: "asc" } }),
-    hasSchedule ? db.scheduleEntry.findMany({ where, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }) : Promise.resolve([]),
+    // Release B1: appointments are Visits. The day board (Notes access) already lists them, so it only needs the staging rows.
+    hasSchedule
+      ? scheduleRows({ from, to, providerId: providerFilter || undefined, includeVisits: !visitsDay, includeStaging: true })
+      : Promise.resolve({ visits: [], staging: [] }),
   ]);
   const providerName = providers.find((p) => p.id === providerFilter)?.name;
   const isProviderish = user.role === "ADMIN" || user.role === "PROVIDER";
   const military = cookies().get("bbc_clock")?.value === "24";
   const visits = visitsDay ? (await visitsForDate(date, { fullNames: isProviderish && user.showFullNames })).filter((v) => !providerFilter || !providerName || v.providerName === providerName) : [];
-  const entries = await entryDTOs(rows);
+  const entries = [...sched.visits, ...sched.staging];
   // One entry per page load: view, date range, provider filter id and a count. Never client names.
   const providerId = !providerFilter ? "all" : providers.some((p) => p.id === providerFilter) ? providerFilter : "unknown";
   await audit(user.email, "schedule.view", `${view} ${from}..${to} provider=${providerId} entries=${entries.length}`);
@@ -149,7 +147,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Sea
         <NotesBoard date={date} visits={visits} canEdit={canAccess(user, "notes", "edit")} defaultProvider={process.env.NOTES_DEFAULT_PROVIDER ?? ""} embedded promote={promoteFor(user)} military={military} showProvider={isProviderish} providerOptions={providers.map((p) => p.name)} providerFilter={providerFilter} />
       )}
 
-      {visitsDay && entries.length > 0 && <h2 style={{ marginTop: "1.5rem" }}>Other schedule entries (not linked to a visit)</h2>}
+      {visitsDay && entries.length > 0 && <h2 style={{ marginTop: "1.5rem" }}>Needs a patient (not linked to a visit yet)</h2>}
 
       {visitsDay && entries.length === 0 ? null : view === "month" ? (
         <MonthGrid date={date} entries={entries} today={today} dayHref={(d) => href(d, "day")} />
