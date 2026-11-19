@@ -9,8 +9,8 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("consent gate", () => {
   it("the wording is one constant file, not copied into the screen", () => {
-    expect(app).not.toContain("transcribed by an AI tool");
-    expect(readFileSync("src/lib/consent.ts", "utf8")).toContain("transcribed by an AI tool");
+    expect(app).not.toContain("no audio is saved");
+    expect(readFileSync("src/lib/consent.ts", "utf8")).toContain("no audio is saved");
     expect(CONSENT_TEXT_VERSION).toMatch(/draft/);
   });
   it("Record only opens the question; capture starts only from the confirm button, which needs the checkbox", () => {
