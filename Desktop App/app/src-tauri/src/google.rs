@@ -368,6 +368,33 @@ fn hostname() -> String {
 
 #[cfg(test)]
 mod tests {
+    /// Release gate: every route the web code names (read from the real source files) is accepted by the Rust path rule,
+    /// so a route that the app builds but the Rust layer refuses can never ship again.
+    #[test]
+    fn every_route_in_the_web_source_passes_the_rust_path_rule() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src");
+        let mut files = vec![root.join("App.tsx"), root.join("Health.tsx")];
+        for e in std::fs::read_dir(root.join("lib")).unwrap() { let p = e.unwrap().path(); if p.extension().map_or(false, |x| x == "ts") { files.push(p); } }
+        let mut checked = 0;
+        for f in files {
+            let Ok(src) = std::fs::read_to_string(&f) else { continue };
+            for q in ['`', '"'] {
+                for lit in src.split(q).skip(1).step_by(2) {
+                    let known = ["/notes/", "/tasks", "/feedback", "/diagnostics", "/auth/"];
+                    if !lit.starts_with('/') || lit.len() > 160 || lit.contains(' ') || !known.iter().any(|k| lit.starts_with(k)) { continue; }
+                    // fill every ${...} with a realistic value
+                    let mut out = String::new(); let mut rest = lit;
+                    while let Some(a) = rest.find("${") { out.push_str(&rest[..a]); let b = rest[a..].find('}').unwrap() + a; out.push_str("3f2a9c1e-7b4d-4e0a-9c55-0a1b2c3d4e5f"); rest = &rest[b + 1..]; }
+                    out.push_str(rest);
+                    let path = format!("/api/desktop/v1{out}");
+                    check_api_path(&path).unwrap_or_else(|e| panic!("{} builds {path}: {e}", f.display()));
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked >= 20, "found only {checked} routes; the scan is broken");
+    }
+
     /// A real HTTP server on this Mac: records what the real `api_request` put on the wire, answers 200 with an echo.
     fn serve(requests: usize) -> (u16, std::thread::JoinHandle<Vec<(String, String, String, usize, String)>>) {
         use std::io::{Read, Write};
