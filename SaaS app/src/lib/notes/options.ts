@@ -3,6 +3,7 @@
 
 import { db } from "../db";
 import { TIME_PRESETS } from "./scheduleTime";
+import { LIVE_VISITS } from "../unify/visible";
 
 export const BASE_APPOINTMENT_TYPES = [
   "Psych Eval",
@@ -44,7 +45,7 @@ export type VisitOptions = { programs: string[]; appointmentTypes: string[]; pro
 
 export async function loadVisitOptions(): Promise<VisitOptions> {
   const [visits, providers, tracks, types] = await Promise.all([
-    db.visit.findMany({ distinct: ["program", "appointmentType", "providerName"], select: { program: true, appointmentType: true, providerName: true } }),
+    db.visit.findMany({ where: LIVE_VISITS, distinct: ["program", "appointmentType", "providerName"], select: { program: true, appointmentType: true, providerName: true } }),
     db.provider.findMany({ select: { name: true } }),
     db.trackDef.findMany({ select: { name: true } }),
     db.entryType.findMany({ select: { name: true } }),

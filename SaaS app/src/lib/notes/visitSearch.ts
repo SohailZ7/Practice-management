@@ -3,6 +3,7 @@
 
 import { db } from "../db";
 import { patientInitials } from "./patientFolder";
+import { LIVE_VISITS } from "../unify/visible";
 
 export const MAX_SEARCH_RESULTS = 50;
 
@@ -35,7 +36,7 @@ export async function searchVisits(q: { initials?: string; date?: string }): Pro
     if (patientIds.length === 0) return [];
   }
   const visits = await db.visit.findMany({
-    where: { ...(q.date ? { visitDate: q.date } : {}), ...(patientIds ? { patientId: { in: patientIds } } : {}) },
+    where: { ...LIVE_VISITS, ...(q.date ? { visitDate: q.date } : {}), ...(patientIds ? { patientId: { in: patientIds } } : {}) },
     include: { patient: { select: { lastName: true, firstName: true } }, documents: { select: { id: true } } },
     orderBy: [{ visitDate: "desc" }, { createdAt: "desc" }],
     take: MAX_SEARCH_RESULTS,

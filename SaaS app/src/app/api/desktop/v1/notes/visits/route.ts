@@ -4,6 +4,7 @@ import { isISODate, todayISO } from "@/lib/dates";
 import { ApiError, authenticate, handle, json, readJson } from "@/lib/desktop/api";
 import { patientInitials } from "@/lib/notes/patientFolder";
 import { addVisit, VisitError } from "@/lib/notes/visitService";
+import { LIVE_VISITS } from "@/lib/unify/visible";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export const GET = handle(async (req) => {
   if (!isISODate(date)) throw new ApiError(400, "bad_date");
 
   const visits = await db.visit.findMany({
-    where: { visitDate: date },
+    where: { visitDate: date, ...LIVE_VISITS },
     include: { patient: true, documents: { select: { id: true } } },
     orderBy: { createdAt: "asc" },
   });

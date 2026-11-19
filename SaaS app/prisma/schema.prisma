@@ -74,6 +74,7 @@ model Provider {
   // Tracked for volume and revenue only: never flows to billing, documents, invoices or timesheets.
   trackingOnly Boolean         @default(false)
   entries      ScheduleEntry[]
+  visits       Visit[]
 }
 
 model TrackDef {
@@ -240,24 +241,43 @@ model Patient {
 // A recorded visit (requirements v17 / change request 17). The audio never reaches the server: the recorder
 // transcribes on the Mac and pushes only the text. visitDate: YYYY-MM-DD in the practice time zone.
 model Visit {
-  id              String          @id @default(cuid())
-  patientId       String
-  visitDate       String
-  appointmentType String          @default("")
-  program         String          @default("")
-  apptTime        String          @default("")
-  providerName    String          @default("")
+  id                    String          @id @default(cuid())
+  patientId             String
+  visitDate             String
+  appointmentType       String          @default("")
+  program               String          @default("")
+  apptTime              String          @default("")
+  providerName          String          @default("")
   // What happened to the visit: scheduled | seen | no_show | cancelled | note_signed (see src/lib/notes/visitStatus.ts).
-  status          String          @default("scheduled")
-  transcript      String          @default("")
-  transcriptAt    DateTime?
-  createdByEmail  String
-  createdAt       DateTime        @default(now())
-  patient         Patient         @relation(fields: [patientId], references: [id])
-  documents       VisitDocument[]
+  status                String          @default("scheduled")
+  transcript            String          @default("")
+  transcriptAt          DateTime?
+  createdByEmail        String
+  createdAt             DateTime        @default(now())
+  // Unification, Release A (docs/release-a-runbook.md): the Visit becomes the one appointment record. Every column below is
+  // nullable and additive; nothing reads them yet. Filled by scripts/unify-backfill.ts, only where still null.
+  legacyScheduleEntryId String? // the ScheduleEntry this Visit mirrors or was inserted from (trace only, not a FK)
+  backfilledAt          DateTime? // set ONLY on Visits the migration inserted; list readers skip them until Release B
+  startTime             String? // HH:MM (24h) parsed from the schedule time text; exact time, or start of a range
+  endTime               String? // HH:MM (24h), only for a range
+  timeLabel             String? // the original schedule time text
+  section               String? // PSYCH_EVAL | TRACK
+  trackName             String?
+  providerId            String?
+  encounterId           String? // filled by Seen-to-Encounter (a later phase), not by Release A
+  scheduleNotes         String?
+  discharged            Boolean?
+  overdueBasis          String?
+  patient               Patient         @relation(fields: [patientId], references: [id])
+  documents             VisitDocument[]
+  provider              Provider?       @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  encounter             Encounter?      @relation(fields: [encounterId], references: [id], onDelete: SetNull)
 
   @@index([visitDate])
   @@index([patientId, visitDate])
+  @@index([legacyScheduleEntryId])
+  @@index([providerId])
+  @@index([encounterId])
 }
 
 // One generated document, stored as Markdown. Every save keeps the previous text as a version, so an edit can be
@@ -382,6 +402,7 @@ model Encounter {
   deletedById      String?
   patient          Patient   @relation(fields: [patientId], references: [id])
   program          Program   @relation(fields: [programId], references: [id])
+  visits           Visit[]
 
   @@index([patientId, encounterDate])
   @@index([createdById])

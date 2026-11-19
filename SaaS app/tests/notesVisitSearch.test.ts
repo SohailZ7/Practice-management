@@ -56,7 +56,7 @@ describe("GET /notes/visits/search", () => {
   it("filters by exact date, newest first, capped at 50", async () => {
     await call("date=2026-11-05");
     const arg = db.visit.findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ visitDate: "2026-11-05" });
+    expect(arg.where).toEqual({ backfilledAt: null, visitDate: "2026-11-05" }); // migration-inserted Visits stay hidden until Release B
     expect(arg.take).toBe(50);
     expect(arg.orderBy[0]).toEqual({ visitDate: "desc" });
   });

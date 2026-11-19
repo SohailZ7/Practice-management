@@ -4,6 +4,7 @@ import { db } from "../db";
 import { patientInitials } from "./patientFolder";
 import { sortRows } from "./scheduleTime";
 import { trackingOnlyNames } from "./trackingOnly";
+import { LIVE_VISITS } from "@/lib/unify/visible";
 
 export type DocumentRow = { id: string; kind: string; label: string; draft: boolean; updatedAt: string; /** Filled in once the versioned store exists. */ latestVersion?: number };
 
@@ -28,7 +29,7 @@ export type VisitRow = {
 export async function visitsForDate(date: string, opts: { fullNames?: boolean } = {}): Promise<VisitRow[]> {
   const tracking = await trackingOnlyNames();
   const visits = await db.visit.findMany({
-    where: { visitDate: date },
+    where: { visitDate: date, ...LIVE_VISITS },
     // Only the columns the board shows. Whole documents (their encrypted markdown) and the whole patient row are
     // not needed here, and decrypting them for every visit was most of the cost of this query.
     select: {
@@ -66,7 +67,7 @@ export async function visitsForDate(date: string, opts: { fullNames?: boolean } 
 /** The patient's most recent document before this visit, for the carry-forward. */
 export async function priorDocument(patientId: string, beforeDate: string) {
   const visit = await db.visit.findFirst({
-    where: { patientId, visitDate: { lt: beforeDate } },
+    where: { patientId, visitDate: { lt: beforeDate }, ...LIVE_VISITS },
     include: { documents: { orderBy: { createdAt: "asc" }, take: 1 } },
     orderBy: { visitDate: "desc" },
   });

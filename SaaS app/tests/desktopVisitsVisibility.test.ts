@@ -7,7 +7,7 @@ describe("who sees visits", () => {
   it("the recorder's visit list needs Notes view, like the web board, and is not filtered by user", () => {
     expect(get).toContain('level: "view"');
     expect(get).not.toContain('level: "edit"');
-    expect(get).toContain("where: { visitDate: date }");
+    expect(get).toContain("where: { visitDate: date, ...LIVE_VISITS }");
   });
   it("adding a visit still needs edit", () => {
     expect(route.slice(route.indexOf("export const POST"))).toContain('level: "edit"');

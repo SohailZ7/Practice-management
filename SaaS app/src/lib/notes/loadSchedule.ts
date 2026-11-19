@@ -4,6 +4,7 @@
 import { db } from "../db";
 import { parseSchedule } from "./scheduleParse";
 import { validatePatient } from "../billing/validate";
+import { LIVE_VISITS } from "../unify/visible";
 
 export type LoadResult = {
   created: number;
@@ -41,7 +42,7 @@ export async function loadScheduleForDate(
         data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id },
       }));
 
-    if (await db.visit.findFirst({ where: { patientId: patient.id, visitDate: date } })) {
+    if (await db.visit.findFirst({ where: { patientId: patient.id, visitDate: date, ...LIVE_VISITS } })) {
       skippedExisting += 1;
       continue;
     }
