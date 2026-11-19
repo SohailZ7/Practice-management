@@ -111,13 +111,13 @@ export type Delivery = { via: "inbox" | "visit"; linked: boolean };
  */
 export async function sendConfirmed(s: Session, item: QueueItem, text: string, consent?: ConsentEvent | null): Promise<Delivery> {
   const id = item.recording_id;
-  if (!id) { await pushTranscript(s, item.visit_id, text); return { via: "visit", linked: true }; }
+  if (!id) { await pushTranscript(s, item.visit_id, text, consent); return { via: "visit", linked: true }; }
   const want = await sha256Hex(text);
   let reply;
   try {
     reply = await putInbox(s, id, { seq: FINAL_SEQ, final: true, text, durationSeconds: item.duration_seconds, recordedAt: item.created_at, visitId: item.link_visit ?? null, consent: consent ?? null });
   } catch (e) {
-    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text); return { via: "visit", linked: true }; }
+    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text, consent); return { via: "visit", linked: true }; }
     if (e instanceof ApiFailure && e.status === 404) throw new ApiFailure(404, "inbox_pending");
     throw e;
   }

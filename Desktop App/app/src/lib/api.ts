@@ -2,7 +2,7 @@
 //
 // It pulls the day's visits and pushes back a transcript. The audio never leaves this Mac, and the recorder keeps
 // no patient record of its own: visits arrive as initials and are forgotten when the day changes.
-import type { ConsentEvent } from "./consent";
+import { consentWire, type ConsentEvent } from "./consent";
 import { record, recentEvents, routeTemplate, safeCode } from "./diagnostics";
 import { assertSafeBaseUrl } from "./environments";
 
@@ -173,10 +173,10 @@ export type LoadResult = {
 export const syncSchedule = (session: Session, date: string, pasted: string, provider: string) =>
   call<LoadResult>(session, "/notes/schedule", { method: "POST", body: JSON.stringify({ date, pasted, provider }) });
 
-export const pushTranscript = (session: Session, visitId: string, transcript: string) =>
+export const pushTranscript = (session: Session, visitId: string, transcript: string, consent?: ConsentEvent | null) =>
   call<{ ok: true }>(session, `/notes/visits/${encodeURIComponent(visitId)}/transcript`, {
     method: "POST",
-    body: JSON.stringify({ transcript }),
+    body: JSON.stringify({ transcript, ...(consent ? { consent: consentWire(consent) } : {}) }),
   });
 
 // ----------------------------------------------------------------------------- the inbox (docs/inbox-upload-contract.md)
@@ -198,7 +198,7 @@ export async function putInbox(session: Session, uuid: string, b: InboxBody): Pr
   const sha256 = await sha256Hex(b.text);
   return call<InboxReply>(session, `/notes/inbox/${encodeURIComponent(uuid)}`, {
     method: "PUT",
-    body: JSON.stringify({ ...b, sha256, ...(b.visitId ? { visitId: b.visitId } : {}), ...(b.consent ? { consent: b.consent } : {}) }),
+    body: JSON.stringify({ ...b, sha256, ...(b.visitId ? { visitId: b.visitId } : {}), ...(b.consent ? { consent: consentWire(b.consent) } : {}) }),
   });
 }
 

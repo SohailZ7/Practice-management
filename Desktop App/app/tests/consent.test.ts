@@ -1,7 +1,7 @@
 // Recording-consent gate: wording lives in one file, every start asks first, the answer is stored and travels with the transcript.
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildConsentEvent, CONSENT_TEXT, CONSENT_TEXT_VERSION } from "../src/lib/consent";
+import { buildConsentEvent, consentWire, CONSENT_TEXT, CONSENT_TEXT_VERSION } from "../src/lib/consent";
 import { sendConfirmed } from "../src/lib/queue";
 
 const app = readFileSync("src/App.tsx", "utf8");
@@ -22,6 +22,10 @@ describe("consent gate", () => {
     expect(calls).toBe(1);   // the only capture start is inside startNow, reached only through confirmConsent
     expect(app.indexOf("await startNow()")).toBeGreaterThan(app.indexOf("async function confirmConsent"));
   });
+  it("the wire shape is what the practice app stores: given, textVersion, at", () => {
+    const e = buildConsentEvent("v1", "p", true, new Date("2026-11-19T10:00:00Z"));
+    expect(consentWire(e)).toEqual({ given: true, textVersion: CONSENT_TEXT_VERSION, at: "2026-11-19T10:00:00.000Z" });
+  });
   it("cancel starts nothing", () => {
     expect(app).toMatch(/onClick=\{\(\) => setAskConsent\(false\)\}>\{CONSENT_CANCEL_LABEL\}/);
   });
@@ -37,6 +41,6 @@ describe("consent gate", () => {
     const consent = buildConsentEvent("v1", "Dr. A", true);
     const session: any = { baseUrl: "http://127.0.0.1:1", accessToken: "t", request: async (_m: string, _p: string, body: string) => { sent = JSON.parse(body); return { status: 200, body: JSON.stringify({ ok: true, uuid: "u", seq: 1, sha256: sent.sha256, final: true, visitId: null }) }; } };
     try { await sendConfirmed(session, { visit_id: "v1", environment: "production", created_at: "2026-11-19T10:00:00Z", duration_seconds: 5, status: "pending", recording_id: "11111111-2222-4333-8444-555555555555" } as any, text, consent); } catch { /* transport shape differs; assert on what was captured */ }
-    if (sent) { expect(sent.consent).toEqual(consent); expect(sent.text).toBe(text); }
+    if (sent) { expect(sent.consent).toEqual({ given: true, textVersion: consent.textVersion, at: consent.timestamp }); expect(sent.text).toBe(text); }
   });
 });
