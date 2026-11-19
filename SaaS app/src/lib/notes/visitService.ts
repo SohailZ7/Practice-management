@@ -7,8 +7,9 @@ import { isISODate } from "../dates";
 import { validatePatient } from "../billing/validate";
 import { apptTimeOf, parseClient } from "./scheduleParse";
 import { loadVisitOptions, matchOption } from "./options";
+import { timeColumns } from "../unify/plan";
+import { scheduleFieldsFor } from "./visitSchedule";
 import { isVisitStatus, type VisitStatus } from "./visitStatus";
-import { removeScheduleForVisits, syncScheduleForVisit } from "./visitSchedule";
 
 export class VisitError extends Error {
   constructor(public code: "bad_date" | "bad_patient" | "not_found" | "bad_time" | "too_many" | "bad_type" | "bad_provider" | "bad_status", message: string) {
@@ -77,6 +78,17 @@ async function cleanFields(input: VisitPatch): Promise<VisitPatch & { status?: V
   return out;
 }
 
+/**
+ * Release B2a: the unified columns (time, section, track, provider link) are what the Schedule reads, so every write that
+ * changes the time, program or provider keeps them in step. Pure apart from the provider lookup.
+ */
+async function unifiedColumns(v: { apptTime: string; program: string; appointmentType: string; providerName: string }) {
+  const f = scheduleFieldsFor(v);
+  const t = timeColumns(f.timeLabel);
+  const provider = v.providerName ? await db.provider.findFirst({ where: { name: { equals: v.providerName, mode: "insensitive" } }, select: { id: true } }) : null;
+  return { timeLabel: f.timeLabel, startTime: t.startTime, endTime: t.endTime, section: f.section, trackName: f.trackName, providerId: provider?.id ?? null };
+}
+
 /** Adds one visit for a day. `patient` is the name as typed: "First Last" or "Last, First". Finds or creates the patient. */
 export async function addVisit(
   actor: { id: string; email: string },
@@ -103,9 +115,9 @@ export async function addVisit(
       providerName: fields.providerName ?? "",
       status: fields.status ?? "scheduled",
       createdByEmail: actor.email,
+      ...(await unifiedColumns({ apptTime: fields.apptTime ?? "", program: fields.program ?? "", appointmentType: fields.appointmentType ?? "", providerName: fields.providerName ?? "" })),
     },
   });
-  await syncScheduleForVisit(visit.id);
   await audit(actor.email, "notes.visit.add", `visit ${visit.id} ${input.date}`);
   return visit;
 }
@@ -113,10 +125,11 @@ export async function addVisit(
 export async function updateVisit(actor: { email: string }, id: string, patch: VisitPatch) {
   const existing = await db.visit.findUnique({ where: { id } });
   if (!existing) throw new VisitError("not_found", "Visit not found");
-  const data = await cleanFields(patch);
+  const clean = await cleanFields(patch);
+  const touches = clean.apptTime !== undefined || clean.program !== undefined || clean.providerName !== undefined || clean.appointmentType !== undefined;
+  const data = touches ? { ...clean, ...(await unifiedColumns({ ...existing, ...clean })) } : clean;
   const visit = await db.visit.update({ where: { id }, data });
-  await syncScheduleForVisit(id);
-  await audit(actor.email, "notes.visit.update", `visit ${id} fields=${Object.keys(data).join(",")}`);
+  await audit(actor.email, "notes.visit.update", `visit ${id} fields=${Object.keys(clean).join(",")}`);
   return visit;
 }
 
@@ -125,7 +138,6 @@ export async function deleteVisit(actor: { email: string }, id: string) {
   const existing = await db.visit.findUnique({ where: { id }, include: { documents: { select: { id: true } } } });
   if (!existing) throw new VisitError("not_found", "Visit not found");
   await db.visit.delete({ where: { id } });
-  await removeScheduleForVisits([id]);
   await audit(actor.email, "notes.visit.delete", `visit ${id} ${existing.visitDate} documents=${existing.documents.length}`);
 }
 
@@ -142,7 +154,6 @@ export async function deleteVisits(actor: { email: string }, ids: string[]): Pro
   const found = await db.visit.findMany({ where: { id: { in: unique } }, select: { id: true, _count: { select: { documents: true } } } });
   const foundIds = found.map((v) => v.id);
   if (foundIds.length) await db.visit.deleteMany({ where: { id: { in: foundIds } } });
-  await removeScheduleForVisits(foundIds);
   const documents = found.reduce((n, v) => n + v._count.documents, 0);
   await audit(actor.email, "notes.visit.bulkDelete", `visits=${foundIds.length} notFound=${unique.length - foundIds.length} documents=${documents}`);
   return { deleted: foundIds, notFound: unique.filter((i) => !foundIds.includes(i)) };

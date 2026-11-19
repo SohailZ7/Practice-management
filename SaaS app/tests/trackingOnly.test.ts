@@ -15,7 +15,6 @@ vi.mock("../src/lib/desktop/api", async () => {
 });
 
 const { visitsForDate } = await import("../src/lib/notes/queries");
-const { syncScheduleForVisit } = await import("../src/lib/notes/visitSchedule");
 const { POST } = await import("../src/app/api/desktop/v1/notes/visits/[id]/transcript/route");
 const { assertBillableVisit, TRACKING_ONLY_MESSAGE } = await import("../src/lib/notes/trackingOnly");
 
@@ -42,14 +41,6 @@ describe("tracking-only visits", () => {
     db.visit.findMany.mockResolvedValue([visit("a", "9:00 AM", "Dr. K")]);
     expect((await visitsForDate("2026-11-17"))[0].fullName).toBeUndefined();
     expect((await visitsForDate("2026-11-17", { fullNames: true }))[0].fullName).toBe("Jane Roe");
-  });
-
-  it("never get a Schedule row (what billing and timesheets read), and an old one is removed", async () => {
-    db.visit.findUnique.mockResolvedValue({ ...visit("b", "12:00 PM", "Fitsum Belay") });
-    db.provider.findFirst.mockResolvedValue({ id: "pr1", name: "Fitsum Belay", trackingOnly: true });
-    expect(await syncScheduleForVisit("b")).toBe("missing");
-    expect(db.scheduleEntry.deleteMany).toHaveBeenCalledWith({ where: { visitId: "b" } });
-    expect(db.scheduleEntry.create).not.toHaveBeenCalled();
   });
 
   it("refuse a transcript from the recorder", async () => {

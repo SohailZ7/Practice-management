@@ -4,6 +4,7 @@ import { db } from "../db";
 import { audit, clip } from "../audit";
 import { matchProvider } from "./match";
 import type { ParseResult } from "./outpatientBoard";
+import { visitDedupeKeys } from "./visitKeys";
 
 /** Errors whose message is safe to show the user (never contains row data). */
 export class ImportError extends Error {}
@@ -34,10 +35,10 @@ function chunks<T>(items: T[], size = CHUNK): T[][] {
   return out;
 }
 
-async function existingKeys(keys: string[]): Promise<Set<string>> {
-  const found = new Set<string>();
+async function existingKeys(keys: string[], dates: string[]): Promise<Set<string>> {
+  const found = await visitDedupeKeys(db as never, dates);
   for (const part of chunks(keys, 2000)) {
-    const rows = await db.scheduleEntry.findMany({
+    const rows = await db.unmatchedAppointment.findMany({
       where: { dedupeKey: { in: part } },
       select: { dedupeKey: true },
     });
@@ -63,7 +64,7 @@ export async function buildPreview(parsed: ParseResult) {
     };
   });
 
-  const existing = await existingKeys(parsed.entries.map((e) => e.dedupeKey));
+  const existing = await existingKeys(parsed.entries.map((e) => e.dedupeKey), parsed.entries.map((e) => e.date));
   const duplicates = parsed.entries.filter((e) => existing.has(e.dedupeKey)).length;
 
   return {
@@ -163,9 +164,9 @@ export async function commitImport(args: {
         resolved.set(raw, { id, name });
       }
 
-      const existing = new Set<string>();
+      const existing = await visitDedupeKeys(tx as never, parsed.entries.map((e) => e.date));
       for (const part of chunks(parsed.entries.map((e) => e.dedupeKey), 2000)) {
-        const rows = await tx.scheduleEntry.findMany({
+        const rows = await tx.unmatchedAppointment.findMany({
           where: { dedupeKey: { in: part } },
           select: { dedupeKey: true },
         });
@@ -186,7 +187,7 @@ export async function commitImport(args: {
       });
 
       for (const part of chunks(fresh)) {
-        await tx.scheduleEntry.createMany({
+        await tx.unmatchedAppointment.createMany({
           data: part.map((e) => {
             const r = e.providerName ? resolved.get(e.providerName) : undefined;
             return {

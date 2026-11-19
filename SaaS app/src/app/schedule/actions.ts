@@ -7,9 +7,8 @@ import { requireAccess } from "@/lib/session";
 import { isISODate } from "@/lib/dates";
 import { makeDedupeKey } from "@/lib/import/outpatientBoard";
 import { entryDTO } from "@/lib/patients";
-import { visitAsEntry } from "@/lib/schedule/rows";
+import { unmatchedAsEntry, visitAsEntry } from "@/lib/schedule/rows";
 import { timeColumns, statusFromFlags } from "@/lib/unify/plan";
-import { syncScheduleForVisit } from "@/lib/notes/visitSchedule";
 import { flagsForStatus } from "@/lib/notes/visitStatus";
 import { type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
 
@@ -47,7 +46,7 @@ export async function createEntry(input: {
   const timeLabel = clean(input.timeLabel, 120);
   const { providerId, providerName } = await providerFor(input.providerId);
 
-  const entry = await db.scheduleEntry.create({
+  const entry = await db.unmatchedAppointment.create({
     data: {
       date: input.date,
       section,
@@ -62,7 +61,7 @@ export async function createEntry(input: {
   });
   await audit(user.email, "schedule.add", `entry ${entry.id} ${entry.date} ${section}`);
   revalidatePath("/schedule");
-  return entryDTO(entry);
+  return entryDTO(unmatchedAsEntry(entry));
 }
 
 /** Release B1: a Visit row is edited as the Visit (mirror re-synced for rollback). Returns null when the id is not a Visit. */
@@ -93,7 +92,6 @@ async function updateVisitRow(email: string, id: string, patch: EntryPatch): Pro
     ...(flagsTouched ? { status: statusFromFlags(flags as { absent: boolean; canceled: boolean; completed: boolean; missed: boolean }).status } : {}),
   };
   const updated = await db.visit.update({ where: { id }, data, include: { patient: { select: { lastName: true, firstName: true } } } });
-  await syncScheduleForVisit(id);
   await audit(email, "schedule.update", `visit ${id} ${v.visitDate} fields=${Object.keys(patch).join(",")}`);
   revalidatePath("/schedule");
   return entryDTO(visitAsEntry(updated));
@@ -103,7 +101,7 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
   const user = await requireAccess("schedule", "edit");
   const asVisit = await updateVisitRow(user.email, id, patch);
   if (asVisit) return asVisit;
-  const existing = await db.scheduleEntry.findUnique({ where: { id } });
+  const existing = await db.unmatchedAppointment.findUnique({ where: { id } });
   if (!existing) throw new Error("Entry not found");
 
   const section = patch.section !== undefined ? asSection(patch.section) : asSection(existing.section);
@@ -115,7 +113,7 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
       ? await providerFor(patch.providerId)
       : { providerId: existing.providerId, providerName: existing.providerName };
 
-  const updated = await db.scheduleEntry.update({
+  const updated = await db.unmatchedAppointment.update({
     where: { id },
     data: {
       section,
@@ -142,7 +140,7 @@ export async function updateEntry(id: string, patch: EntryPatch): Promise<EntryD
   });
   await audit(user.email, "schedule.update", `entry ${id} ${existing.date} fields=${Object.keys(patch).join(",")}`);
   revalidatePath("/schedule");
-  return entryDTO(updated);
+  return entryDTO(unmatchedAsEntry(updated));
 }
 
 export async function removeEntry(id: string): Promise<void> {
@@ -152,13 +150,12 @@ export async function removeEntry(id: string): Promise<void> {
     // A visit with a transcript or documents is clinical record: it is removed from Notes, not from the Schedule grid.
     if (visit.transcript || visit._count.documents > 0) throw new Error("This visit has a recording or documents. Delete it from Notes instead.");
     await db.visit.delete({ where: { id } });
-    await db.scheduleEntry.deleteMany({ where: { visitId: id } });
     await audit(user.email, "schedule.delete", `visit ${id} ${visit.visitDate}`);
     revalidatePath("/schedule");
     return;
   }
-  const existing = await db.scheduleEntry.findUnique({ where: { id } });
-  await db.scheduleEntry.delete({ where: { id } }).catch(() => undefined);
+  const existing = await db.unmatchedAppointment.findUnique({ where: { id } });
+  await db.unmatchedAppointment.delete({ where: { id } }).catch(() => undefined);
   if (existing) await audit(user.email, "schedule.delete", `entry ${id} ${existing.date}`);
   revalidatePath("/schedule");
 }

@@ -74,6 +74,7 @@ model Provider {
   // Tracked for volume and revenue only: never flows to billing, documents, invoices or timesheets.
   trackingOnly Boolean         @default(false)
   entries      ScheduleEntry[]
+  unmatched    UnmatchedAppointment[]
   visits       Visit[]
 }
 
@@ -709,4 +710,31 @@ model RecordingConsent {
 
   @@index([visitId, givenAt])
   @@index([recordingId])
+}
+
+// Unification, Release B2a: appointments that have no patient yet (imports, free-text adds). They are not Visits because a
+// Visit needs a patient. Copied from ScheduleEntry by scripts/unify-copy-unmatched.ts (same id, same stored values, same
+// encrypted clientInfo); ScheduleEntry is dropped in B2b. Linking a patient turns a row into a Visit and deletes it here.
+model UnmatchedAppointment {
+  id           String    @id @default(cuid())
+  date         String
+  section      String
+  timeLabel    String    @default("")
+  trackName    String    @default("")
+  typeName     String    @default("")
+  clientInfo   String    @default("")
+  providerId   String?
+  providerName String    @default("")
+  absent       Boolean   @default(false)
+  canceled     Boolean   @default(false)
+  completed    Boolean   @default(false)
+  missed       Boolean   @default(false)
+  dedupeKey    String    @default("")
+  importLogId  String?
+  patientId    String?
+  createdAt    DateTime  @default(now())
+  provider     Provider? @relation(fields: [providerId], references: [id])
+
+  @@index([date])
+  @@index([dedupeKey])
 }

@@ -4,7 +4,7 @@ import { isISODate, todayISO } from "@/lib/dates";
 import { ApiError, authenticate, handle, json } from "@/lib/desktop/api";
 import { programOf } from "@/lib/desktop/policy";
 import { entryDTOs } from "@/lib/patients";
-import { byTime, stagingOnly, trackingOnlyNames, visitAsEntry } from "@/lib/schedule/rows";
+import { byTime, trackingOnlyNames, unmatchedAsEntry, visitAsEntry } from "@/lib/schedule/rows";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,7 @@ export const GET = handle(async (req) => {
   const visits = await db.visit.findMany({ where: { visitDate: date }, include: { patient: { select: { lastName: true, firstName: true } } } });
   const hidden = new Set(await trackingOnlyNames());
   const shown = visits.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort(byTime);
-  const legacy = new Set(visits.map((v) => v.legacyScheduleEntryId).filter((x): x is string => !!x));
-  const staging = stagingOnly(await db.scheduleEntry.findMany({ where: { date }, orderBy: [{ createdAt: "asc" }] }), legacy, new Set(visits.map((v) => v.id)));
+  const staging = (await db.unmatchedAppointment.findMany({ where: { date }, orderBy: [{ createdAt: "asc" }] })).map(unmatchedAsEntry);
   // The entry id stays the old ScheduleEntry id where the Visit came from one, so recorder ids do not change.
   const apiId = new Map(shown.map((v) => [v.id, v.legacyScheduleEntryId ?? v.id]));
   const rows = [...shown.map(visitAsEntry), ...staging];

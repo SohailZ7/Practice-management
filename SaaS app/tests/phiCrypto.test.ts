@@ -110,6 +110,7 @@ describe("applying the cipher to Prisma data", () => {
   it("knows which columns are encrypted", () => {
     expect(ENCRYPTED_FIELDS).toEqual({
       ScheduleEntry: ["clientInfo"],
+      UnmatchedAppointment: ["clientInfo"],
       Provider: ["zoomPassword"],
       Task: ["notes"],
       ImportDraft: ["payload"],
@@ -241,5 +242,13 @@ describe("an undecryptable Task note does not break the board", () => {
   it("still decrypts a good note and still throws for other encrypted columns", () => {
     expect((decryptRow(mine, "Task", { notes: mine.encrypt("ok", "Task.notes") }) as { notes: string }).notes).toBe("ok");
     expect(() => decryptRow(mine, "Visit", { transcript: foreign.encrypt("x", "Visit.transcript") })).toThrow(PhiCryptoError);
+  });
+});
+
+describe("UnmatchedAppointment (Release B2a)", () => {
+  it("keeps the ScheduleEntry cipher context, so rows copied with their stored text still decrypt", () => {
+    const c = cipherFor();
+    const stored = (encryptData(c, "ScheduleEntry", { clientInfo: "Doe, Jane" }) as { clientInfo: string }).clientInfo;
+    expect((decryptRow(c, "UnmatchedAppointment", { clientInfo: stored }) as { clientInfo: string }).clientInfo).toBe("Doe, Jane");
   });
 });

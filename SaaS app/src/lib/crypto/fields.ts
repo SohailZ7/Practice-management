@@ -10,6 +10,7 @@ const use = (c: CipherSource) => (typeof c === "function" ? c() : c);
 /** Model name (as in schema.prisma) -> encrypted string columns. */
 export const ENCRYPTED_FIELDS: Record<string, readonly string[]> = {
   ScheduleEntry: ["clientInfo"],
+  UnmatchedAppointment: ["clientInfo"],
   Provider: ["zoomPassword"],
   Task: ["notes"],
   ImportDraft: ["payload"],
@@ -29,17 +30,20 @@ export const TOLERANT_FIELDS: Record<string, readonly string[]> = { Task: ["note
 /** Relations that lead to another encrypted model, so values inside `include` results are decrypted too. */
 export const RELATIONS: Record<string, Record<string, string>> = {
   ScheduleEntry: { provider: "Provider" },
+  UnmatchedAppointment: { provider: "Provider" },
   Patient: { consents: "PatientConsent", visits: "Visit" },
   Visit: { documents: "VisitDocument" },
   VisitDocument: { versions: "VisitDocumentVersion", visit: "Visit" },
-  Provider: { entries: "ScheduleEntry" },
+  Provider: { entries: "ScheduleEntry", unmatched: "UnmatchedAppointment" },
   Employee: { tasks: "Task", provider: "Provider" },
   Category: { tasks: "Task" },
   TaskLink: { task: "Task" },
   RecurringTask: { tasks: "Task" },
 };
 
-const context = (model: string, field: string) => `${model}.${field}`;
+// UnmatchedAppointment rows are copied from ScheduleEntry with the encrypted text as stored, so they keep its cipher context.
+const CONTEXT_MODEL: Record<string, string> = { UnmatchedAppointment: "ScheduleEntry" };
+const context = (model: string, field: string) => `${CONTEXT_MODEL[model] ?? model}.${field}`;
 type Row = Record<string, unknown>;
 const isRow = (v: unknown): v is Row => typeof v === "object" && v !== null && !Array.isArray(v) && !(v instanceof Date);
 

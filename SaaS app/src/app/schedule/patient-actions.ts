@@ -10,9 +10,8 @@ import { patientSearch } from "@/lib/billing/scope";
 import { validatePatient } from "@/lib/billing/validate";
 import { entryDTO, survivingPatientId } from "@/lib/patients";
 import type { EntryDTO } from "@/lib/scheduleTypes";
-import { visitAsEntry } from "@/lib/schedule/rows";
+import { unmatchedAsEntry, visitAsEntry } from "@/lib/schedule/rows";
 import { timeColumns, statusFromFlags } from "@/lib/unify/plan";
-import { syncScheduleForVisit } from "@/lib/notes/visitSchedule";
 
 // Audit details hold record ids and dates only, never patient names or MRNs (PAT-5, CON-3).
 
@@ -60,21 +59,16 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
     if (patientId === asVisit.patientId) return entryDTO(visitAsEntry(await loadVisit(entryId)));
     throw new Error("This appointment already has a patient. Remove it and add it again for someone else.");
   }
-  const entry = await db.scheduleEntry.findUnique({ where: { id: entryId } });
+  const entry = await db.unmatchedAppointment.findUnique({ where: { id: entryId } });
   if (!entry) throw new Error("Entry not found");
 
-  if (patientId === null) {
-    const updated = await db.scheduleEntry.update({ where: { id: entryId }, data: { patientId: null } });
-    await audit(user.email, "schedule.patient.unlink", `entry ${entryId}`);
-    revalidatePath("/schedule");
-    return entryDTO(updated);
-  }
+  // A row here has no patient by definition, so there is nothing to unlink.
+  if (patientId === null) return entryDTO(unmatchedAsEntry(entry));
 
   const resolved = await survivingPatientId(patientId);
   const patient = resolved ? await db.patient.findUnique({ where: { id: resolved } }) : null;
   if (!patient) throw new Error("Patient not found");
-  const clientInfo = `${patient.lastName}, ${patient.firstName}`;
-  // Release B1: linking a patient turns the staging row into a Visit (the entry stays as the rollback mirror).
+  // Release B1: linking a patient turns the staging row into a Visit (the staging row is deleted; the Visit keeps its id in legacyScheduleEntryId).
   const t = timeColumns(entry.timeLabel);
   const visit = await db.visit.create({
     data: {
@@ -95,9 +89,7 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
       providerId: entry.providerId,
     },
   });
-  // Point the staging row at its new Visit first, so the mirror sync updates it instead of adding a second row.
-  await db.scheduleEntry.update({ where: { id: entry.id }, data: { visitId: visit.id, patientId: patient.id, clientInfo } });
-  await syncScheduleForVisit(visit.id);
+  await db.unmatchedAppointment.delete({ where: { id: entry.id } });
   await audit(user.email, "schedule.patient.link", `entry ${entryId} visit ${visit.id} patient ${patient.id}`);
   revalidatePath("/schedule");
   return entryDTO(visitAsEntry(await loadVisit(visit.id)));

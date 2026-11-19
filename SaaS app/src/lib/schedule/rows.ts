@@ -1,7 +1,7 @@
 // Release B1: the Schedule reads Visits (the unified appointment). Rows that are not a Visit yet (no patient) still come
 // from ScheduleEntry as "staging" rows. This module turns both into the one EntryDTO the grid already uses.
 
-import type { ScheduleEntry, Visit } from "@prisma/client";
+import type { ScheduleEntry, UnmatchedAppointment, Visit } from "@prisma/client";
 import { db } from "../db";
 import { entryDTOs } from "../patients";
 import type { EntryDTO } from "../scheduleTypes";
@@ -40,12 +40,9 @@ export function byTime(a: { startTime?: string | null; createdAt: Date }, b: { s
   return a.createdAt.getTime() - b.createdAt.getTime();
 }
 
-/**
- * Staging rows: schedule rows that are not a Visit (and not the mirror of one). Pure so it can be tested.
- * `legacyIds` are the ScheduleEntry ids that a live Visit already carries.
- */
-export function stagingOnly<T extends { id: string; visitId: string | null }>(entries: T[], legacyIds: Set<string>, visitIds: Set<string>): T[] {
-  return entries.filter((e) => !e.visitId || !visitIds.has(e.visitId)).filter((e) => !legacyIds.has(e.id));
+/** A staging row (no patient yet) shaped like a ScheduleEntry for the shared DTO builder. */
+export function unmatchedAsEntry(u: UnmatchedAppointment): ScheduleEntry {
+  return { ...u, visitId: null };
 }
 
 export async function trackingOnlyNames(): Promise<string[]> {
@@ -57,30 +54,21 @@ export type ScheduleRange = { from: string; to: string; providerId?: string; inc
 
 export async function scheduleRows(r: ScheduleRange): Promise<{ visits: EntryDTO[]; staging: EntryDTO[] }> {
   let visits: EntryDTO[] = [];
-  let legacy = new Set<string>();
-  let visitIds = new Set<string>();
-  if (r.includeVisits || r.includeStaging) {
+  if (r.includeVisits) {
     const vs = await db.visit.findMany({
       where: { visitDate: { gte: r.from, lte: r.to }, ...(r.providerId ? { providerId: r.providerId } : {}) },
       include: { patient: { select: { lastName: true, firstName: true } } },
     });
-    // Needed even when only staging is wanted, so mirrored rows are never listed twice.
-    const all = r.providerId ? await db.visit.findMany({ where: { visitDate: { gte: r.from, lte: r.to } }, select: { id: true, legacyScheduleEntryId: true } }) : vs;
-    legacy = new Set(all.map((v) => v.legacyScheduleEntryId).filter((x): x is string => !!x));
-    visitIds = new Set(all.map((v) => v.id));
-    if (r.includeVisits) {
-      const hidden = new Set(await trackingOnlyNames()); // tracking-only providers stay off the schedule grid
-      const shown = vs.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort(byTime);
-      visits = await entryDTOs(shown.map(visitAsEntry));
-    }
+    const hidden = new Set(await trackingOnlyNames()); // tracking-only providers stay off the schedule grid
+    visits = await entryDTOs(vs.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort(byTime).map(visitAsEntry));
   }
   let staging: EntryDTO[] = [];
   if (r.includeStaging) {
-    const rows = await db.scheduleEntry.findMany({
+    const rows = await db.unmatchedAppointment.findMany({
       where: { date: { gte: r.from, lte: r.to }, ...(r.providerId ? { providerId: r.providerId } : {}) },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     });
-    staging = await entryDTOs(stagingOnly(rows, legacy, visitIds));
+    staging = await entryDTOs(rows.map(unmatchedAsEntry));
   }
   return { visits, staging };
 }

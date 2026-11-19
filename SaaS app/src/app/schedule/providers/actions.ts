@@ -43,11 +43,6 @@ export async function saveProvider(form: FormData) {
       trackingOnly: form.get("trackingOnly") === "on",
     },
   });
-  if (form.get("trackingOnly") === "on") {
-    // Flagging a provider pulls their existing visits out of Schedule rows, which billing and timesheets read.
-    const theirs = await db.visit.findMany({ where: { providerName: { equals: name, mode: "insensitive" } }, select: { id: true } });
-    await db.scheduleEntry.deleteMany({ where: { visitId: { in: theirs.map((v) => v.id) } } });
-  }
   await audit(user.email, "provider.update", `provider ${id} trackingOnly=${form.get("trackingOnly") === "on"}`);
   revalidatePath(BACK);
   flash(BACK, "notice", `Saved ${name}.`);

@@ -17,16 +17,9 @@ describe("visit to schedule mapping", () => {
 
 describe("wiring", () => {
   const svc = readFileSync("src/lib/notes/visitService.ts", "utf8");
-  it("add, edit and delete keep the schedule row in step", () => {
-    expect(svc).toContain("syncScheduleForVisit(visit.id)");
-    expect(svc).toContain("syncScheduleForVisit(id)");
-    expect(svc.match(/removeScheduleForVisits\(/g)?.length).toBe(2);
-  });
-  it("sync is idempotent: it looks up by visitId before creating", () => {
-    expect(readFileSync("src/lib/notes/visitSchedule.ts", "utf8")).toContain("findFirst({ where: { visitId: v.id }");
-  });
-  it("schema change is one optional column plus an index", () => {
-    const s = readFileSync("prisma/schema.prisma", "utf8");
-    expect(s).toMatch(/visitId\s+String\?/);
+  it("add and edit keep the unified Visit columns in step; the ScheduleEntry mirror is retired", () => {
+    expect(svc).toContain("unifiedColumns(");
+    expect(svc).not.toContain("syncScheduleForVisit");
+    expect(readFileSync("src/lib/notes/visitSchedule.ts", "utf8")).not.toContain("scheduleEntry");
   });
 });

@@ -3,13 +3,12 @@ import { apptTimeOf, parseSchedule } from "../src/lib/notes/scheduleParse";
 
 const db = {
   visit: { findMany: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-  provider: { findMany: vi.fn() },
+  provider: { findMany: vi.fn(), findFirst: vi.fn() },
   trackDef: { findMany: vi.fn() },
   entryType: { findMany: vi.fn() },
   patient: { findFirst: vi.fn(), create: vi.fn() },
 };
 vi.mock("../src/lib/db", () => ({ db }));
-vi.mock("../src/lib/notes/visitSchedule", () => ({ syncScheduleForVisit: vi.fn(), removeScheduleForVisits: vi.fn() }));
 const audit = vi.fn();
 vi.mock("../src/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));
 
@@ -93,10 +92,10 @@ describe("options and strict fields", () => {
 
 describe("updateVisit and deleteVisit", () => {
   it("edits only the time and audits field names, not values", async () => {
-    db.visit.findUnique.mockResolvedValue({ id: "v1" });
+    db.visit.findUnique.mockResolvedValue({ id: "v1", apptTime: "", program: "", appointmentType: "", providerName: "" });
     db.visit.update.mockResolvedValue({ id: "v1" });
     await updateVisit(actor, "v1", { apptTime: "3:00 PM" });
-    expect(db.visit.update).toHaveBeenCalledWith({ where: { id: "v1" }, data: { apptTime: "3:00 PM" } });
+    expect(db.visit.update).toHaveBeenCalledWith({ where: { id: "v1" }, data: expect.objectContaining({ apptTime: "3:00 PM", timeLabel: "3:00 PM", startTime: "15:00", section: "PSYCH_EVAL" }) });
     expect(audit.mock.calls[0][2]).toBe("visit v1 fields=apptTime");
   });
   it("deletes an existing visit and says not_found for a missing one", async () => {
