@@ -68,6 +68,7 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
               </ul>
             )}
           </section>
+          <ConsentSection visitId={visit.id} />
           <section>
             <h3>Transcript</h3>
             <p className="small muted">{visit.hasTranscript ? "A transcript is saved for this visit." : "No transcript yet. It appears once the recording is complete."}</p>
@@ -83,5 +84,36 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
       </aside>
     </div>,
     document.body,
+  );
+}
+
+type ConsentRow = { id: string; userEmail: string; given: boolean; textVersion: string; source: string; at: string };
+
+/** Who confirmed recording consent for this visit, when, and which wording version they saw. */
+function ConsentSection({ visitId }: { visitId: string }) {
+  const [rows, setRows] = useState<ConsentRow[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/notes/visits/${encodeURIComponent(visitId)}/consent`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : { consents: [] }))
+      .then((b: { consents?: ConsentRow[] }) => alive && setRows(b.consents ?? []))
+      .catch(() => alive && setRows([]));
+    return () => { alive = false; };
+  }, [visitId]);
+  return (
+    <section>
+      <h3>Recording consent</h3>
+      {rows === null ? <p className="muted small">Loading…</p> : rows.length === 0 ? (
+        <p className="muted small">No consent recorded for this visit.</p>
+      ) : (
+        <ul className="vd-docs">
+          {rows.map((c) => (
+            <li key={c.id}>
+              <span>{c.given ? "Consent confirmed" : "Consent not given"} <small className="muted">· {c.userEmail} · {c.source} · {new Date(c.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} · wording {c.textVersion}</small></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

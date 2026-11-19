@@ -19,7 +19,7 @@ export const PUT = (req: Request, { params }: { params: { uuid: string } }) =>
       throw new ApiError(400, "bad_request");
     }
     const put = parseInboxPut(params.uuid, body);
-    const out = await putInbox(params.uuid, put, user.email);
-    await audit(user.email, "desktop.inbox.put", `rec ${params.uuid} seq=${out.seq} final=${out.final} chars=${put.text.length}`);
+    const out = await putInbox(params.uuid, put, user);
+    await audit(user.email, "desktop.inbox.put", `rec ${params.uuid} seq=${out.seq} final=${out.final} chars=${put.text.length}${put.consent ? ` consent=${put.consent.given}` : ""}`);
     return json(out);
   })(req);

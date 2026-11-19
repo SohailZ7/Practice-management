@@ -4,6 +4,7 @@ type Row = { id: string; seq: number; final: boolean; text: string; sha256: stri
 const store = vi.hoisted(() => ({ rows: new Map<string, Row>(), visits: new Map<string, { transcript?: string }>() }));
 vi.mock("../src/lib/db", () => ({
   db: {
+    recordingConsent: { updateMany: async () => ({ count: 0 }), findFirst: async () => null, create: async () => ({}) },
     recordingInbox: {
       findUnique: async ({ where }: { where: { id: string } }) => store.rows.get(where.id) ?? null,
       create: async ({ data }: { data: Row }) => { store.rows.set(data.id, { ...data }); return { ...data }; },

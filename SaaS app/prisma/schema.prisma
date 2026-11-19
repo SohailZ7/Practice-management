@@ -647,3 +647,22 @@ model RecordingInbox {
   @@index([visitId])
   @@index([createdAt])
 }
+
+// Recording-consent confirmation: the checkbox a user ticked before a recording or a Generate. One row per
+// confirmation (web or Desktop). `visitId` may be null when a Desktop upload arrives before it is linked to a
+// visit; `recordingId` then ties it to the inbox upload and linking fills `visitId`. Additive; no patient data.
+model RecordingConsent {
+  id          String   @id @default(cuid())
+  visitId     String?
+  recordingId String?
+  userId      String?
+  userEmail   String
+  given       Boolean
+  textVersion String
+  source      String   @default("web")
+  givenAt     DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([visitId, givenAt])
+  @@index([recordingId])
+}

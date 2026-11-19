@@ -2,13 +2,14 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/desktop/api";
+import { parseConsent, saveConsent, type ConsentInput } from "@/lib/consent/recordingConsent";
 
 export const MAX_INBOX_TEXT = 2_000_000;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const isUuidV4 = (s: string) => UUID_V4.test(s);
 export const sha256Hex = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 
-export type InboxPut = { seq: number; final: boolean; text: string; sha256: string; durationSeconds: number; recordedAt: Date; visitId: string | null };
+export type InboxPut = { seq: number; final: boolean; text: string; sha256: string; durationSeconds: number; recordedAt: Date; visitId: string | null; consent?: ConsentInput | null };
 
 /** Validates a PUT body. Throws ApiError with the contract's codes. */
 export function parseInboxPut(uuid: string, body: Record<string, unknown>): InboxPut {
@@ -23,7 +24,7 @@ export function parseInboxPut(uuid: string, body: Record<string, unknown>): Inbo
   const when = typeof body.recordedAt === "string" ? new Date(body.recordedAt) : new Date(NaN);
   if (Number.isNaN(when.getTime())) throw new ApiError(400, "bad_recorded_at");
   const visitId = typeof body.visitId === "string" && body.visitId ? body.visitId : null;
-  return { seq, final: body.final === true, text: body.text, sha256: body.sha256, durationSeconds: dur, recordedAt: when, visitId };
+  return { seq, final: body.final === true, text: body.text, sha256: body.sha256, durationSeconds: dur, recordedAt: when, visitId, consent: parseConsent(body) };
 }
 
 const reply = (r: { id: string; seq: number; sha256: string; final: boolean; visitId: string | null }, extra: object = {}) => ({
@@ -38,7 +39,23 @@ async function writeToVisit(visitId: string, text: string): Promise<boolean> {
   return true;
 }
 
-export async function putInbox(uuid: string, p: InboxPut, email: string) {
+/** Stores the optional consent once per recording (checkpoints repeat it); ties it to the visit when there is one. */
+async function storeConsent(uuid: string, p: InboxPut, user: { id?: string; email: string }, visitId: string | null) {
+  if (!p.consent) return;
+  const have = await db.recordingConsent.findFirst({ where: { recordingId: uuid }, select: { id: true } });
+  if (!have) await saveConsent({ consent: p.consent, user, source: "desktop", visitId, recordingId: uuid });
+  else if (visitId) await db.recordingConsent.updateMany({ where: { recordingId: uuid, visitId: null }, data: { visitId } });
+}
+
+export async function putInbox(uuid: string, p: InboxPut, who: string | { id?: string; email: string }) {
+  const user = typeof who === "string" ? { email: who } : who;
+  const email = user.email;
+  const out = await putInboxCore(uuid, p, email);
+  await storeConsent(uuid, p, user, out.visitId);
+  return out;
+}
+
+async function putInboxCore(uuid: string, p: InboxPut, email: string) {
   const cur = await db.recordingInbox.findUnique({ where: { id: uuid } });
   let linkTo: string | null = null;
   if (p.visitId && (!cur || !cur.visitId) && (await db.visit.findUnique({ where: { id: p.visitId }, select: { id: true } }))) linkTo = p.visitId;
@@ -79,6 +96,7 @@ export async function linkInbox(uuid: string, visitId: string) {
   if (cur.visitId && cur.visitId !== visitId) throw new ApiError(409, "already_linked");
   if (!(await writeToVisit(visitId, cur.text))) throw new ApiError(404, "visit_not_found");
   if (cur.visitId !== visitId) await db.recordingInbox.update({ where: { id: uuid }, data: { visitId } });
+  await db.recordingConsent.updateMany({ where: { recordingId: uuid, visitId: null }, data: { visitId } });
   return { ok: true, visitId };
 }
 

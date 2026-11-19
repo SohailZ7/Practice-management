@@ -10,6 +10,7 @@ import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
 import { GenerateDialog } from "./GenerateDialog";
+import { RecordingConsentDialog } from "./RecordingConsentDialog";
 import { Modal } from "../Modal";
 import { VisitsTable } from "./VisitsTable";
 import { PromoteDialog } from "./PromoteDialog";
@@ -43,6 +44,8 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
   const [note, setNote] = useState("");
   const [openDoc, setOpenDoc] = useState<{ visitId: string; id: string; label: string } | null>(null);
   const [generating, setGenerating] = useState<VisitRow | null>(null);
+  // Consent is asked first; Generate opens only after it is confirmed and saved for the visit.
+  const [consenting, setConsenting] = useState<VisitRow | null>(null);
   // Documents just generated, shown at once; the server's list replaces them after the refresh.
   const [fresh, setFresh] = useState<Record<string, DocSummary[]>>({});
   const docsOf = (v: VisitRow): DocSummary[] => {
@@ -130,7 +133,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
             router.refresh();
           })}
           onOpenDoc={(v, d) => setOpenDoc({ visitId: v.id, id: d.id, label: d.title })}
-          onGenerate={(v) => { void warmUp(); setGenerating(v); }}
+          onGenerate={(v) => { void warmUp(); setConsenting(v); }}
           onTranscript={(v) => setReading(v.id)}
           onPasteTranscript={(v) => setPasteFor(v)}
           onPromote={promote ? (v) => setPromoting(v) : undefined}
@@ -163,6 +166,14 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
       {promoting && promote && <PromoteDialog visitId={promoting.id} who={promoting.initials} prodUrl={promote.prodUrl} clientId={promote.clientId} onClose={() => setPromoting(null)} />}
 
       {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
+
+      {consenting && (
+        <RecordingConsentDialog
+          visitId={consenting.id}
+          onCancel={() => setConsenting(null)}
+          onConfirmed={() => { setGenerating(consenting); setConsenting(null); }}
+        />
+      )}
 
       {generating && (
         <GenerateDialog
