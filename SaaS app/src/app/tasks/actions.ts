@@ -10,7 +10,7 @@ import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
 import { canAssignTo, type MoveKind } from "@/lib/taskAccess";
 import { loadTaskScope } from "@/lib/taskScope";
-import { MAX_NOTES, toTaskDTO, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
 // Visibility rule (TSK-6, TSK-59): a non-admin may only change tasks assigned to them or to an employee whose tab
 // the Admin granted them edit access to. Every action below checks it on the server.
@@ -131,10 +131,12 @@ export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = fa
     if (patch.expiresAt && !isISODate(patch.expiresAt)) throw new Error("Invalid expiration date");
     data.expiresAt = patch.expiresAt || null;
   }
-  if (patch.completed !== undefined) {
-    data.completed = patch.completed === true;
-    // Track when it was finished (used by Analytics); clear it if the task is reopened.
-    data.completedAt = patch.completed === true ? (existing.completed ? existing.completedAt : new Date()) : null;
+  // completed=true means Done, completed=false means Not started; status picks any of the three. Done tracks when it was
+  // finished (used by Analytics) and clears it if the task is reopened.
+  if (patch.status !== undefined || patch.completed !== undefined) {
+    if (patch.status !== undefined && !isTaskStatus(patch.status)) throw new Error("Invalid status");
+    const to: TaskStatus = patch.status ?? (patch.completed === true ? "done" : existing.completed ? "not_started" : taskStatus(existing));
+    Object.assign(data, taskStatusFields(to, existing));
   }
   if (patch.inToday !== undefined) data.inToday = patch.inToday === true;
 

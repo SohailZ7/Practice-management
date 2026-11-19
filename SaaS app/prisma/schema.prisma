@@ -136,6 +136,9 @@ model Task {
   dueDate        String?
   expiresAt      String?
   completed      Boolean        @default(false)
+  // not_started | in_progress | done. `completed` stays the source of truth for Done (old rows and the sync read it);
+  // this column only tells not_started from in_progress while a task is open. See taskStatus() in taskTypes.ts.
+  status         String         @default("not_started")
   completedAt    DateTime?
   inToday        Boolean        @default(false)
   sortOrder      Int            @default(0)
@@ -535,9 +538,12 @@ model FeedbackItem {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @default(now()) @updatedAt
   author          User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  // Feedback-to-production workflow: new | triaged | build_it | building | on_staging | approved | needs_changes | rejected | shipped
+  // Feedback-to-production workflow: new | triaged | building | on_staging | tested | released | rejected.
+  // Older rows may still hold build_it | approved | needs_changes | shipped; the app reads them as the new states.
   status          String            @default("new")
-  // Set by the owner when marking Build it: ui_small | other. Only ui_small may auto-promote after approval.
+  // Triage outcome: accepted | rejected | more_info (null = not triaged yet).
+  triageOutcome   String?
+  // Set by the owner when accepting at triage: ui_small | other. Only ui_small may auto-promote once Tested.
   scope           String?
   testNotes       String            @default("")
   ownerApprovedAt DateTime?

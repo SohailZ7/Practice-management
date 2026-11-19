@@ -453,9 +453,17 @@ span.status-pill { cursor: default; }
 
 /* Feedback workflow */
 .fb-status { font-size: .75rem; padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
-.fb-on_staging, .fb-build_it { border-color: var(--accent); }
-.fb-approved, .fb-shipped { border-color: var(--ok); }
-.fb-needs_changes, .fb-rejected { border-color: var(--danger); }
+.fb-on_staging, .fb-triaged { border-color: var(--accent); }
+.fb-tested, .fb-released { border-color: var(--ok); }
+.fb-rejected { border-color: var(--danger); }
+/* Status buttons (Feedback and Tasks): the current state is filled, one tap changes it. */
+.status-buttons { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.status-buttons .status-btn { font-size: .78rem; padding: .2rem .65rem; border-radius: 999px; background: transparent; color: var(--text); border: 1px solid var(--line); white-space: nowrap; }
+.status-buttons .status-btn:not(:disabled):hover { border-color: var(--accent); }
+.status-buttons .status-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); opacity: 1; font-weight: 600; }
+.status-buttons .status-btn:disabled:not(.active) { opacity: .45; }
+.fb-actions .status-group { display: flex; flex-direction: column; gap: .25rem; margin-top: .5rem; }
+.fb-actions .status-group .small { margin: 0; }
 .fb-filter { margin: .75rem 0; }
 .fb-notes, .fb-thread { border-left: 3px solid var(--line); padding-left: .75rem; margin: .5rem 0; }
 .fb-actions textarea { width: 100%; margin: .5rem 0; }

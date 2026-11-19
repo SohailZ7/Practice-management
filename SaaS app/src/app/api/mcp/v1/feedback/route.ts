@@ -4,7 +4,7 @@ import { feedbackShape } from "@/lib/mcpApi/feedbackApi";
 
 export const dynamic = "force-dynamic";
 
-/** Feedback-scope token. ?status=build_it (any status word) &limit=. Oldest first. No author, no PHI fields. */
+/** Feedback-scope token. ?status=triaged|building|on_staging|tested|released|rejected|new (old words still work) &limit=. Oldest first. No author, no PHI fields. */
 export const GET = handle(async (req) => {
   const { user } = await authenticateApi(req, { scope: "feedback", level: "view" });
   const q = new URL(req.url).searchParams;

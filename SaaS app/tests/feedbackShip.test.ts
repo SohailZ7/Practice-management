@@ -6,10 +6,10 @@ const audits: string[] = [];
 vi.mock("../src/lib/db", () => ({
   db: {
     feedbackItem: {
-      findMany: async ({ where }: { where: { status: string; shippedRelease: { lte: number } } }) =>
-        rows.filter((r) => r.status === where.status && r.shippedRelease !== null && r.shippedRelease <= where.shippedRelease.lte).map((r) => ({ id: r.id })),
-      updateMany: async ({ where, data }: { where: { id: string; status: string }; data: { status: string } }) => {
-        const r = rows.find((x) => x.id === where.id && x.status === where.status);
+      findMany: async ({ where }: { where: { status: { in: string[] }; shippedRelease: { lte: number } } }) =>
+        rows.filter((r) => where.status.in.includes(r.status) && r.shippedRelease !== null && r.shippedRelease <= where.shippedRelease.lte).map((r) => ({ id: r.id })),
+      updateMany: async ({ where, data }: { where: { id: string; status: { in: string[] } }; data: { status: string } }) => {
+        const r = rows.find((x) => x.id === where.id && where.status.in.includes(x.status));
         if (r) r.status = data.status;
         return { count: r ? 1 : 0 };
       },
@@ -44,28 +44,28 @@ describe("release numbers", () => {
 });
 
 describe("shipDueItems", () => {
-  it("ships Approved items at or below the running release, as system, and nothing else", async () => {
+  it("releases Tested items at or below the running release, as system, and nothing else", async () => {
     rows.push(
-      { id: "a", status: "approved", shippedRelease: 15 },
-      { id: "b", status: "approved", shippedRelease: 16 },
-      { id: "c", status: "approved", shippedRelease: 17 },
-      { id: "d", status: "approved", shippedRelease: null },
+      { id: "a", status: "tested", shippedRelease: 15 },
+      { id: "b", status: "approved", shippedRelease: 16 }, // old word, still shipped
+      { id: "c", status: "tested", shippedRelease: 17 },
+      { id: "d", status: "tested", shippedRelease: null },
       { id: "e", status: "on_staging", shippedRelease: 10 },
-      { id: "f", status: "needs_changes", shippedRelease: 10 },
+      { id: "f", status: "building", shippedRelease: 10 },
     );
     expect(await shipDueItems(prod)).toBe(2);
-    expect(rows.map((r) => `${r.id}:${r.status}`)).toEqual(["a:shipped", "b:shipped", "c:approved", "d:approved", "e:on_staging", "f:needs_changes"]);
+    expect(rows.map((r) => `${r.id}:${r.status}`)).toEqual(["a:released", "b:released", "c:tested", "d:tested", "e:on_staging", "f:building"]);
     expect(events).toHaveLength(2);
-    expect(events.every((e) => e.actorName === "system" && e.actorKind === "system" && e.fromValue === "approved" && e.toValue === "shipped")).toBe(true);
+    expect(events.every((e) => e.actorName === "system" && e.actorKind === "system" && e.fromValue === "tested" && e.toValue === "released")).toBe(true);
     expect(audits.every((d) => !/[A-Z][a-z]+ [A-Z][a-z]+/.test(d.replace("Web", "")))).toBe(true);
   });
   it("does nothing on staging, even when items are due", async () => {
-    rows.push({ id: "a", status: "approved", shippedRelease: 1 });
+    rows.push({ id: "a", status: "tested", shippedRelease: 1 });
     expect(await shipDueItems({ ...prod, APP_ENV: "staging" })).toBe(0);
-    expect(rows[0].status).toBe("approved");
+    expect(rows[0].status).toBe("tested");
   });
   it("is repeatable and never moves an item twice", async () => {
-    rows.push({ id: "a", status: "approved", shippedRelease: 3 });
+    rows.push({ id: "a", status: "tested", shippedRelease: 3 });
     expect(await shipDueItems(prod)).toBe(1);
     expect(await shipDueItems(prod)).toBe(0);
     expect(events).toHaveLength(1);

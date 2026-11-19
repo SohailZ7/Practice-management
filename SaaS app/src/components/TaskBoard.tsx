@@ -27,7 +27,8 @@ import { PhiConfirm } from "./PhiConfirm";
 import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
 import { TodoSyncButton } from "./TodoSyncButton";
 import { linkTypeMeta } from "@/lib/links";
-import { applyReorder, splitTasks, type CategoryDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { applyReorder, splitTasks, TASK_STATUSES, TASK_STATUS_LABEL, type CategoryDTO, type TaskDTO, type TaskPatch, type TaskStatus } from "@/lib/taskTypes";
+import { StatusButtons } from "./StatusButtons";
 import {
   addCategory,
   addTaskLink,
@@ -112,7 +113,12 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
       : tasks.map((t) => {
           if (t.id !== id) return t;
           const next = { ...t, ...patch };
-          if (patch.completed !== undefined) next.completedAt = patch.completed ? (t.completedAt ?? Date.now()) : null;
+          if (patch.status !== undefined || patch.completed !== undefined) {
+            const to: TaskStatus = patch.status ?? (patch.completed ? "done" : t.completed ? "not_started" : t.status);
+            next.status = to;
+            next.completed = to === "done";
+            next.completedAt = to === "done" ? (t.completedAt ?? Date.now()) : null;
+          }
           return next;
         });
     return mutate(next, () => updateTask(id, patch, confirmNoPhi), () => void patchTask(id, patch, true));
@@ -528,14 +534,6 @@ function TaskItem({
             <Icon name="flag" filled />
           </span>
         )}
-        <input
-          type="checkbox"
-          className="todo-check"
-          checked={task.completed}
-          disabled={!canEdit}
-          aria-label="Done"
-          onChange={() => onPatch(task.id, { completed: !task.completed })}
-        />
         {editing && canEdit ? (
           <input
             className="todo-title-input"
@@ -564,6 +562,13 @@ function TaskItem({
             {task.title}
           </span>
         )}
+        <StatusButtons
+          label="Task status"
+          current={task.status}
+          disabled={!canEdit}
+          onSelect={(v) => onPatch(task.id, { status: v as TaskStatus })}
+          options={TASK_STATUSES.map((v) => ({ value: v, label: TASK_STATUS_LABEL[v] }))}
+        />
         {task.completed && (
           <span className="completed-pill" title={task.completedAt ? new Date(task.completedAt).toLocaleString() : undefined}>
             {task.completedAt
