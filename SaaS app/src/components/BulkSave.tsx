@@ -15,6 +15,7 @@ export function BulkSave({ children }: { children: ReactNode }) {
   const initial = useRef(new Map<HTMLFormElement, string>());
   const [dirty, setDirty] = useState<HTMLFormElement[]>([]);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [asking, setAsking] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -43,12 +44,15 @@ export function BulkSave({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty.length]);
 
+  // Nothing left to ask about once the edits are gone (saved, discarded or undone).
+  useEffect(() => { if (dirty.length === 0) setAsking(false); }, [dirty.length]);
+
   const saveAll = () => {
+    setAsking(false);
     const rows: BulkRow[] = dirty.map((f) => ({
       kind: f.dataset.bulk!,
       fields: [...new FormData(f).entries()].filter((e): e is [string, string] => typeof e[1] === "string"),
     }));
-    if (!window.confirm(`Save ${rows.length} ${rows.length === 1 ? "change" : "changes"}?`)) return;
     start(async () => {
       try {
         const r = await saveAllAction(rows);
@@ -63,10 +67,18 @@ export function BulkSave({ children }: { children: ReactNode }) {
   return (
     <div ref={root} onInput={recheck} onChange={recheck}>
       <div className="bulk-bar" role="group" aria-label="Save all changes">
-        <button type="button" onClick={saveAll} disabled={dirty.length === 0 || pending}>
-          {pending ? "Saving…" : dirty.length ? `Save all (${dirty.length})` : "Save all"}
-        </button>
-        <button type="button" className="secondary" disabled={dirty.length === 0 || pending} onClick={() => router.refresh()} title="Throw away unsaved edits">
+        {asking && dirty.length > 0 ? (
+          <>
+            <span className="small" role="alert">Save {dirty.length} {dirty.length === 1 ? "change" : "changes"}?</span>
+            <button type="button" onClick={saveAll} disabled={pending}>Yes, save</button>
+            <button type="button" className="secondary" onClick={() => setAsking(false)} onKeyDown={(e) => e.key === "Escape" && setAsking(false)}>Cancel</button>
+          </>
+        ) : (
+          <button type="button" onClick={() => setAsking(true)} disabled={dirty.length === 0 || pending}>
+            {pending ? "Saving…" : dirty.length ? `Save all (${dirty.length})` : "Save all"}
+          </button>
+        )}
+        <button type="button" className="secondary" disabled={dirty.length === 0 || pending} onClick={() => { setAsking(false); router.refresh(); }} title="Throw away unsaved edits">
           Discard
         </button>
         <span className="muted small">{dirty.length ? `${dirty.length} unsaved ${dirty.length === 1 ? "change" : "changes"}` : "No unsaved changes"}</span>
