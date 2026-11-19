@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { PRACTICE_TIMEZONE, todayISO } from "@/lib/dates";
 import { ensureRecurringTasks } from "@/lib/recurring";
 import { visitsForDate, type VisitRow } from "@/lib/notes/queries";
-import { Phi } from "@/components/Phi";
+import { PatientName } from "@/components/PatientName";
 import { statusLabel, statusTone } from "@/lib/notes/visitStatus";
 
 const greeting = () => {
@@ -97,7 +97,7 @@ export default async function Home() {
               <>
                 <div className="hero-time">{next.apptTime || "Time not set"}</div>
                 <div>{next.appointmentType} · {next.providerName}</div>
-                <div className="hero-who"><span className="hero-dot" />{next.fullName ? <Phi name={next.fullName} /> : next.initials}</div>
+                <div className="hero-who"><span className="hero-dot" /><PatientName initials={next.initials} fullName={next.fullName} /></div>
               </>
             ) : (
               <div className="hero-time">{live.length === 0 ? "No visits" : "All done"}</div>
@@ -145,7 +145,7 @@ export default async function Home() {
                         <td>
                           <span className="pat-cell">
                             <span className="avatar sm" aria-hidden="true">{v.initials.slice(0, 2)}</span>
-                            <span><strong>{v.fullName ? <Phi name={v.fullName} /> : v.initials}</strong><span className="sub">{v.program}</span></span>
+                            <span><strong><PatientName initials={v.initials} fullName={v.fullName} /></strong><span className="sub">{v.program}</span></span>
                           </span>
                         </td>
                         <td>{v.appointmentType}<span className="sub">{v.providerName}</span></td>

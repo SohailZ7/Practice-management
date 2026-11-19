@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { applyPrefs, readPrefs, savePrefs, type Prefs } from "@/lib/prefs";
+import { DEFAULT_PREFS, applyPrefs, readPrefs, savePrefs, type Prefs } from "@/lib/prefs";
 
 export type Cmd = { label: string; href: string; hint?: string };
 
 /** Top-bar tools: Cmd/Ctrl-K go-to palette (navigation only, never patient data) and the privacy-mode switch. */
 export function TopTools({ commands }: { commands: Cmd[] }) {
   const router = useRouter();
-  const [prefs, setPrefs] = useState<Prefs>({ compact: false, privacy: false });
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);

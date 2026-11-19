@@ -10,7 +10,7 @@ describe("display preferences", () => {
     for (const raw of [null, "", "{", "[]", "null", '"x"', "42"]) expect(parsePrefs(raw)).toEqual(DEFAULT_PREFS);
   });
   it("only true switches things on", () => {
-    expect(parsePrefs('{"compact":true,"privacy":"yes"}')).toEqual({ compact: true, privacy: false });
+    expect(parsePrefs('{"compact":true,"privacy":"yes"}')).toEqual({ compact: true, privacy: false, fullNames: false });
   });
   it("initials handle odd names", () => {
     expect(initialsFor("Emma Wilson")).toBe("EW");

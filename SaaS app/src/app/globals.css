@@ -175,10 +175,11 @@ label.check { display: inline-flex; gap: .25rem; align-items: center; font-size:
 .plus-btn:hover { background: color-mix(in srgb, var(--accent) 18%, var(--card)); }
 .todo-section-head .count { margin-left: auto; font-size: .85rem; padding-right: .4rem; }
 .todo-empty { padding: .5rem 1rem; color: var(--muted); font-size: .92rem; }
-.todo-item { background: var(--card); border: 0; border-radius: 9px; box-shadow: var(--shadow); margin-bottom: .35rem; }
+.todo-item { background: var(--card); border: 0; border-radius: 9px; box-shadow: var(--shadow); margin-bottom: .25rem; }
 .todo-item.completed .todo-title { text-decoration: line-through; color: var(--muted); }
-.todo-row { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; padding: .32rem .8rem .32rem .45rem; min-height: 38px; }
-.todo-title { flex: 1 1 260px; min-width: 150px; cursor: text; padding: .15rem .3rem; border-radius: 6px; font-size: 1rem; }
+.todo-row { display: flex; flex-wrap: wrap; gap: .3rem .4rem; align-items: center; padding: .18rem .6rem .18rem .35rem; min-height: 34px; }
+.todo-meta { display: flex; flex-wrap: wrap; gap: .25rem .35rem; align-items: center; margin-left: auto; }
+.todo-title { flex: 1 1 220px; min-width: 150px; cursor: text; padding: .15rem .3rem; border-radius: 6px; font-size: 1rem; }
 .todo-title:hover { background: color-mix(in srgb, var(--muted) 10%, transparent); }
 .todo-title-input { flex: 1 1 260px; min-width: 150px; font-size: 1rem; }
 .drag-handle { background: transparent; color: color-mix(in srgb, var(--muted) 55%, transparent); padding: .1rem .2rem; cursor: grab; touch-action: none; border: 0; font-size: .85rem; }
@@ -186,9 +187,9 @@ label.check { display: inline-flex; gap: .25rem; align-items: center; font-size:
 .todo-check { appearance: none; -webkit-appearance: none; width: 17px; height: 17px; border: 1.5px solid color-mix(in srgb, var(--text) 50%, transparent); border-radius: 5px; background: transparent; cursor: pointer; margin: 0 .3rem 0 .1rem; flex: none; }
 .todo-check:checked { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E") center/80% no-repeat; border-color: var(--accent); }
 .todo-check:disabled { cursor: default; opacity: .6; }
-.pick { appearance: none; -webkit-appearance: none; background: color-mix(in srgb, var(--muted) 14%, var(--card)) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b9eb9' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") right .5rem center/12px no-repeat; border: 0; border-radius: 999px; padding: .22rem 1.5rem .22rem .75rem; font-size: .85rem; color: var(--text); max-width: 170px; cursor: pointer; }
+.pick { appearance: none; -webkit-appearance: none; background: color-mix(in srgb, var(--muted) 14%, var(--card)) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b9eb9' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") right .5rem center/12px no-repeat; border: 0; border-radius: 999px; padding: .12rem 1.4rem .12rem .6rem; font-size: .8rem; color: var(--text); max-width: 150px; cursor: pointer; }
 .pick:disabled { cursor: default; opacity: .8; }
-.due-pill { border: 1px solid transparent; border-radius: 999px; padding: .15rem .75rem; font-size: .85rem; font-weight: 700; background: color-mix(in srgb, var(--muted) 14%, var(--card)); color: var(--muted); cursor: pointer; }
+.due-pill { border: 1px solid transparent; border-radius: 999px; padding: .08rem .6rem; font-size: .8rem; font-weight: 700; background: color-mix(in srgb, var(--muted) 14%, var(--card)); color: var(--muted); cursor: pointer; }
 .due-today { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--card)); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
 .due-soon { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .due-overdue { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--card)); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
@@ -458,7 +459,7 @@ span.status-pill { cursor: default; }
 .fb-rejected { border-color: var(--danger); }
 /* Status buttons (Feedback and Tasks): the current state is filled, one tap changes it. */
 .status-buttons { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
-.status-buttons .status-btn { font-size: .78rem; padding: .2rem .65rem; border-radius: 999px; background: transparent; color: var(--text); border: 1px solid var(--line); white-space: nowrap; }
+.status-buttons .status-btn { font-size: .75rem; padding: .1rem .55rem; border-radius: 999px; background: transparent; color: var(--text); border: 1px solid var(--line); white-space: nowrap; }
 .status-buttons .status-btn:not(:disabled):hover { border-color: var(--accent); }
 .status-buttons .status-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); opacity: 1; font-weight: 600; }
 .status-buttons .status-btn:disabled:not(.active) { opacity: .45; }
@@ -712,6 +713,9 @@ button.sm, .v-actions .row-menu summary { border-radius: 6px; font-size: .85rem;
 @media (max-width: 700px) { .cmdk-btn span { display: none; } .cmdk-btn { min-width: 0; } }
 html[data-privacy="on"] .phi { font-size: 0; }
 html[data-privacy="on"] .phi::before { content: attr(data-initials); font-size: 1rem; letter-spacing: .04em; }
+/* PatientName: initials unless the user turned "See full names" on (and Privacy mode is off). Server-rendered, so full names never flash. */
+html:not([data-fullnames="on"]) .pname, html[data-privacy="on"] .pname { font-size: 0; }
+html:not([data-fullnames="on"]) .pname::before, html[data-privacy="on"] .pname::before { content: attr(data-initials); font-size: 1rem; letter-spacing: .04em; }
 html[data-density="compact"] table td { padding-top: 5px; padding-bottom: 5px; }
 html[data-density="compact"] table.visits td, html[data-density="compact"] .enc-table td { height: auto; }
 html[data-density="compact"] .card, html[data-density="compact"] .ov-panel { padding-top: .55rem; padding-bottom: .55rem; }

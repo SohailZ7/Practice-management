@@ -42,6 +42,9 @@ import {
 } from "@/app/tasks/actions";
 import { askConfirm } from "@/lib/confirm";
 
+/** The catch-all category the recurring generator uses; its pill is replaced by the repeat icon. */
+export const isRecurringCategory = (name: string) => /^recurring( tasks?)?$/i.test(name.trim());
+
 type Opt = { id: string; name: string };
 
 type Props = {
@@ -483,6 +486,9 @@ function TaskItem({
   const expRef = useRef<HTMLInputElement>(null);
 
   const due = dueLabel(task.dueDate, today);
+  const categoryName = categories.find((c) => c.id === task.categoryId)?.name ?? "";
+  // The "Recurring tasks" category pill says nothing the repeat icon does not: show only the icon (with its tooltip).
+  const hideCategory = isRecurringCategory(categoryName);
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   const commitTitle = () => {
@@ -524,8 +530,8 @@ function TaskItem({
             ⠿
           </button>
         )}
-        {task.recurring && (
-          <span className="recur-badge" title="Recurring task" aria-label="Recurring task">
+        {(task.recurring || hideCategory) && (
+          <span className="recur-badge" title={`Recurring task${categoryName && !hideCategory ? ` · ${categoryName}` : ""}`} aria-label="Recurring task">
             <Icon name="repeat" />
           </span>
         )}
@@ -576,6 +582,8 @@ function TaskItem({
               : "Completed (date unknown)"}
           </span>
         )}
+        <div className="todo-meta">
+        {!hideCategory && (
         <select
           className="pick"
           value={task.categoryId ?? ""}
@@ -590,6 +598,7 @@ function TaskItem({
             </option>
           ))}
         </select>
+        )}
         <select
           className="pick"
           value={task.assigneeId ?? ""}
@@ -674,6 +683,7 @@ function TaskItem({
             </button>
           </>
         )}
+        </div>
       </div>
       {editingNotes && (
         <TaskNotesDialog
