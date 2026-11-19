@@ -73,7 +73,6 @@ model Provider {
   employee     Employee?       @relation(fields: [employeeId], references: [id])
   // Tracked for volume and revenue only: never flows to billing, documents, invoices or timesheets.
   trackingOnly Boolean         @default(false)
-  entries      ScheduleEntry[]
   unmatched    UnmatchedAppointment[]
   visits       Visit[]
 }
@@ -92,34 +91,6 @@ model EntryType {
 }
 
 // section: PSYCH_EVAL | TRACK    date: YYYY-MM-DD
-model ScheduleEntry {
-  id           String    @id @default(cuid())
-  date         String
-  section      String
-  timeLabel    String    @default("")
-  trackName    String    @default("")
-  typeName     String    @default("")
-  clientInfo   String    @default("")
-  providerId   String?
-  providerName String    @default("")
-  absent       Boolean   @default(false)
-  canceled     Boolean   @default(false)
-  completed    Boolean   @default(false)
-  missed       Boolean   @default(false)
-  dedupeKey    String    @default("")
-  importLogId  String?
-  patientId    String?
-  // Set when this row mirrors a Notes visit (added in the web app or the recorder). One row per visit.
-  visitId      String?
-  createdAt    DateTime  @default(now())
-  provider     Provider? @relation(fields: [providerId], references: [id])
-  patient      Patient?  @relation(fields: [patientId], references: [id])
-
-  @@index([date])
-  @@index([visitId])
-  @@index([dedupeKey])
-  @@index([patientId])
-}
 
 model Category {
   id        String @id @default(cuid())
@@ -245,7 +216,6 @@ model Patient {
   updatedAt       DateTime         @updatedAt
   mergedIntoId    String?
   encounters      Encounter[]
-  scheduleEntries ScheduleEntry[]
   consents        PatientConsent[]
   Visit           Visit[]
 

@@ -1,4 +1,7 @@
-import type { ScheduleEntry } from "@prisma/client";
+import type { UnmatchedAppointment } from "@prisma/client";
+
+/** The one shape the Schedule grid and DTO builders read: an unmatched row, or a Visit shaped like one (visitId set). */
+export type ScheduleEntry = UnmatchedAppointment & { visitId: string | null };
 
 export type Section = "PSYCH_EVAL" | "TRACK";
 

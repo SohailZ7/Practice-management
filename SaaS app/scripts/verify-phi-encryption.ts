@@ -36,7 +36,7 @@ const entry = (date: string, client: string) => ({
 });
 
 async function cleanup() {
-  await raw.scheduleEntry.deleteMany({ where: { OR: [{ providerName: "ZZ Provider" }, { timeLabel: { startsWith: "ZZ" } }] } });
+  await raw.unmatchedAppointment.deleteMany({ where: { OR: [{ providerName: "ZZ Provider" }, { timeLabel: { startsWith: "ZZ" } }] } });
   await raw.importLog.deleteMany({ where: { fileName: { startsWith: "ZZ" } } });
   await raw.importDraft.deleteMany({ where: { fileName: { startsWith: "ZZ" } } });
   await raw.task.deleteMany({ where: { title: { startsWith: "ZZ" } } });
@@ -49,25 +49,25 @@ async function main() {
   // 1. Transparent encryption through the app client.
   const provider = await app.provider.create({ data: { name: "ZZ Provider", zoomPassword: "zz-zoom-pass" } });
   const e = entry("2026-01-05", "ZZ Verify, Patient");
-  const created = await app.scheduleEntry.create({
+  const created = await app.unmatchedAppointment.create({
     data: { ...e, providerId: provider.id, dedupeKey: makeDedupeKey(e) },
     include: { provider: true },
   });
   check("create returns plaintext clientInfo", created.clientInfo === "ZZ Verify, Patient");
   check("nested provider.zoomPassword is decrypted", created.provider?.zoomPassword === "zz-zoom-pass");
-  const rawEntry = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "ScheduleEntry" WHERE id = ${created.id}`)[0];
+  const rawEntry = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "UnmatchedAppointment" WHERE id = ${created.id}`)[0];
   check("stored clientInfo is ciphertext", rawEntry.clientInfo.startsWith("phi:v1:") && !rawEntry.clientInfo.includes("Verify"));
   check("stored dedupeKey has no client text", isKeyedDedupe(rawEntry.dedupeKey) && !rawEntry.dedupeKey.toLowerCase().includes("verify"));
   const rawProv = (await raw.$queryRaw<{ zoomPassword: string }[]>`SELECT "zoomPassword" FROM "Provider" WHERE id = ${provider.id}`)[0];
   check("stored zoomPassword is ciphertext", rawProv.zoomPassword.startsWith("phi:v1:"));
 
-  const upd = await app.scheduleEntry.update({ where: { id: created.id }, data: { clientInfo: "ZZ Verify, Changed" } });
+  const upd = await app.unmatchedAppointment.update({ where: { id: created.id }, data: { clientInfo: "ZZ Verify, Changed" } });
   check("update encrypts and returns plaintext", upd.clientInfo === "ZZ Verify, Changed");
-  const many = await app.scheduleEntry.findMany({ where: { providerName: "ZZ Provider" } });
+  const many = await app.unmatchedAppointment.findMany({ where: { providerName: "ZZ Provider" } });
   check("findMany decrypts", many.length === 1 && many[0].clientInfo === "ZZ Verify, Changed");
   let refused = false;
   try {
-    await app.scheduleEntry.findMany({ where: { clientInfo: { contains: "Verify" } } });
+    await app.unmatchedAppointment.findMany({ where: { clientInfo: { contains: "Verify" } } });
   } catch {
     refused = true;
   }
@@ -101,13 +101,13 @@ async function main() {
   const legacy = entry("2026-01-08", "ZZ Legacy Client");
   const legacyKey = legacyDedupeKey(legacy);
   const lid = "zz-legacy-entry";
-  await raw.$executeRaw`INSERT INTO "ScheduleEntry"(id,date,section,"timeLabel","trackName","typeName","clientInfo","providerName","dedupeKey") VALUES (${lid},${legacy.date},${legacy.section},${legacy.timeLabel},'ZZ Track','',${legacy.clientInfo},'ZZ Provider',${legacyKey})`;
+  await raw.$executeRaw`INSERT INTO "UnmatchedAppointment"(id,date,section,"timeLabel","trackName","typeName","clientInfo","providerName","dedupeKey") VALUES (${lid},${legacy.date},${legacy.section},${legacy.timeLabel},'ZZ Track','',${legacy.clientInfo},'ZZ Provider',${legacyKey})`;
   const tid = "zz-legacy-task";
   await raw.$executeRaw`INSERT INTO "Task"(id,title,notes,"sortOrder") VALUES (${tid},'ZZ legacy task','ZZ legacy note',9999)`;
   const dry = backfill("--dry-run");
   check("dry run reports changes but writes none", changed(dry) >= 2 && (await raw.task.findUnique({ where: { id: tid } }))?.notes === "ZZ legacy note");
   const run1 = backfill();
-  const afterRow = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "ScheduleEntry" WHERE id = ${lid}`)[0];
+  const afterRow = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "UnmatchedAppointment" WHERE id = ${lid}`)[0];
   check("backfill encrypts clientInfo", afterRow.clientInfo.startsWith("phi:v1:"));
   check("backfill rewrites the dedupe key (matches what an import computes)", afterRow.dedupeKey === makeDedupeKey(legacy), afterRow.dedupeKey);
   check("backfill encrypts Task.notes", (await raw.task.findUnique({ where: { id: tid } }))!.notes.startsWith("phi:v1:"));
@@ -115,7 +115,7 @@ async function main() {
   const run2 = backfill();
   check("second backfill changes nothing (idempotent)", changed(run2) === 0, run2);
   const back = backfill("--decrypt");
-  const plainRow = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "ScheduleEntry" WHERE id = ${lid}`)[0];
+  const plainRow = (await raw.$queryRaw<{ clientInfo: string; dedupeKey: string }[]>`SELECT "clientInfo","dedupeKey" FROM "UnmatchedAppointment" WHERE id = ${lid}`)[0];
   check("--decrypt restores plaintext and the old dedupe key", plainRow.clientInfo === legacy.clientInfo && plainRow.dedupeKey === legacyKey, back);
   check("--decrypt twice changes nothing", changed(backfill("--decrypt")) === 0);
   backfill();

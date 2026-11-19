@@ -86,17 +86,9 @@ describe("safety guards", () => {
     expect(() => snapshotStamp("2026; DROP TABLE x")).toThrow();
     expect(() => snapshotStamp("20261340")).toThrow();
   });
-  it("every writing script goes through guard(); read-only ones declare readOnly", () => {
-    const writers = ["unify-backfill", "unify-snapshot", "unify-copyback", "unify-rollback"];
-    for (const n of writers) expect(readFileSync(`scripts/${n}.ts`, "utf8")).toMatch(/guard\(\{ name: "[a-z-]+"/);
-    for (const n of ["unify-dryrun", "unify-fingerprint", "unify-verify"]) expect(readFileSync(`scripts/${n}.ts`, "utf8")).toContain("readOnly: true");
-    expect(readFileSync("scripts/unify-seed-fake.ts", "utf8")).toContain("neverProd: true");
-    expect(readFileSync("scripts/unify-rehearse.ts", "utf8")).toContain("rehearsalVerdict");
-  });
-  it("the backfill dry-runs by default and production apply demands the dry-run's insert count", () => {
-    const s = readFileSync("scripts/unify-backfill.ts", "utf8");
-    expect(s).toContain('readOnly: !apply');
-    expect(s).toContain("--expect-inserts");
+  it("the remaining writing scripts go through guard() (Release A backfill tooling was retired in B2b)", () => {
+    for (const n of ["unify-snapshot", "unify-copy-unmatched"]) expect(readFileSync(`scripts/${n}.ts`, "utf8")).toMatch(/guard\(\{ name: "[a-z-]+"/);
+    expect(readFileSync("scripts/unify-fingerprint.ts", "utf8")).toContain("readOnly: true");
   });
 });
 
@@ -150,8 +142,7 @@ describe("snapshot tables never block or suffer a schema step", () => {
       expect(gateSchemaSql(withoutSnapshotDrops(bad)).length).toBeGreaterThan(0);
     }
   });
-  it("schema-apply and the rehearsal both use it", () => {
+  it("schema-apply uses it", () => {
     expect(readFileSync("scripts/schema-apply.ts", "utf8")).toContain("withoutSnapshotDrops(raw)");
-    expect(readFileSync("scripts/unify-rehearse.ts", "utf8")).toContain("withoutSnapshotDrops(");
   });
 });

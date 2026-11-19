@@ -1,7 +1,8 @@
 // Release B1: the Schedule reads Visits (the unified appointment). Rows that are not a Visit yet (no patient) still come
 // from ScheduleEntry as "staging" rows. This module turns both into the one EntryDTO the grid already uses.
 
-import type { ScheduleEntry, UnmatchedAppointment, Visit } from "@prisma/client";
+import type { UnmatchedAppointment, Visit } from "@prisma/client";
+import type { ScheduleEntry } from "../scheduleTypes";
 import { db } from "../db";
 import { entryDTOs } from "../patients";
 import type { EntryDTO } from "../scheduleTypes";

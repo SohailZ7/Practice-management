@@ -48,7 +48,7 @@ async function main() {
   try {
     // ScheduleEntry: clientInfo + dedupeKey together.
     for (let cursor: string | undefined; ; ) {
-      const rows = await db.scheduleEntry.findMany({
+      const rows = await db.unmatchedAppointment.findMany({
         take: BATCH,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
         orderBy: { id: "asc" },
@@ -58,7 +58,7 @@ async function main() {
       const updates = rows.map((r) => ({ id: r.id, data: planScheduleEntry(cipher, r, mode) }));
       rows.forEach((_, i) => bump("ScheduleEntry", Object.keys(updates[i].data).length > 0));
       const todo = updates.filter((u) => Object.keys(u.data).length > 0);
-      if (!dryRun && todo.length) await db.$transaction(todo.map((u) => db.scheduleEntry.update({ where: { id: u.id }, data: u.data })));
+      if (!dryRun && todo.length) await db.$transaction(todo.map((u) => db.unmatchedAppointment.update({ where: { id: u.id }, data: u.data })));
       cursor = rows[rows.length - 1].id;
     }
 

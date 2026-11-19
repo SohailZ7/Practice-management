@@ -1,5 +1,5 @@
 // Database helpers for patient links and consent on the schedule (requirements v19, section 5.7).
-import type { ScheduleEntry } from "@prisma/client";
+import type { ScheduleEntry } from "@/lib/scheduleTypes";
 import { db } from "./db";
 import { consentBadge } from "./consent";
 import { toEntryDTO, type EntryDTO } from "./scheduleTypes";
