@@ -19,7 +19,7 @@ async function main() {
   try { const r = await timed(base + "/login"); const t = await r.text(); rec("login page loads", r.status === 200 && /sign in/i.test(t), `status ${r.status}`); } catch (e) { rec("login page loads", false, String(e).slice(0, 80)); }
 
   // 2. Protected screens refuse anonymous visitors (redirect to login), never show data.
-  for (const p of ["/schedule", "/billing", "/tasks", "/ledger", "/employees", "/admin"]) {
+  for (const p of ["/", "/schedule", "/tasks", "/employees", "/billing", "/billing/new", "/billing/patients", "/billing/programs", "/ledger", "/ledger/summary", "/ledger/settings", "/feedback", "/admin", "/settings"]) {
     try { const r = await timed(base + p); const loc = r.headers.get("location") ?? ""; rec(`anonymous ${p} is turned away`, [301, 302, 303, 307, 308].includes(r.status) && /login|denied/.test(loc), `status ${r.status}`); }
     catch (e) { rec(`anonymous ${p} is turned away`, false, String(e).slice(0, 80)); }
   }
