@@ -6,6 +6,7 @@ import type { VisitRow } from "@/lib/notes/queries";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
+import { PatientName } from "@/components/PatientName";
 import { formatTimeText } from "@/lib/notes/scheduleTime";
 
 /**
@@ -80,11 +81,11 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
             const docs = docsOf(v);
             return (
               <tr key={v.id} className={v.trackingOnly ? "tracking-row" : undefined} title={v.trackingOnly ? "Not B&B: tracking only. Counted for volume and revenue, never billed." : undefined}>
-                <td className="v-pat" title={v.fullName ? "Full name" : "Shown as initials"}>
+                <td className="v-pat" title={v.fullName ? "Full name when See full names is on (Settings)" : "Shown as initials"}>
                   <span className="v-pat-wrap">
                     {canEdit && <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => onSelect(v.id, e.target.checked)} />}
-                    <span className="avatar sm" aria-hidden="true">{(v.fullName ?? v.initials).replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}</span>
-                    <span className="v-name">{v.fullName ?? v.initials}</span>
+                    <span className="avatar sm" aria-hidden="true">{v.initials.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}</span>
+                    <span className="v-name"><PatientName initials={v.initials} fullName={v.fullName} /></span>
                   </span>
                 </td>
                 <td className="v-time">{renderTime ? renderTime(v) : formatTimeText(v.apptTime, military)}</td>

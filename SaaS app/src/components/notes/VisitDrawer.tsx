@@ -6,7 +6,7 @@ import type { VisitRow } from "@/lib/notes/queries";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
-import { Phi } from "@/components/Phi";
+import { PatientName } from "@/components/PatientName";
 
 /** The Visit details side panel: everything about one visit on one screen. Presentational; actions are passed in. */
 export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onStatus, onOpenDoc, onGenerate, onTranscript }: {
@@ -31,7 +31,6 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
   if (!mounted) return null;
 
   const status = VISIT_STATUSES.find((s) => s.value === visit.status)?.label ?? "Scheduled";
-  const name = visit.fullName ?? visit.initials;
   return createPortal(
     <div className="drawer-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <aside className="visit-drawer" role="dialog" aria-modal="true" aria-label="Visit details">
@@ -41,9 +40,9 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
         </header>
         <div className="vd-body">
           <div className="vd-who">
-            <span className="avatar" aria-hidden="true">{name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}</span>
+            <span className="avatar" aria-hidden="true">{visit.initials.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}</span>
             <div>
-              <b><Phi name={name} /></b>
+              <b><PatientName initials={visit.initials} fullName={visit.fullName} /></b>
               <div className="small muted">{visit.appointmentType || "Visit"}</div>
             </div>
             <span className={`status-pill tone-${statusTone(visit.status)}`}>{status}</span>
