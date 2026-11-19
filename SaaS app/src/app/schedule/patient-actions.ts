@@ -62,8 +62,13 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
   const entry = await db.unmatchedAppointment.findUnique({ where: { id: entryId } });
   if (!entry) throw new Error("Entry not found");
 
-  // A row here has no patient by definition, so there is nothing to unlink.
-  if (patientId === null) return entryDTO(unmatchedAsEntry(entry));
+  // A copied row can still carry a patient link (no Visit yet): unlinking clears it. Rows with no patient are left as they are.
+  if (patientId === null) {
+    const cleared = entry.patientId ? await db.unmatchedAppointment.update({ where: { id: entryId }, data: { patientId: null } }) : entry;
+    if (entry.patientId) await audit(user.email, "schedule.patient.unlink", `entry ${entryId}`);
+    revalidatePath("/schedule");
+    return entryDTO(unmatchedAsEntry(cleared));
+  }
 
   const resolved = await survivingPatientId(patientId);
   const patient = resolved ? await db.patient.findUnique({ where: { id: resolved } }) : null;
