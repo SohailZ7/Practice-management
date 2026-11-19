@@ -12,7 +12,7 @@ export default async function EditEncounterPage({ params }: { params: { id: stri
   const user = await requireAccess("billing", "edit");
   const enc = await db.encounter.findUnique({ where: { id: params.id }, include: { patient: true } });
   if (!enc) notFound();
-  const visible = await db.billingPatient.findFirst({ where: { id: enc.patientId, ...patientScope(user) } });
+  const visible = await db.patient.findFirst({ where: { id: enc.patientId, ...patientScope(user) } });
   if (!visible) {
     await auditDenied(user.email, `billing encounter ${params.id}`);
     notFound();

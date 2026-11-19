@@ -25,7 +25,7 @@ export async function searchPatients(q: string): Promise<PatientOption[]> {
   const user = await requireAccess("schedule", "edit");
   const search = patientSearch(typeof q === "string" ? q.slice(0, 100) : "");
   if (!search) return [];
-  const rows = await db.billingPatient.findMany({
+  const rows = await db.patient.findMany({
     where: { AND: [{ mergedIntoId: null }, search] },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     take: 8,
@@ -39,10 +39,10 @@ export async function createPatient(input: { lastName: string; firstName: string
   const { values, errors } = validatePatient(input);
   if (Object.keys(errors).length) return { ok: false, errors };
   if (values.mrn) {
-    const onFile = await db.billingPatient.findUnique({ where: { mrn: values.mrn } });
+    const onFile = await db.patient.findUnique({ where: { mrn: values.mrn } });
     if (onFile) return { ok: false, errors: { mrn: "A patient with that MRN already exists. Search for them instead." } };
   }
-  const created = await db.billingPatient.create({
+  const created = await db.patient.create({
     data: { mrn: values.mrn || null, lastName: values.lastName, firstName: values.firstName, createdById: user.id },
   });
   await audit(user.email, "patient.create", `patient ${created.id} via schedule`);
@@ -63,7 +63,7 @@ export async function linkPatient(entryId: string, patientId: string | null): Pr
   }
 
   const resolved = await survivingPatientId(patientId);
-  const patient = resolved ? await db.billingPatient.findUnique({ where: { id: resolved } }) : null;
+  const patient = resolved ? await db.patient.findUnique({ where: { id: resolved } }) : null;
   if (!patient) throw new Error("Patient not found");
   const clientInfo = `${patient.lastName}, ${patient.firstName}`;
   const updated = await db.scheduleEntry.update({

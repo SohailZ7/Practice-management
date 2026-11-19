@@ -21,7 +21,7 @@ describe.skipIf(process.env.NOTES_E2E !== "1")("notes pipeline", () => {
     const admin = await db.user.findFirst({ where: { role: "ADMIN" } });
     expect(admin, "seed the database first").toBeTruthy();
 
-    const patient = await db.billingPatient.create({
+    const patient = await db.patient.create({
       data: { lastName: "Zzsynthetic", firstName: "Testcase", createdById: admin!.id },
     });
     const visit = await db.visit.create({
@@ -73,7 +73,7 @@ describe.skipIf(process.env.NOTES_E2E !== "1")("notes pipeline", () => {
     } finally {
       await db.visitDocument.deleteMany({ where: { visitId: visit.id } });
       await db.visit.delete({ where: { id: visit.id } });
-      await db.billingPatient.delete({ where: { id: patient.id } });
+      await db.patient.delete({ where: { id: patient.id } });
     }
   }, 1_200_000);
 });

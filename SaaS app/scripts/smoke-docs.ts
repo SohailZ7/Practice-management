@@ -21,7 +21,7 @@ async function main() {
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true } });
   if (!admin) throw new Error("no admin user on this database");
   const actor = { id: admin.id, email: admin.email };
-  const patient = await db.billingPatient.create({ data: { lastName: "Zzsmoke", firstName: "Synthetic", createdById: admin.id } });
+  const patient = await db.patient.create({ data: { lastName: "Zzsmoke", firstName: "Synthetic", createdById: admin.id } });
   const visit = await db.visit.create({
     data: { patientId: patient.id, visitDate: "2026-11-05", appointmentType: "Follow-up", providerName: "", transcript: FAKE, createdByEmail: admin.email },
   });
@@ -59,7 +59,7 @@ async function main() {
     check("PDF of version 1", pdf1.bytes.length > 1000);
   } finally {
     await db.visit.delete({ where: { id: visit.id } }).catch(() => undefined);
-    await db.billingPatient.delete({ where: { id: patient.id } }).catch(() => undefined);
+    await db.patient.delete({ where: { id: patient.id } }).catch(() => undefined);
   }
 }
 

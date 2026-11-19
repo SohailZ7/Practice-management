@@ -6,7 +6,7 @@ const db = {
   provider: { findMany: vi.fn() },
   trackDef: { findMany: vi.fn() },
   entryType: { findMany: vi.fn() },
-  billingPatient: { findFirst: vi.fn(), create: vi.fn() },
+  patient: { findFirst: vi.fn(), create: vi.fn() },
 };
 vi.mock("../src/lib/db", () => ({ db }));
 vi.mock("../src/lib/notes/visitSchedule", () => ({ syncScheduleForVisit: vi.fn(), removeScheduleForVisits: vi.fn() }));
@@ -55,8 +55,8 @@ describe("cleanApptTime", () => {
 
 describe("addVisit", () => {
   it("finds or creates the patient and stores the visit with its time", async () => {
-    db.billingPatient.findFirst.mockResolvedValue(null);
-    db.billingPatient.create.mockResolvedValue({ id: "p1" });
+    db.patient.findFirst.mockResolvedValue(null);
+    db.patient.create.mockResolvedValue({ id: "p1" });
     db.visit.create.mockResolvedValue({ id: "v1" });
     await addVisit(actor, { date: "2026-11-05", patient: "Alpha Testcase", apptTime: "2:00 PM", program: "KIOP-AM" });
     expect(db.visit.create.mock.calls[0][0].data).toMatchObject({ patientId: "p1", visitDate: "2026-11-05", apptTime: "2:00 PM", program: "KIOP-AM" });
@@ -84,7 +84,7 @@ describe("options and strict fields", () => {
   it("refuses a type or provider that is not listed, and stores the listed spelling", async () => {
     await expect(addVisit(actor, { date: "2026-11-05", patient: "A B", appointmentType: "Haircut" })).rejects.toMatchObject({ code: "bad_type" });
     await expect(addVisit(actor, { date: "2026-11-05", patient: "A B", providerName: "Nobody" })).rejects.toMatchObject({ code: "bad_provider" });
-    db.billingPatient.findFirst.mockResolvedValue({ id: "p1" });
+    db.patient.findFirst.mockResolvedValue({ id: "p1" });
     db.visit.create.mockResolvedValue({ id: "v2" });
     await addVisit(actor, { date: "2026-11-05", patient: "A B", appointmentType: "follow-up", providerName: "dr. example" });
     expect(db.visit.create.mock.calls[0][0].data).toMatchObject({ appointmentType: "Follow-up", providerName: "Dr. Example" });

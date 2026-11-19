@@ -91,27 +91,27 @@ model EntryType {
 
 // section: PSYCH_EVAL | TRACK    date: YYYY-MM-DD
 model ScheduleEntry {
-  id           String          @id @default(cuid())
+  id           String    @id @default(cuid())
   date         String
   section      String
-  timeLabel    String          @default("")
-  trackName    String          @default("")
-  typeName     String          @default("")
-  clientInfo   String          @default("")
+  timeLabel    String    @default("")
+  trackName    String    @default("")
+  typeName     String    @default("")
+  clientInfo   String    @default("")
   providerId   String?
-  providerName String          @default("")
-  absent       Boolean         @default(false)
-  canceled     Boolean         @default(false)
-  completed    Boolean         @default(false)
-  missed       Boolean         @default(false)
-  dedupeKey    String          @default("")
+  providerName String    @default("")
+  absent       Boolean   @default(false)
+  canceled     Boolean   @default(false)
+  completed    Boolean   @default(false)
+  missed       Boolean   @default(false)
+  dedupeKey    String    @default("")
   importLogId  String?
   patientId    String?
   // Set when this row mirrors a Notes visit (added in the web app or the recorder). One row per visit.
   visitId      String?
-  createdAt    DateTime        @default(now())
-  provider     Provider?       @relation(fields: [providerId], references: [id])
-  patient      BillingPatient? @relation(fields: [patientId], references: [id])
+  createdAt    DateTime  @default(now())
+  provider     Provider? @relation(fields: [providerId], references: [id])
+  patient      Patient?  @relation(fields: [patientId], references: [id])
 
   @@index([date])
   @@index([visitId])
@@ -213,7 +213,7 @@ model Program {
 }
 
 // MRN is optional; an admin can add it later. mergedIntoId keeps merged records instead of erasing them.
-model BillingPatient {
+model Patient {
   id              String           @id @default(cuid())
   mrn             String?          @unique
   lastName        String
@@ -228,6 +228,8 @@ model BillingPatient {
   Visit           Visit[]
 
   @@index([lastName, firstName])
+  // Renamed in code only (docs/patient-model-proposal.md, Phase 1): the table keeps its name, so no SQL runs.
+  @@map("BillingPatient")
 }
 
 // Consent for AI-assisted visit documentation (requirements v19, CON-1). History is kept; at most one row per patient
@@ -248,7 +250,7 @@ model Visit {
   transcriptAt    DateTime?
   createdByEmail  String
   createdAt       DateTime        @default(now())
-  patient         BillingPatient  @relation(fields: [patientId], references: [id])
+  patient         Patient         @relation(fields: [patientId], references: [id])
   documents       VisitDocument[]
 
   @@index([visitDate])
@@ -307,16 +309,16 @@ model DocumentVersion {
 }
 
 model PatientConsent {
-  id               String         @id @default(cuid())
+  id               String    @id @default(cuid())
   patientId        String
   consentDate      String
-  note             String         @default("")
-  active           Boolean        @default(true)
+  note             String    @default("")
+  active           Boolean   @default(true)
   confirmedByEmail String
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime  @default(now())
   withdrawnByEmail String?
   withdrawnAt      DateTime?
-  patient          BillingPatient @relation(fields: [patientId], references: [id])
+  patient          Patient   @relation(fields: [patientId], references: [id])
 
   @@index([patientId, active])
 }
@@ -359,24 +361,24 @@ model ApiToken {
 
 // encounterDate: YYYY-MM-DD. icd10Codes: in order, first = primary.
 model Encounter {
-  id               String         @id @default(cuid())
+  id               String    @id @default(cuid())
   patientId        String
   encounterDate    String
   programId        String
   icd10Codes       String[]
-  chargeCode       String         @default("")
-  note             String         @default("")
-  getixEntered     Boolean        @default(false)
+  chargeCode       String    @default("")
+  note             String    @default("")
+  getixEntered     Boolean   @default(false)
   getixEnteredAt   DateTime?
   getixEnteredById String?
   createdById      String
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime  @default(now())
   updatedById      String?
   updatedAt        DateTime?
   deletedAt        DateTime?
   deletedById      String?
-  patient          BillingPatient @relation(fields: [patientId], references: [id])
-  program          Program        @relation(fields: [programId], references: [id])
+  patient          Patient   @relation(fields: [patientId], references: [id])
+  program          Program   @relation(fields: [programId], references: [id])
 
   @@index([patientId, encounterDate])
   @@index([createdById])

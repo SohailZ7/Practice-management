@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = { billingPatient: { findMany: vi.fn() }, visit: { findMany: vi.fn() } };
+const db = { patient: { findMany: vi.fn() }, visit: { findMany: vi.fn() } };
 vi.mock("../src/lib/db", () => ({ db }));
 vi.mock("../src/lib/audit", () => ({ audit: vi.fn() }));
 const authenticate = vi.fn();
@@ -16,7 +16,7 @@ const call = (qs: string) => GET(new Request(`http://x/search?${qs}`));
 beforeEach(() => {
   vi.clearAllMocks();
   authenticate.mockResolvedValue({ user: { email: "a@example.org" } });
-  db.billingPatient.findMany.mockResolvedValue([
+  db.patient.findMany.mockResolvedValue([
     { id: "p1", lastName: "Testcase", firstName: "Alpha" },
     { id: "p2", lastName: "Sample", firstName: "Bravo" },
   ]);

@@ -90,8 +90,8 @@ export async function addVisit(
 
   const fields = await cleanFields(input);
   const patient =
-    (await db.billingPatient.findFirst({ where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null } })) ??
-    (await db.billingPatient.create({ data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id } }));
+    (await db.patient.findFirst({ where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null } })) ??
+    (await db.patient.create({ data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id } }));
 
   const visit = await db.visit.create({
     data: {

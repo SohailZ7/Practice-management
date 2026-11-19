@@ -34,10 +34,10 @@ export async function loadScheduleForDate(
     if (Object.keys(errors).length) continue;
 
     const patient =
-      (await db.billingPatient.findFirst({
+      (await db.patient.findFirst({
         where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null },
       })) ??
-      (await db.billingPatient.create({
+      (await db.patient.create({
         data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id },
       }));
 

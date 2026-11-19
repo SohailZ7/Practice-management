@@ -30,7 +30,7 @@ export async function searchVisits(q: { initials?: string; date?: string }): Pro
   let patientIds: string[] | undefined;
   if (q.initials) {
     const want = normalizeInitials(q.initials) ?? "";
-    const patients = await db.billingPatient.findMany({ where: { mergedIntoId: null }, select: { id: true, lastName: true, firstName: true } });
+    const patients = await db.patient.findMany({ where: { mergedIntoId: null }, select: { id: true, lastName: true, firstName: true } });
     patientIds = patients.filter((p) => lettersOf(patientInitials(p.lastName, p.firstName)) === want).map((p) => p.id);
     if (patientIds.length === 0) return [];
   }

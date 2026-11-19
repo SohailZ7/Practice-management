@@ -17,7 +17,7 @@ export const GET = handle(async (req) => {
   const rows = await db.scheduleEntry.findMany({ where: { date }, orderBy: [{ createdAt: "asc" }] });
   const dtos = await entryDTOs(rows);
   const ids = [...new Set(dtos.map((d) => d.patientId).filter((x): x is string => !!x))];
-  const patients = ids.length ? await db.billingPatient.findMany({ where: { id: { in: ids } }, select: { id: true, lastName: true, firstName: true } }) : [];
+  const patients = ids.length ? await db.patient.findMany({ where: { id: { in: ids } }, select: { id: true, lastName: true, firstName: true } }) : [];
   const byId = new Map(patients.map((p) => [p.id, p]));
 
   await audit(user.email, "desktop.schedule.view", `${date} entries=${rows.length}`);

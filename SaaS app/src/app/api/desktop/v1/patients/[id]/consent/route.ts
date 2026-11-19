@@ -17,7 +17,7 @@ export const GET = (req: Request, { params }: Ctx) =>
   handle(async () => {
     await authenticate(req, { module: "schedule", level: "view" });
     const id = await survivingPatientId(params.id);
-    if (!id || !(await db.billingPatient.findUnique({ where: { id }, select: { id: true } }))) throw new ApiError(404, "not_found");
+    if (!id || !(await db.patient.findUnique({ where: { id }, select: { id: true } }))) throw new ApiError(404, "not_found");
     const c = await activeConsent(id);
     return json({ patientId: id, active: !!c, consentDate: c?.consentDate ?? null });
   })(req);

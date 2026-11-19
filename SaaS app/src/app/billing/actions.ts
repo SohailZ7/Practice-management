@@ -76,7 +76,7 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
   let newPatient: { mrn: string | null; lastName: string; firstName: string } | null = null;
 
   if (input.patientId) {
-    const visible = await db.billingPatient.findFirst({ where: { id: input.patientId, ...patientScope(user) } });
+    const visible = await db.patient.findFirst({ where: { id: input.patientId, ...patientScope(user) } });
     if (!visible) errors.patient = "Choose a patient from the list.";
     else patientId = visible.id;
   } else {
@@ -86,7 +86,7 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
 
     const { mrn, lastName, firstName } = p.values;
     if (mrn) {
-      const onFile = await db.billingPatient.findUnique({ where: { mrn } });
+      const onFile = await db.patient.findUnique({ where: { mrn } });
       if (onFile) {
         if (!sameName(onFile.lastName, lastName) || !sameName(onFile.firstName, firstName)) {
           return fail({
@@ -99,7 +99,7 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
       }
     } else {
       // No MRN: ask before creating a second record for the same name.
-      const sameNamed = await db.billingPatient.findMany({
+      const sameNamed = await db.patient.findMany({
         where: {
           ...patientScope(user),
           lastName: { equals: lastName, mode: "insensitive" },
@@ -125,7 +125,7 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
   const result = await db.$transaction(async (tx) => {
     let pid = patientId;
     if (!pid && newPatient) {
-      const created = await tx.billingPatient.create({ data: { ...newPatient, createdById: user.id } });
+      const created = await tx.patient.create({ data: { ...newPatient, createdById: user.id } });
       pid = created.id;
     }
     const encounter = await tx.encounter.create({
@@ -208,7 +208,7 @@ export async function searchPatients(q: string): Promise<PatientHit[]> {
   const user = await requireAccess("billing", "edit");
   const filter = patientSearch(str(q).slice(0, 100));
   if (!filter) return [];
-  const rows = await db.billingPatient.findMany({
+  const rows = await db.patient.findMany({
     where: { AND: [patientScope(user), filter] },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     take: 15,
@@ -227,11 +227,11 @@ export async function addMrn(patientId: string, rawMrn: string): Promise<Patient
   const admin = await requireAdmin();
   const { mrn, error } = validateMrn(rawMrn);
   if (error) return { ok: false, error };
-  const patient = await db.billingPatient.findUnique({ where: { id: patientId } });
+  const patient = await db.patient.findUnique({ where: { id: patientId } });
   if (!patient || patient.mergedIntoId) return { ok: false, error: "Patient not found." };
   if (patient.mrn) return { ok: false, error: "This patient already has an MRN. Use “Fix name or MRN”." };
 
-  const other = await db.billingPatient.findUnique({ where: { mrn } });
+  const other = await db.patient.findUnique({ where: { mrn } });
   if (other && other.id !== patient.id) {
     if (sameName(other.lastName, patient.lastName) && sameName(other.firstName, patient.firstName)) {
       return {
@@ -244,7 +244,7 @@ export async function addMrn(patientId: string, rawMrn: string): Promise<Patient
   }
   await db.$transaction(async (tx) => {
     await recordHistory(tx, "patient", patient.id, "add_mrn", patient, admin.id);
-    await tx.billingPatient.update({ where: { id: patient.id }, data: { mrn } });
+    await tx.patient.update({ where: { id: patient.id }, data: { mrn } });
   });
   await audit(admin.email, "billing.patient.add_mrn", `patient ${patient.id}`);
   revalidatePath("/billing", "layout");
@@ -259,15 +259,15 @@ export async function fixPatient(
   const { values, errors } = validatePatient(input);
   const first = Object.values(errors)[0];
   if (first) return { ok: false, error: first };
-  const patient = await db.billingPatient.findUnique({ where: { id: patientId } });
+  const patient = await db.patient.findUnique({ where: { id: patientId } });
   if (!patient || patient.mergedIntoId) return { ok: false, error: "Patient not found." };
   if (values.mrn) {
-    const other = await db.billingPatient.findUnique({ where: { mrn: values.mrn } });
+    const other = await db.patient.findUnique({ where: { mrn: values.mrn } });
     if (other && other.id !== patient.id) return { ok: false, error: "Another record already has that MRN." };
   }
   await db.$transaction(async (tx) => {
     await recordHistory(tx, "patient", patient.id, "fix", patient, admin.id);
-    await tx.billingPatient.update({
+    await tx.patient.update({
       where: { id: patient.id },
       data: { mrn: values.mrn || null, lastName: values.lastName, firstName: values.firstName },
     });
@@ -282,8 +282,8 @@ export async function mergePatients(keepId: string, removeId: string): Promise<P
   const admin = await requireAdmin();
   if (keepId === removeId) return { ok: false, error: "Choose two different records." };
   const [keep, remove] = await Promise.all([
-    db.billingPatient.findUnique({ where: { id: keepId } }),
-    db.billingPatient.findUnique({ where: { id: removeId } }),
+    db.patient.findUnique({ where: { id: keepId } }),
+    db.patient.findUnique({ where: { id: removeId } }),
   ]);
   if (!keep || !remove || keep.mergedIntoId || remove.mergedIntoId) return { ok: false, error: "Patient not found." };
   if (!sameName(keep.lastName, remove.lastName) || !sameName(keep.firstName, remove.firstName)) {
@@ -294,7 +294,7 @@ export async function mergePatients(keepId: string, removeId: string): Promise<P
     for (const e of moving) await recordHistory(tx, "encounter", e.id, "merge_move", e, admin.id);
     await recordHistory(tx, "patient", remove.id, "merge", remove, admin.id);
     await tx.encounter.updateMany({ where: { patientId: remove.id }, data: { patientId: keep.id } });
-    await tx.billingPatient.update({ where: { id: remove.id }, data: { mrn: null, mergedIntoId: keep.id } });
+    await tx.patient.update({ where: { id: remove.id }, data: { mrn: null, mergedIntoId: keep.id } });
   });
   await audit(admin.email, "billing.patient.merge", `patient ${remove.id} into ${keep.id}`);
   revalidatePath("/billing", "layout");

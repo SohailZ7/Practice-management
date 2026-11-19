@@ -9,7 +9,7 @@ export default async function NewEncounterPage({ searchParams }: { searchParams:
   const user = await requireAccess("billing", "edit");
   const programs = await db.program.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const patient = searchParams.patient
-    ? await db.billingPatient.findFirst({ where: { id: searchParams.patient, ...patientScope(user) } })
+    ? await db.patient.findFirst({ where: { id: searchParams.patient, ...patientScope(user) } })
     : null;
 
   if (patient) await audit(user.email, "billing.patient.view", `patient ${patient.id} (new encounter form)`);

@@ -29,7 +29,7 @@ export const TOLERANT_FIELDS: Record<string, readonly string[]> = { Task: ["note
 /** Relations that lead to another encrypted model, so values inside `include` results are decrypted too. */
 export const RELATIONS: Record<string, Record<string, string>> = {
   ScheduleEntry: { provider: "Provider" },
-  BillingPatient: { consents: "PatientConsent", visits: "Visit" },
+  Patient: { consents: "PatientConsent", visits: "Visit" },
   Visit: { documents: "VisitDocument" },
   VisitDocument: { versions: "VisitDocumentVersion", visit: "Visit" },
   Provider: { entries: "ScheduleEntry" },

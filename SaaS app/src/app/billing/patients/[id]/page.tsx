@@ -13,7 +13,7 @@ import { PatientEncounters } from "@/components/billing/PatientEncounters";
 export default async function PatientPage({ params }: { params: { id: string } }) {
   const user = await requireAccess("billing", "view");
   const admin = isAdmin(user);
-  const patient = await db.billingPatient.findFirst({ where: { id: params.id, ...patientScope(user) } });
+  const patient = await db.patient.findFirst({ where: { id: params.id, ...patientScope(user) } });
   if (!patient) {
     await auditDenied(user.email, `billing patient ${params.id}`);
     notFound();

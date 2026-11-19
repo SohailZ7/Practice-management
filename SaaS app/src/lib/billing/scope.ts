@@ -3,13 +3,13 @@ import type { Actor } from "./rules";
 import { isAdmin } from "./rules";
 
 /** Patients this user may see: all for admins; otherwise those they entered an encounter for. */
-export function patientScope(user: Actor): Prisma.BillingPatientWhereInput {
+export function patientScope(user: Actor): Prisma.PatientWhereInput {
   if (isAdmin(user)) return { mergedIntoId: null };
   return { mergedIntoId: null, encounters: { some: { createdById: user.id, deletedAt: null } } };
 }
 
 /** Prisma filter for "MRN or name prefix", or "Last, First". */
-export function patientSearch(q: string): Prisma.BillingPatientWhereInput | null {
+export function patientSearch(q: string): Prisma.PatientWhereInput | null {
   const text = q.trim();
   if (!text) return null;
   const comma = text.indexOf(",");

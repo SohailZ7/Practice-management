@@ -77,13 +77,13 @@ export async function queryPatients(user: Actor, f: PatientFilters): Promise<Pat
   if (admin && f.by) encFilter.createdById = f.by;
   const narrowed = Boolean(f.from || f.to || f.programId || f.waiting || (admin && f.by));
 
-  const and: Prisma.BillingPatientWhereInput[] = [patientScope(user)];
+  const and: Prisma.PatientWhereInput[] = [patientScope(user)];
   const search = patientSearch(f.q);
   if (search) and.push(search);
   if (f.mrn === "missing") and.push({ mrn: null });
   if (narrowed) and.push({ encounters: { some: encFilter } });
 
-  const patients = await db.billingPatient.findMany({
+  const patients = await db.patient.findMany({
     where: { AND: and },
     include: { encounters: { where: { deletedAt: null }, select: { encounterDate: true, getixEntered: true } } },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],

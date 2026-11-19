@@ -8,7 +8,7 @@ import { toEntryDTO, type EntryDTO } from "./scheduleTypes";
 export async function survivingPatientId(id: string | null): Promise<string | null> {
   let current = id;
   for (let i = 0; current && i < 10; i++) {
-    const p = await db.billingPatient.findUnique({ where: { id: current }, select: { mergedIntoId: true } });
+    const p = await db.patient.findUnique({ where: { id: current }, select: { mergedIntoId: true } });
     if (!p) return null;
     if (!p.mergedIntoId) return current;
     current = p.mergedIntoId;
@@ -20,7 +20,7 @@ export async function survivingPatientId(id: string | null): Promise<string | nu
 export async function entryDTOs(rows: ScheduleEntry[]): Promise<EntryDTO[]> {
   const ids = [...new Set(rows.map((r) => r.patientId).filter((x): x is string => !!x))];
   if (ids.length === 0) return rows.map((r) => toEntryDTO(r));
-  const patients = await db.billingPatient.findMany({
+  const patients = await db.patient.findMany({
     where: { id: { in: ids } },
     select: { id: true, mergedIntoId: true },
   });
