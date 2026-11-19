@@ -188,11 +188,16 @@ export function App() {
     setQueue((await engine.queueList().catch(() => [])).filter((q) => q.status !== "uploaded"));
   }, [engine]);
 
-  const retryQueue = useCallback(async () => {
+  // A visit the server says is not in this app (404) will not appear by retrying: automatic retries leave it alone
+  // (it waits for "Retry now" or for the visit to be added), instead of asking the server every 5 minutes forever.
+  const failuresRef = useRef(failures);
+  failuresRef.current = failures;
+  const retryQueue = useCallback(async (auto = false) => {
     if (!engine) return;
     setRetrying(true);
     try {
-      noteResults(await retryAll(engine));
+      const parked = auto ? new Set(Object.entries(failuresRef.current).filter(([, f]) => f.kind === "not_found").map(([id]) => id)) : undefined;
+      noteResults(await retryAll(engine, parked));
       await loadQueue();
       await refreshStatus();
     } finally {
@@ -213,11 +218,12 @@ export function App() {
   const attempt = useRef(0);
   useEffect(() => {
     if (!engine) return;
-    if (queue.length === 0) { attempt.current = 0; return; }
+    const live = queue.filter((q) => failures[q.visit_id]?.kind !== "not_found");
+    if (live.length === 0) { attempt.current = 0; return; }
     if (retrying) return;
-    const t = setTimeout(() => { attempt.current += 1; void retryQueue(); }, nextDelay(attempt.current));
+    const t = setTimeout(() => { attempt.current += 1; void retryQueue(true); }, nextDelay(attempt.current));
     return () => clearTimeout(t);
-  }, [engine, queue, retrying, retryQueue]);
+  }, [engine, queue, failures, retrying, retryQueue]);
 
   // Silent sign-in renewal: renew a token that expires within 15 minutes, so the sign-in never lapses mid-day.
   const lastRefresh = useRef(Date.now());

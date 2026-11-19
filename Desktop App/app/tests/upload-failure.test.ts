@@ -21,7 +21,7 @@ describe("why a saved transcript has not been sent", () => {
     expect(f.message).toBe("This visit is not in the Production app. Add it on the Production website.");
   });
   it("a network error says the practice app cannot be reached", () => {
-    expect(describeUploadFailure(new TypeError("Failed to fetch"), "production").message).toBe("Cannot reach the practice app.");
+    expect(describeUploadFailure(new TypeError("Failed to fetch"), "production").message).toContain("Cannot reach the practice app");
     expect(describeUploadFailure("connection refused", "production").kind).toBe("unreachable");
   });
   it("server and other refusals show the status only", () => {

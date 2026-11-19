@@ -27,3 +27,4 @@ v1.0.24 | 2026-11-18 | built on 3a56aa3 | When the server ends a session for goo
 v1.0.25 | 2026-11-18 | built on 84580ec | Ivory and plum redesign (shared with the web app), plus more safety tests and a guard on the retry timer.
 v1.0.26 | 2026-11-18 | built on 66a365b | Several waiting recordings now share one sign-in renewal instead of racing; 80 more safety tests.
 v1.0.27 | 2026-11-18 | built on ff0374b | An unplugged or blocked microphone during a visit now shows a clear warning instead of looking like a normal recording.
+v1.0.28 | 2026-11-18 | built on f4bb91a | HOTFIX: uploads from 1.0.23 to 1.0.26 never left the Mac (the app refused to send PUT); fixed. Failure messages now name the real cause, and a visit the server does not know is parked instead of retried every 5 minutes.

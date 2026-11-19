@@ -203,6 +203,12 @@ pub fn check_api_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The HTTP methods the app may send. PUT is how a recording is uploaded to the inbox by its id (idempotent); leaving it
+/// out made every new upload fail inside the app (1.0.23 to 1.0.26), so a test now checks each method the web code uses.
+pub fn check_method(method: &str) -> Result<(), String> {
+    if matches!(method, "GET" | "POST" | "PUT" | "PATCH" | "DELETE") { Ok(()) } else { Err(format!("The app tried to use an HTTP method it does not allow ({method}).")) }
+}
+
 /// One call to the practice app's desktop API, made here instead of in the webview: the webview is a different origin
 /// from the server, and the server sends no CORS headers. Any HTTP status comes back as data; `Err` means the server
 /// could not be reached at all.
@@ -211,9 +217,7 @@ pub fn api_request(
 ) -> Result<(u16, String), String> {
     check_base_url(base_url)?;
     check_api_path(path)?;
-    if !matches!(method, "GET" | "POST" | "PATCH" | "DELETE") {
-        return Err("Unsupported request.".into());
-    }
+    check_method(method)?;
     // Generating documents can take a minute or more; the server's own limit is 300 s.
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(310)).build();
     let mut req = agent.request(method, &format!("{}{}", base_url.trim_end_matches('/'), path));
@@ -364,6 +368,15 @@ fn hostname() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_method_the_app_uses_is_allowed_including_put_for_the_inbox() {
+        for m in ["GET", "POST", "PUT", "PATCH", "DELETE"] { assert!(check_method(m).is_ok(), "{m}"); }
+        for m in ["TRACE", "CONNECT", "put", ""] { assert!(check_method(m).is_err(), "{m}"); }
+        assert!(check_api_path("/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555").is_ok());
+        assert!(check_api_path("/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555/link").is_ok());
+        assert!(check_api_path("/api/desktop/v1/notes/inbox?linked=false").is_ok());
+    }
+
     use super::*;
 
     #[test]

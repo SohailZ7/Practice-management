@@ -4,7 +4,7 @@ import { ApiFailure, FINAL_SEQ, linkInbox, pushTranscript, putInbox, sha256Hex, 
 import { isEnvironment, labelFor, urlFor } from "./environments";
 import type { Engine, QueueItem } from "./engine";
 
-export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "server" | "refused" | "local";
+export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "app" | "server" | "refused" | "local";
 
 /** Why an upload failed, in plain words. Built only from the error kind, status and short code: never from the
  *  transcript, a patient name or the server's free text, so it is safe to show and to log. */
@@ -12,6 +12,12 @@ export type UploadFailure = { kind: FailureKind; message: string; environment: Q
 
 export type UploadResult = { visitId: string; ok: boolean; reason?: string; failure?: UploadFailure };
 
+const NETWORK_CAUSE: Record<string, string> = {
+  Dns: "this Mac could not look up the server's address (DNS)", ConnectionFailed: "the connection was refused or blocked (firewall or proxy)",
+  Io: "the connection dropped or timed out", TooManyRedirects: "the network sent the app in circles (a sign-in page on guest Wi-Fi?)",
+  ProxyConnect: "the proxy refused the connection", InvalidProxyCreds: "the proxy needs a login", InsecureRequestHttpsOnly: "the network blocked the secure connection",
+  BadStatus: "the server sent an unreadable reply", InvalidUrl: "the server address is not valid", UnknownScheme: "the server address is not valid", HTTP: "the server sent an unreadable reply",
+};
 const REASONS: Record<string, string> = {
   session_revoked: "this session was ended", session_expired: "the session expired", unknown_session: "the server no longer knows this session",
   user_inactive: "this account is inactive", no_token: "no sign-in",
@@ -35,8 +41,16 @@ export function describeUploadFailure(e: unknown, env: QueueItem["environment"])
     if (e.status >= 500) return f("server", `The practice app had a problem (HTTP ${e.status}).`);
     return f("refused", `The practice app refused the transcript (HTTP ${e.status}${/^[a-z_]{1,40}$/.test(e.code ?? "") ? " " + e.code : ""}).`);
   }
-  // Anything else from the send itself is the network: offline, DNS, timeout, blocked.
-  return f("unreachable", "Cannot reach the practice app.");
+  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  const reach = /Could not reach the practice app \((\w+)\)/.exec(msg);
+  const abort = e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
+  if (reach || abort || e instanceof TypeError || /could not reach the practice app|failed to fetch|network|timed out|connection/i.test(msg) || !msg) {
+    return f("unreachable", `Cannot reach the practice app: ${NETWORK_CAUSE[reach?.[1] ?? ""] ?? "no connection to the server"}. Nothing is lost; it keeps trying.`);
+  }
+  // The app itself refused to send (a bug in the app, not the network): say so, never call it a network problem.
+  // Only the app's own fixed rule messages are shown (they carry no patient text); anything else is left out.
+  const own = /^(Unsupported request\.|The app tried to use an HTTP method it does not allow \([A-Z]*\)\.|The app built a request it will not send \([^)]{0,120}\))/.exec(msg.replace(/\s+/g, " "));
+  return f("app", `The app could not send this${own ? ` (${own[0].replace(/\.$/, "")})` : ""}. This is a problem inside the app, not your network. The recording is safe on this Mac; use Send diagnostics.`);
 }
 
 /** True for a saved transcript recorded against an environment this build does not connect to (the old staging or
@@ -164,8 +178,8 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
 }
 
 /** Retries everything in the queue, each against its own environment. */
-export async function retryAll(engine: Engine): Promise<UploadResult[]> {
-  const items = (await engine.queueList()).filter((i) => i.status !== "uploaded");
+export async function retryAll(engine: Engine, skip: ReadonlySet<string> = new Set()): Promise<UploadResult[]> {
+  const items = (await engine.queueList()).filter((i) => i.status !== "uploaded" && !skip.has(i.visit_id));
   return Promise.all(items.map((i) => uploadQueued(engine, i)));
 }
 
