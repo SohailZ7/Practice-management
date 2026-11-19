@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 import { Icon, type IconName } from "./Icons";
 import { IdleLogoff } from "./IdleLogoff";
+import { TopTools, type Cmd } from "./TopTools";
 
 type Props = {
   name: string;
@@ -119,6 +120,16 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
   const manage: { href: string; label: string; icon: IconName }[] = [
     { href: "/feedback", label: "Feedback", icon: "flag" },
     { href: "/admin", label: "Administration", icon: "shield" },
+  ];
+
+  const commands: Cmd[] = [
+    { label: "Overview", href: "/" },
+    ...items.filter((i) => !i.locked).map((i) => ({ label: i.label, href: i.href })),
+    ...(levels.billing !== "none" ? [{ label: "Billing: new encounter", href: "/billing/new", hint: "New" }] : []),
+    ...(levels.schedule !== "none" ? [{ label: "Schedule: week", href: "/schedule?view=week" }, { label: "Schedule: month", href: "/schedule?view=month" }] : []),
+    { label: "Feedback", href: "/feedback" },
+    ...(isAdmin ? [{ label: "Administration", href: "/admin" }] : []),
+    { label: "Settings", href: "/settings" },
   ];
 
   const [order, setOrder] = useState<string[]>([]);
@@ -229,6 +240,7 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
       <div className="content-wrap">
         <header className="topbar">
           <div className="crumbs">Workspace <span>/</span> <b>{crumb(path)}</b></div>
+          <TopTools commands={commands} />
           <span className={`env-pill ${staging ? "staging" : ""}`}>{staging ? "STAGING · TEST ONLY" : "PRODUCTION"}</span>
         </header>
         <div className="content">

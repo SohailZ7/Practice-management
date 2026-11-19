@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { DisplayPrefs } from "@/components/DisplayPrefs";
 import { PageHead } from "@/components/PageHead";
 import { normalizeTheme } from "@/lib/theme";
 import { Banner } from "@/components/Banner";
@@ -60,6 +61,7 @@ export default async function SettingsPage({
           Save
         </button>
       </form>
+      <DisplayPrefs />
       <div className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>Mac Desktop App</h2>
         <p className="muted small">

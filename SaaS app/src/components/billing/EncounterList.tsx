@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { listEncounters } from "@/app/billing/actions";
 import type { EncounterFilters, EncounterRow } from "@/lib/billing/types";
+import { Phi } from "@/components/Phi";
+import { initialsFor } from "@/lib/prefs";
 import { RowActions } from "./RowActions";
 
 type Opt = { id: string; name: string };
@@ -144,9 +146,9 @@ export function EncounterList({
               <tr key={r.id} style={r.deleted ? { opacity: 0.6 } : undefined}>
                 <td>
                   <span className="pat-cell">
-                    <span className="avatar sm" aria-hidden="true">{r.patientName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("")}</span>
+                    <span className="avatar sm" aria-hidden="true">{initialsFor(r.patientName)}</span>
                     <span>
-                      <Link href={`/billing/patients/${r.patientId}`}><strong>{r.patientName}</strong></Link>
+                      <Link href={`/billing/patients/${r.patientId}`}><strong><Phi name={r.patientName} /></strong></Link>
                       <span className="sub">{r.mrn ?? "No MRN yet"}</span>
                     </span>
                   </span>
