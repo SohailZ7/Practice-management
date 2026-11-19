@@ -92,7 +92,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
             </details>
           )}
           {moves(i).length > 0 ? (
-            <form action={moveFeedback} className="fb-actions">
+            <form action={moveFeedback} className="fb-actions" key={`${i.id}:${i.status}:${i.triage ?? ""}:${(events[i.id] ?? []).length}:${(comments[i.id] ?? []).length}`}>
               <input type="hidden" name="id" value={i.id} />
               <textarea name="comment" rows={2} placeholder="Comment (required for More info needed, and when sending back to Building)" maxLength={2000} aria-label="Comment" />
               {actor.isAdmin && (
