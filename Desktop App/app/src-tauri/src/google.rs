@@ -206,7 +206,7 @@ pub fn check_api_path(path: &str) -> Result<(), String> {
 /// The HTTP methods the app may send. PUT is how a recording is uploaded to the inbox by its id (idempotent); leaving it
 /// out made every new upload fail inside the app (1.0.23 to 1.0.26), so a test now checks each method the web code uses.
 pub fn check_method(method: &str) -> Result<(), String> {
-    if matches!(method, "GET" | "POST" | "PUT" | "PATCH" | "DELETE") { Ok(()) } else { Err(format!("The app tried to use an HTTP method it does not allow ({method}).")) }
+    if matches!(method, "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE") { Ok(()) } else { Err(format!("The app tried to use an HTTP method it does not allow ({method}).")) }
 }
 
 /// One call to the practice app's desktop API, made here instead of in the webview: the webview is a different origin
@@ -368,9 +368,83 @@ fn hostname() -> String {
 
 #[cfg(test)]
 mod tests {
+    /// A real HTTP server on this Mac: records what the real `api_request` put on the wire, answers 200 with an echo.
+    fn serve(requests: usize) -> (u16, std::thread::JoinHandle<Vec<(String, String, String, usize, String)>>) {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let h = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for _ in 0..requests {
+                let (mut c, _) = l.accept().unwrap();
+                let mut buf = Vec::new(); let mut chunk = [0u8; 65536];
+                let (head_end, len) = loop {
+                    let n = c.read(&mut chunk).unwrap(); buf.extend_from_slice(&chunk[..n]);
+                    if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&buf[..p]).to_lowercase();
+                        let len = head.lines().find_map(|l| l.strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                        break (p + 4, len);
+                    }
+                    assert!(n > 0, "connection closed early");
+                };
+                while buf.len() < head_end + len { let n = c.read(&mut chunk).unwrap(); assert!(n > 0); buf.extend_from_slice(&chunk[..n]); }
+                let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
+                let first = head.lines().next().unwrap().to_string();
+                let mut parts = first.split(' ');
+                let (m, path) = (parts.next().unwrap().to_string(), parts.next().unwrap().to_string());
+                let auth = head.lines().find(|l| l.to_lowercase().starts_with("authorization:")).unwrap_or("").to_string();
+                let body = String::from_utf8_lossy(&buf[head_end..head_end + len]).to_string();
+                let reply = format!("{{\"echo\":{}}}", body.len());
+                let resp = if m == "HEAD" { "HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string() }
+                    else { format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}", reply.len(), reply) };
+                c.write_all(resp.as_bytes()).unwrap();
+                seen.push((m, path, auth, body.len(), body));
+            }
+            seen
+        });
+        (port, h)
+    }
+
+    #[test]
+    fn end_to_end_every_method_really_reaches_a_server_through_the_real_rust_layer() {
+        let methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
+        let (port, h) = serve(methods.len());
+        let base = format!("http://127.0.0.1:{port}");
+        for m in methods {
+            let body = if matches!(m, "GET" | "HEAD" | "DELETE") { None } else { Some("{\"x\":1}") };
+            let (status, _) = api_request(&base, m, "/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555", Some("tok"), body)
+                .unwrap_or_else(|e| panic!("{m} never left the app: {e}"));
+            assert_eq!(status, 200, "{m}");
+        }
+        let seen = h.join().unwrap();
+        for (i, m) in methods.iter().enumerate() {
+            assert_eq!(seen[i].0, *m);
+            assert_eq!(seen[i].1, "/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555");
+            assert!(seen[i].2.to_lowercase().contains("bearer tok"), "{m} carries the sign-in");
+        }
+    }
+
+    #[test]
+    fn end_to_end_a_large_transcript_upload_arrives_whole_by_put() {
+        let big = format!("{{\"seq\":1000000,\"final\":true,\"text\":\"{}\"}}", "word ".repeat(60_000)); // about 300 KB
+        let (port, h) = serve(1);
+        let (status, reply) = api_request(&format!("http://127.0.0.1:{port}"), "PUT", "/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555", Some("t"), Some(&big)).unwrap();
+        assert_eq!(status, 200);
+        assert!(reply.contains(&big.len().to_string()));
+        let seen = h.join().unwrap();
+        assert_eq!(seen[0].4, big, "byte for byte");
+    }
+
+    #[test]
+    fn end_to_end_an_unreachable_server_reports_a_network_cause_not_a_rule_failure() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap(); let port = l.local_addr().unwrap().port(); drop(l);
+        let e = api_request(&format!("http://127.0.0.1:{port}"), "PUT", "/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555", Some("t"), Some("{}")).unwrap_err();
+        assert!(e.starts_with("Could not reach the practice app ("), "{e}");
+    }
+
     #[test]
     fn every_method_the_app_uses_is_allowed_including_put_for_the_inbox() {
-        for m in ["GET", "POST", "PUT", "PATCH", "DELETE"] { assert!(check_method(m).is_ok(), "{m}"); }
+        for m in ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] { assert!(check_method(m).is_ok(), "{m}"); }
         for m in ["TRACE", "CONNECT", "put", ""] { assert!(check_method(m).is_err(), "{m}"); }
         assert!(check_api_path("/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555").is_ok());
         assert!(check_api_path("/api/desktop/v1/notes/inbox/11111111-2222-4333-8444-555555555555/link").is_ok());
