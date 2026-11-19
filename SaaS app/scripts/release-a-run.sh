@@ -42,13 +42,13 @@ envsetup() { local keep="$1" rm="" k; for k in "${ALLCONF[@]}"; do case ",$keep,
 runstep() {
   local name="$1" args="$2" keep="$3"; shift 3
   envsetup "$keep"
-  local secrets=("${JOBSECRET[@]}"); [ $# -gt 0 ] && secrets=("$@")
-  local upd=(gcloud run jobs update $JOB --project $P --region $R --image "$IMG" "--args=^@^tsx@scripts/$args" --max-retries 0 --quiet "${ENVFLAGS[@]}" "${secrets[@]}")
+  local secrets=(); [ ${#JOBSECRET[@]} -gt 0 ] && secrets=("${JOBSECRET[@]}"); [ $# -gt 0 ] && secrets=("$@")
+  local upd=(gcloud run jobs update $JOB --project $P --region $R --image "$IMG" "--args=^@^tsx@scripts/$args" --max-retries 0 --quiet "${ENVFLAGS[@]}" ${secrets[@]+"${secrets[@]}"})
   local exe=(gcloud run jobs execute $JOB --project $P --region $R --wait)
   if [ $PRINT = 1 ]; then say "[$name] ${upd[*]}"; say "[$name] ${exe[*]}"; return 0; fi
   "${upd[@]}" >/dev/null 2>&1 || { say "[$name] could not set up the job"; return 1; }
   local out; out=$("${exe[@]}" 2>&1); local rc=$?
-  local ex; ex=$(echo "$out" | grep -o 'Execution \[[^]]*\]' | head -1 | sed 's/Execution \[//;s/\]//')
+  local ex; ex=$(echo "$out" | grep -o 'executions describe [A-Za-z0-9_-]*' | head -1 | sed 's/executions describe //'); [ -n "$ex" ] || ex=$(echo "$out" | grep -o 'Execution \[[^]]*\]' | head -1 | sed 's/Execution \[//;s/\]//')
   local logs="" i
   for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
     logs=$(gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB\" AND labels.\"run.googleapis.com/execution_name\"=\"$ex\" AND (textPayload:\"GATE\" OR textPayload:\"_COUNTS\" OR textPayload:\"FINGERPRINT\" OR textPayload:\"APPLIED\" OR textPayload:\"SNAPSHOT\" OR textPayload:\"FAILED\" OR textPayload:\"REFUSED\" OR textPayload:\"unify failed\" OR textPayload:\"COPYBACK\" OR textPayload:\"ROLLBACK\" OR textPayload:\"RECORDING\" OR textPayload:\"BEFORE\")" --project $P --freshness=30m --order=asc --format='value(textPayload)' 2>/dev/null)
@@ -61,7 +61,7 @@ runstep() {
   return 0
 }
 # Always leave the job without a confirm phrase or the scratch secret, whatever happened.
-cleanup() { [ $PRINT = 1 ] && return; gcloud run jobs update $JOB --project $P --region $R --remove-env-vars PROD_CONFIRM,SCRATCH_CONFIRM,BACKUP_ID "${JOBSECRET[@]}" --quiet >/dev/null 2>&1; }
+cleanup() { [ $PRINT = 1 ] && return; gcloud run jobs update $JOB --project $P --region $R --remove-env-vars PROD_CONFIRM,SCRATCH_CONFIRM,BACKUP_ID ${JOBSECRET[@]+"${JOBSECRET[@]}"} --quiet >/dev/null 2>&1; }
 trap cleanup EXIT
 LAST_LOGS=""
 fieldof() { echo "$LAST_LOGS" | grep "^$1 " | head -1 | cut -d' ' -f2-; }
@@ -79,7 +79,9 @@ APPENV=APP_ENV=$ENVN
 [ "$ENVN" = production ] && CONF="PROD_CONFIRM=WRITE-TO-PRODUCTION-$HOST" || CONF="STAGING=1"
 
 # ---- 1. recording gate ---------------------------------------------------------------------------------------------
-runstep recording "unify-recording-check.ts" "$APPENV" || stop "GATE recording: FAIL"
+# Production is always 15 minutes. Staging may shorten it (RECORDING_QUIET_MINUTES) because rehearsals seed fake uploads and a synthetic check runs.
+if [ "$ENVN" = staging ] && [ -n "${RECORDING_QUIET_MINUTES:-}" ]; then RECARGS="unify-recording-check.ts@--minutes@$RECORDING_QUIET_MINUTES"; else RECARGS="unify-recording-check.ts"; fi
+runstep recording "$RECARGS" "$APPENV" || stop "GATE recording: FAIL"
 
 # ---- 2. backup gate: counts on production vs the restored scratch copy ----------------------------------------------
 runstep prod-counts "unify-dryrun.ts" "$APPENV" || stop "could not read production counts"

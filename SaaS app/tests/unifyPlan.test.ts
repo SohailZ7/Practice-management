@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { planBackfill, statusFromFlags, timeColumns, type EntryRow, type VisitRow } from "@/lib/unify/plan";
 import { rehearsalVerdict, scratchConfirmPhrase, snapName, snapshotStamp } from "@/lib/unify/guards";
 import { allGreen, backupGate, postRunGates } from "@/lib/unify/gates";
-import { gateSchemaSql } from "@/lib/schemaGate";
+import { gateSchemaSql, withoutSnapshotDrops, splitDiffSql } from "@/lib/schemaGate";
 
 const d = (n: number) => new Date(2026, 10, n);
 const entry = (o: Partial<EntryRow> & { id: string }): EntryRow => ({ date: "2026-11-10", section: "PSYCH_EVAL", timeLabel: "2:00 PM", trackName: "", typeName: "", providerId: null, providerName: "", absent: false, canceled: false, completed: false, missed: false, patientId: null, visitId: null, createdAt: d(1), ...o });
@@ -136,5 +136,26 @@ ALTER TABLE "Visit" ADD CONSTRAINT "Visit_providerId_fkey" FOREIGN KEY ("provide
   it("the app still reads ScheduleEntry for the schedule (Release A switches no reader)", () => {
     expect(readFileSync("src/app/schedule/page.tsx", "utf8")).toContain("db.scheduleEntry.findMany");
     expect(readFileSync("src/app/api/desktop/v1/schedule/route.ts", "utf8")).toContain("db.scheduleEntry.findMany");
+  });
+});
+
+describe("snapshot tables never block or suffer a schema step", () => {
+  const add = 'ALTER TABLE "Visit" ADD COLUMN "x" TEXT;';
+  it("drops of the exact snapshot tables are removed from the diff, nothing else is", () => {
+    const sql = `-- DropTable\nDROP TABLE "_snap_20261119_visit";\n\n-- DropTable\nDROP TABLE "_snap_20261119_scheduleentry";\n\n${add}\n\nDROP TABLE "_snap_20261119_inbox";\n\nDROP TABLE "_snap_20261119_meta";`;
+    expect(splitDiffSql(withoutSnapshotDrops(sql))).toEqual([add.slice(0, -1)]);
+    expect(gateSchemaSql(withoutSnapshotDrops(sql))).toEqual([]);
+  });
+  it("a diff with only snapshot drops is empty", () => {
+    expect(splitDiffSql(withoutSnapshotDrops('DROP TABLE "_snap_20261119_visit";'))).toEqual([]);
+  });
+  it("other drops still fail the gate (a real table, or a look-alike name)", () => {
+    for (const bad of ['DROP TABLE "Visit";', 'DROP TABLE "_snap_visit";', 'DROP TABLE "_snap_20261119_other";', 'DROP TABLE "_snap_20261119_visit_x";', 'DROP TABLE "x_snap_20261119_visit";']) {
+      expect(gateSchemaSql(withoutSnapshotDrops(bad)).length).toBeGreaterThan(0);
+    }
+  });
+  it("schema-apply and the rehearsal both use it", () => {
+    expect(readFileSync("scripts/schema-apply.ts", "utf8")).toContain("withoutSnapshotDrops(raw)");
+    expect(readFileSync("scripts/unify-rehearse.ts", "utf8")).toContain("withoutSnapshotDrops(");
   });
 });

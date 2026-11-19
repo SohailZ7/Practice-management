@@ -8,6 +8,18 @@ export type Violation = { statement: string; rule: string };
 export const splitDiffSql = (sql: string): string[] =>
   sql.split("\n").filter((l) => !/^\s*--/.test(l)).join("\n").split(/;\s*(?:\n|$)/).map((x) => x.trim()).filter(Boolean);
 
+/**
+ * The unification snapshot tables (_snap_YYYYMMDD_visit|scheduleentry|inbox|meta, kept 7+ days on purpose) are not in
+ * schema.prisma, so `prisma migrate diff` proposes to DROP them. Those exact statements, and only those, are removed from
+ * the diff BEFORE the gate and the apply: a snapshot is never dropped by a schema step, and it must not block one either.
+ */
+export const SNAPSHOT_DROP = /^DROP TABLE (?:IF EXISTS )?"?(?:public"?\.)?"?_snap_20\d{6}_(?:visit|scheduleentry|inbox|meta)"?(?: CASCADE)?$/i;
+export function withoutSnapshotDrops(sql: string): string {
+  const stmts = splitDiffSql(sql);
+  const kept = stmts.filter((s) => !SNAPSHOT_DROP.test(s.replace(/\s+/g, " ").trim()));
+  return kept.length === stmts.length ? sql : kept.map((x) => `${x};`).join("\n\n");
+}
+
 const strip = (s: string) => s.replace(/--[^\n]*/g, "").replace(/\s+/g, " ").trim();
 const tableOf = (s: string): string => /^ALTER TABLE (?:ONLY )?(?:IF EXISTS )?"?(?:public"?\.)?"?([A-Za-z0-9_]+)"?/i.exec(s)?.[1] ?? "";
 

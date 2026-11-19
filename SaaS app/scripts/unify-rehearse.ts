@@ -3,7 +3,7 @@
 //   SCRATCH_CONFIRM=SCRATCH-COPY-<db host> DATABASE_URL=<scratch> npx tsx scripts/unify-rehearse.ts --scratch-copy [--with-rollback]
 import { execFileSync } from "node:child_process";
 import { rehearsalVerdict } from "../src/lib/unify/guards";
-import { gateSchemaSql, splitDiffSql } from "../src/lib/schemaGate";
+import { gateSchemaSql, splitDiffSql, withoutSnapshotDrops } from "../src/lib/schemaGate";
 const v = rehearsalVerdict(process.env, process.argv.slice(2));
 if (!v.ok) { console.error(`REFUSED: ${v.reason}`); process.exit(1); }
 import { has, run } from "./unify-common";
@@ -16,7 +16,7 @@ run(async () => {
   try {
     const hasCols = Number((await db.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM information_schema.columns WHERE table_name = 'Visit' AND column_name = 'backfilledAt'`)[0].n) > 0;
     if (!hasCols) {
-      const sql = execFileSync("npx", ["prisma", "migrate", "diff", "--from-url", process.env.DATABASE_URL as string, "--to-schema-datamodel", "prisma/schema.prisma", "--script"], { encoding: "utf8" });
+      const sql = withoutSnapshotDrops(execFileSync("npx", ["prisma", "migrate", "diff", "--from-url", process.env.DATABASE_URL as string, "--to-schema-datamodel", "prisma/schema.prisma", "--script"], { encoding: "utf8" }));
       const violations = gateSchemaSql(sql);
       if (violations.length) { console.log(`GATE schema: FAIL (${violations.length} non-additive statement(s))`); process.exit(1); }
       const stmts = splitDiffSql(sql);

@@ -37,6 +37,8 @@ Add `--print-only` first to read every command. Do not set `SOHAIL_APPROVAL_TYPE
 Gates, in the order the script runs them (any FAIL stops the run):
 1. code: live revision contains Release A (git ancestor check). 2. recording: quiet for 15 min (recordings paused). 3. backup: production counts equal the restored scratch copy (patients, visits, visits with transcript, documents, inbox). 4. rehearsal: full Release A on the scratch copy, zero change to transcripts/ScheduleEntry/Patient/VisitDocument/RecordingInbox/Encounter and identical fingerprint, idempotent second run, rollback restores the start state. 5. snapshot taken. 6. schema (no-op if the promote applied it; additive gate). 7. dry run, then backfill with `--expect-inserts`. 8. post-run: counts, fingerprint, snapshot diff (one copy-back of differing rows allowed; a second failure or a failed copy-back = restore from the verified backup is Sohail's morning decision).
 
+Snapshot tables are not in schema.prisma, so `prisma migrate diff` wants to drop them; `schema-apply.ts` (and the rehearsal) remove exactly `DROP TABLE "_snap_YYYYMMDD_{visit,scheduleentry,inbox,meta}"` from the diff before the gate and the apply, and nothing else. A schema step therefore never drops a snapshot and is never blocked by one. This fix must be in the image that runs the schema step (it ships with Release A).
+
 ## Expected after a clean run
 Visit grows by exactly `toInsert`; every other table count equal; `visitWithTranscript` equal; fingerprint equal; ScheduleEntry snapshot diff 0/0/0; Visit snapshot diff changed=0, missing=0, added=toInsert.
 

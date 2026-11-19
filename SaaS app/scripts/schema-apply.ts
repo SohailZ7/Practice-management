@@ -6,7 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { guard } from "./guard";
-import { gateSchemaSql, splitDiffSql } from "../src/lib/schemaGate";
+import { gateSchemaSql, splitDiffSql, withoutSnapshotDrops } from "../src/lib/schemaGate";
 import { describeTarget } from "../src/lib/envGuard";
 
 const apply = process.argv.includes("--apply");
@@ -17,8 +17,9 @@ async function main() {
   if (apply && t.kind === "production" && !/^[0-9A-Za-z_-]{6,}$/.test(process.env.BACKUP_ID ?? "")) {
     throw new Error("BACKUP_ID is required for a production schema change: take an on-demand Cloud SQL backup first and pass its id");
   }
-  const sql = execFileSync("npx", ["prisma", "migrate", "diff", "--from-url", process.env.DATABASE_URL as string, "--to-schema-datamodel", "prisma/schema.prisma", "--script"], { encoding: "utf8" });
-  if (/^-- This is an empty migration/m.test(sql) || !sql.trim()) {
+  const raw = execFileSync("npx", ["prisma", "migrate", "diff", "--from-url", process.env.DATABASE_URL as string, "--to-schema-datamodel", "prisma/schema.prisma", "--script"], { encoding: "utf8" });
+  const sql = withoutSnapshotDrops(raw); // snapshot tables are kept on purpose and never dropped here
+  if (splitDiffSql(sql).length === 0 || /^-- This is an empty migration/m.test(sql) || !sql.trim()) {
     console.log("GATE: PASS (no schema changes)");
     return;
   }
