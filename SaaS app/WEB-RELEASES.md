@@ -37,3 +37,4 @@ Web 1.34 | Feedback states simplified: New, Triaged (Accepted / Rejected / More 
 Web 1.35 | Recording-consent gate: a window with one checkbox (Patient and everyone present gave consent) before Generate; saved per visit (who, when, wording version, new RecordingConsent table); Visit details shows it; Desktop inbox and transcript uploads and POST /visits/:id/consent accept an optional consent object | PENDING (committed, not pushed or deployed)
 Web 1.36 | See full names switch on the web (Settings, off by default, same as Desktop; shared PatientName component for every screen); Tasks list compact (repeat icon replaces the Recurring tasks pill, tighter cards) | PENDING
 Web 1.37 | (no user-facing change; feedback API keeps hiding the submitter by design) | PENDING
+Web 1.38 | Appointment unification Release A: additive Visit columns, backfill/fingerprint/snapshot/rehearsal scripts and runbook (no visible change) | pending
