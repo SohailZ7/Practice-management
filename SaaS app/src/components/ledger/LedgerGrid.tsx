@@ -6,6 +6,7 @@ import { addDays } from "@/lib/dates";
 import { editableMoney, formatMoney, parseMoney } from "@/lib/ledger/money";
 import { ledgerTotals } from "@/lib/ledger/validate";
 import type { LedgerDTO, LedgerFilters, LedgerPatch, Opt } from "@/lib/ledger/types";
+import { askConfirm } from "@/lib/confirm";
 
 type Row = LedgerDTO & { key: string; draft: boolean };
 
@@ -107,7 +108,7 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
   }
 
   async function remove(row: Row) {
-    if (!row.draft && !window.confirm("Delete this ledger entry?")) return;
+    if (!row.draft && !(await askConfirm("Delete this ledger entry?", { danger: true, confirmLabel: "Delete" }))) return;
     setRows((rs) => rs.filter((r) => r.key !== row.key));
     if (row.draft) return;
     try {

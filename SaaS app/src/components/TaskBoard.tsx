@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { dueLabel, formatShort } from "@/lib/dates";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
+import { TaskColumns, TaskInsights, type Workload } from "./TaskInsights";
 import { TaskNotesDialog } from "./TaskNotesDialog";
 import { PhiConfirm } from "./PhiConfirm";
 import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
@@ -38,6 +39,7 @@ import {
   reorderTasks,
   updateTask,
 } from "@/app/tasks/actions";
+import { askConfirm } from "@/lib/confirm";
 
 type Opt = { id: string; name: string };
 
@@ -55,6 +57,10 @@ type Props = {
   canReorder: boolean;
   /** Show the "Sync from Todo App" button (Admin, on their own list). */
   sync?: { category: string; lastSyncedAt: string | null };
+  /** Open tasks per person the viewer may see (side panel). */
+  workload?: Workload[];
+  /** Practice time zone, to tell what was finished "today". */
+  tz?: string;
 };
 
 const PAST = "past-due";
@@ -63,7 +69,7 @@ const BACKLOG = "backlog";
 const DONE = "completed";
 const EXPIRED = "expired";
 
-export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, canUnassign = true, boardAssigneeId, today, canReorder, sync }: Props) {
+export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, canUnassign = true, boardAssigneeId, today, canReorder, sync, workload = [], tz }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
@@ -71,6 +77,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set([DONE, EXPIRED]));
   const [tab, setTab] = useState<"todos" | "analytics">("todos");
   const [showCategories, setShowCategories] = useState(false);
+  const [view, setView] = useState<"list" | "board">("list");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -184,6 +191,12 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
             Analytics
           </button>
         </div>
+        {tab === "todos" && (
+          <div className="tab-switcher" role="group" aria-label="Layout">
+            <button type="button" aria-pressed={view === "list"} className={`tab-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")}>List</button>
+            <button type="button" aria-pressed={view === "board"} className={`tab-btn ${view === "board" ? "active" : ""}`} onClick={() => setView("board")}>Board</button>
+          </div>
+        )}
         {sync && <TodoSyncButton category={sync.category} lastSyncedAt={sync.lastSyncedAt} />}
         {canEdit && (
           <button
@@ -253,7 +266,12 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
       {tab === "analytics" ? (
         <TaskAnalytics tasks={tasks} categories={categories} />
       ) : (
-        <>
+        <div className="todo-grid">
+          <div className="todo-main">
+            {view === "board" ? (
+              <TaskColumns tasks={tasks} categories={categories} today={today} canEdit={canEdit} onDone={(id) => void patchTask(id, { completed: true })} />
+            ) : (
+              <>
           <Section id={PAST} name="Past due" urgent tasks={pastDue} emptyText="Nothing past due." {...sectionProps} />
           <Section
             id={TODAY}
@@ -273,7 +291,11 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
           {expired.length > 0 && (
             <Section id={EXPIRED} name="Expired" muted sortable={false} tasks={expired} {...sectionProps} />
           )}
-        </>
+              </>
+            )}
+          </div>
+          <TaskInsights tasks={tasks} today={today} tz={tz} workload={workload} />
+        </div>
       )}
     </div>
   );
@@ -727,8 +749,8 @@ function CategoryManager({
             />
             <button
               className="danger"
-              onClick={() => {
-                if (window.confirm(`Delete category "${c.name}"? Its tasks move to "No category".`)) onDelete(c.id);
+              onClick={async () => {
+                if (await askConfirm(`Delete category "${c.name}"? Its tasks move to "No category".`, { danger: true, confirmLabel: "Delete" })) onDelete(c.id);
               }}
             >
               Delete

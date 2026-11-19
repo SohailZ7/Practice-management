@@ -15,6 +15,7 @@ import { VisitsTable } from "./VisitsTable";
 import { PromoteDialog } from "./PromoteDialog";
 import { normalizeTyped, formatTimeText, TIME_PRESETS } from "@/lib/notes/scheduleTime";
 import Link from "next/link";
+import { askConfirm } from "@/lib/confirm";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -87,10 +88,10 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
           <button
             className="secondary"
             disabled={pending}
-            onClick={() => {
+            onClick={async () => {
               const withData = visits.filter((v) => selected.includes(v.id) && (v.hasTranscript || v.documents.length > 0)).length;
               const extra = withData ? ` The transcripts and generated documents of those visits are deleted too (${withData} have some).` : "";
-              if (!window.confirm(`Delete ${selected.length} visit${selected.length === 1 ? "" : "s"}?${extra} This cannot be undone.`)) return;
+              if (!(await askConfirm(`Delete ${selected.length} visit${selected.length === 1 ? "" : "s"}?${extra} This cannot be undone.`, { danger: true, confirmLabel: "Delete" }))) return;
               start(async () => {
                 const r = await deleteVisitsAction(selected);
                 setNote(r.ok ? `Deleted ${r.deleted} visit${r.deleted === 1 ? "" : "s"}.` : r.error);
@@ -142,9 +143,9 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
             if (!r.ok) setNote(r.error);
             router.refresh();
           }) : undefined}
-          onDelete={(v) => {
+          onDelete={async (v) => {
             const extra = v.documents.length || v.hasTranscript ? " Its transcript and documents are deleted too." : "";
-            if (!window.confirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`)) return;
+            if (!(await askConfirm(`Delete the visit for ${v.initials}?${extra} This cannot be undone.`, { danger: true, confirmLabel: "Delete" }))) return;
             start(async () => {
               const r = await deleteVisitAction(v.id);
               setNote(r.ok ? "Visit deleted." : r.error);

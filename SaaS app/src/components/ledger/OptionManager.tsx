@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addLedgerOption, deleteLedgerOption, renameLedgerOption } from "@/app/ledger/actions";
 import type { OptionKind, Opt } from "@/lib/ledger/types";
+import { askConfirm } from "@/lib/confirm";
 
 export function OptionManager({ kind, title, hint, options }: { kind: OptionKind; title: string; hint: string; options: Opt[] }) {
   const router = useRouter();
@@ -39,8 +40,8 @@ export function OptionManager({ kind, title, hint, options }: { kind: OptionKind
           />
           <button
             className="danger"
-            onClick={() => {
-              if (window.confirm(`Remove "${o.name}"? Existing entries keep their amounts but lose this label.`)) {
+            onClick={async () => {
+              if (await askConfirm(`Remove "${o.name}"? Existing entries keep their amounts but lose this label.`, { danger: true, confirmLabel: "Remove" })) {
                 run(() => deleteLedgerOption(kind, o.id));
               }
             }}

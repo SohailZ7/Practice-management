@@ -5,6 +5,7 @@ import { formatShort } from "@/lib/dates";
 import { totals, type EntryDTO, type EntryPatch, type Section } from "@/lib/scheduleTypes";
 import { createEntry, removeEntry, updateEntry } from "@/app/schedule/actions";
 import { PatientLink } from "@/components/PatientLink";
+import { askConfirm } from "@/lib/confirm";
 
 type Opt = { id: string; name: string };
 type Track = { id: string; name: string; startTime: string; endTime: string };
@@ -113,7 +114,7 @@ export function ScheduleGrid({ entries, days, providers, tracks, types, canEdit,
   }
 
   async function remove(row: Row) {
-    if (!row.draft && !window.confirm(`Delete the entry for "${row.clientInfo}"?`)) return;
+    if (!row.draft && !(await askConfirm(`Delete the entry for "${row.clientInfo}"?`, { danger: true, confirmLabel: "Delete" }))) return;
     setRows((rs) => rs.filter((r) => r.key !== row.key));
     if (row.draft) return;
     try {

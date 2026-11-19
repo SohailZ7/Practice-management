@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getDocument, saveDocument } from "@/app/notes/actions";
 import { Modal } from "../Modal";
+import { askConfirm } from "@/lib/confirm";
 
 /**
  * The document pop-up (change request 17). It opens showing the document, the provider edits it, and closing asks
@@ -51,7 +52,7 @@ export function DocumentEditor({ documentId, label, canEdit, onClose }: {
 
   async function close() {
     if (!dirty) return onClose();
-    const answer = window.confirm("Save your changes to this document?");
+    const answer = await askConfirm("Save your changes to this document?", { confirmLabel: "Save", cancelLabel: "Discard" });
     if (answer) {
       const ok = await save();
       if (!ok) return; // keep the pop-up open so the edit is not lost

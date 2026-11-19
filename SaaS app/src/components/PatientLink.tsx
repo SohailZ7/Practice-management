@@ -10,6 +10,7 @@ import {
   withdrawConsent,
   type PatientOption,
 } from "@/app/schedule/patient-actions";
+import { askConfirm, askFields } from "@/lib/confirm";
 
 type Props = {
   row: EntryDTO;
@@ -55,15 +56,19 @@ export function PatientLink({ row, today, showMrn, onChange, onError }: Props) {
     guard(async () => {
       if (!row.patientId) return;
       if (row.consent === "on_file") {
-        if (!window.confirm("Withdraw this patient's AI documentation consent? Recording will be turned off for them.")) return;
+        if (!(await askConfirm("Withdraw this patient's AI documentation consent? Recording will be turned off for them.", { danger: true, confirmLabel: "Withdraw" }))) return;
         const r = await withdrawConsent(row.patientId);
         if (!r.ok) throw new Error(Object.values(r.errors)[0]);
         onChange({ consent: "none" });
         return;
       }
-      const date = window.prompt("Patient signed AI documentation consent on (YYYY-MM-DD):", today);
-      if (date === null) return;
-      const note = window.prompt("Optional note (for example, signed intake form):", "") ?? "";
+      const got = await askFields("Record that the patient signed the AI documentation consent.", [
+        { name: "date", label: "Signed on (YYYY-MM-DD)", value: today },
+        { name: "note", label: "Optional note (for example, signed intake form)" },
+      ], { confirmLabel: "Save consent" });
+      if (!got) return;
+      const date = got.date;
+      const note = got.note ?? "";
       const r = await setConsent(row.patientId, { consentDate: date, note });
       if (!r.ok) throw new Error(Object.values(r.errors)[0]);
       onChange({ consent: "on_file" });

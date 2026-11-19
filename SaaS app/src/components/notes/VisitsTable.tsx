@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { VisitDrawer } from "./VisitDrawer";
 import type { VisitRow } from "@/lib/notes/queries";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
@@ -44,6 +45,8 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
   providerOptions?: string[];
   onProvider?: (v: VisitRow, name: string) => void;
 }) {
+  const [detail, setDetail] = useState<VisitRow | null>(null);
+  const shown = detail ? visits.find((v) => v.id === detail.id) ?? null : null; // follows edits to the row
   return (
     <div className="visits-wrap">
       <table className="visits">
@@ -86,8 +89,10 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                 </td>
                 <td className="v-time">{renderTime ? renderTime(v) : formatTimeText(v.apptTime, military)}</td>
                 <td className="v-text" title={`${v.appointmentType} · ${v.program}`}>
-                  <span className="v-main">{v.appointmentType || "Visit"}</span>
-                  <span className="v-sub">{v.program}</span>
+                  <button type="button" className="v-open" onClick={() => setDetail(v)} title="Open visit details">
+                    <span className="v-main">{v.appointmentType || "Visit"}</span>
+                    <span className="v-sub">{v.program}</span>
+                  </button>
                 </td>
                 {showProvider && (
                   <td className="v-text" title={v.providerName}>
@@ -136,6 +141,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                     <details className="row-menu">
                       <summary aria-label={`More actions for ${v.initials}`} title="More actions">⋯</summary>
                       <div className="row-menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
+                        <button className="menu-item" onClick={() => setDetail(v)}>Visit details</button>
                         <button className="menu-item" disabled={!v.hasTranscript} onClick={() => onTranscript(v)}>View transcript</button>
                         {canEdit && !v.trackingOnly && <button className="menu-item" onClick={() => onPasteTranscript(v)}>{v.hasTranscript ? "Replace transcript" : "Add transcript"}</button>}
                         {onPromote && <button className="menu-item" disabled={!!promoteReason?.(v) || v.trackingOnly} title={promoteReason?.(v) || "Copy this visit and its transcript to production"} onClick={() => onPromote(v)}>Promote to production{promoteReason?.(v) ? ` (${promoteReason(v)})` : ""}</button>}
@@ -149,6 +155,20 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
           })}
         </tbody>
       </table>
+      {shown && (
+        <VisitDrawer
+          visit={shown}
+          docs={docsOf(shown)}
+          time={renderTime ? renderTime(shown) : formatTimeText(shown.apptTime, military)}
+          canEdit={canEdit}
+          pending={pending}
+          onClose={() => setDetail(null)}
+          onStatus={onStatus}
+          onOpenDoc={(v, d) => { setDetail(null); onOpenDoc(v, d); }}
+          onGenerate={(v) => { setDetail(null); onGenerate(v); }}
+          onTranscript={(v) => { setDetail(null); onTranscript(v); }}
+        />
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { PhiConfirm } from "./PhiConfirm";
 import { describeRule, nextOccurrenceAfter, WEEKDAYS } from "@/lib/recurrence";
 import { formatShort } from "@/lib/dates";
 import type { RecurringDTO, RecurringPatch } from "@/lib/taskTypes";
+import { askConfirm } from "@/lib/confirm";
 
 type Opt = { id: string; name: string };
 
@@ -98,7 +99,7 @@ export function RecurringManager({
   }
 
   async function remove(row: RecurringDTO) {
-    if (!window.confirm(`Stop repeating "${row.title}"? Tasks it already created stay in the queue.`)) return;
+    if (!(await askConfirm(`Stop repeating "${row.title}"? Tasks it already created stay in the queue.`, { danger: true, confirmLabel: "Stop repeating" }))) return;
     const snapshot = rows;
     setRows((rs) => rs.filter((r) => r.id !== row.id));
     try {

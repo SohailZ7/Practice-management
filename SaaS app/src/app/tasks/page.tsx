@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
-import { todayISO } from "@/lib/dates";
+import { PRACTICE_TIMEZONE, todayISO } from "@/lib/dates";
 import { toTaskDTO } from "@/lib/taskTypes";
 import { ensureRecurringTasks } from "@/lib/recurring";
 import { canEditBoard, pickEmployee } from "@/lib/taskAccess";
@@ -36,6 +36,18 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
         include: { links: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       });
+  const grouped = noProfile
+    ? []
+    : await db.task.groupBy({
+        by: ["assigneeId"],
+        where: { completed: false, OR: [{ expiresAt: null }, { expiresAt: { gte: todayISO() } }], assigneeId: { in: employees.filter((e) => allowed.includes(e.id)).map((e) => e.id) } },
+        _count: { _all: true },
+      });
+  const openBy = new Map(grouped.map((g) => [g.assigneeId, g._count._all]));
+  const workload = employees
+    .filter((e) => allowed.includes(e.id))
+    .map((e) => ({ id: e.id, name: e.name, open: openBy.get(e.id) ?? 0 }))
+    .sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
   const viewingOther = !isAdmin && selected !== null && selected !== me?.id;
   const readOnlyOther = viewingOther && !canEdit;
   const owner = employees.find((e) => e.id === selected);
@@ -70,6 +82,8 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
             canUnassign={isAdmin}
             boardAssigneeId={selected}
             today={todayISO()}
+            tz={PRACTICE_TIMEZONE}
+            workload={workload}
             canReorder={isAdmin}
             sync={showSync ? { category: TODO_SYNC_CATEGORY, lastSyncedAt: lastSync ? lastSync.toISOString() : null } : undefined}
           />

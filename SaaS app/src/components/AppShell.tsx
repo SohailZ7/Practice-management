@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { applyOrder, readOrder, writeOrder } from "@/lib/order";
 import { Icon, type IconName } from "./Icons";
 import { IdleLogoff } from "./IdleLogoff";
+import { ConfirmHost } from "./ConfirmHost";
 import { TopTools, type Cmd } from "./TopTools";
 
 type Props = {
@@ -246,6 +247,7 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
         <div className="content">
           <div className="content-inner">{children}</div>
         </div>
+        <ConfirmHost />
       </div>
     </div>
   );

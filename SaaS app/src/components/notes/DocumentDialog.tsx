@@ -5,6 +5,7 @@ import { docsApi as defaultApi, type DocsApi, type DocumentDetail, type FieldVal
 import { completeValues, isDirty, modelOriginal, saveErrorOutcome, versionLabel } from "@/lib/notes/docUi";
 import { DocumentForm } from "./DocumentForm";
 import { Modal } from "../Modal";
+import { askConfirm } from "@/lib/confirm";
 
 /**
  * Pop-up for one generated document: the form, a version selector, Save (a new version each time), an unsaved-changes
@@ -107,7 +108,7 @@ export function DocumentDialog({ visitId, docId, title, canEdit, onClose, api = 
   }
 
   async function pick(version: number) {
-    if (dirty && !window.confirm("Switching versions discards your unsaved edits. Continue?")) return;
+    if (dirty && !(await askConfirm("Switching versions discards your unsaved edits. Continue?", { confirmLabel: "Switch" }))) return;
     setMsg(null);
     setStale(false);
     if (version === latest) { await load(); return; }

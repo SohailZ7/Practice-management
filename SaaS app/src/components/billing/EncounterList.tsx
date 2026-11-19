@@ -7,6 +7,7 @@ import type { EncounterFilters, EncounterRow } from "@/lib/billing/types";
 import { Phi } from "@/components/Phi";
 import { initialsFor } from "@/lib/prefs";
 import { RowActions } from "./RowActions";
+import { EncounterReview } from "./EncounterReview";
 
 type Opt = { id: string; name: string };
 
@@ -29,6 +30,7 @@ export function EncounterList({
   const [rows, setRows] = useState(initialRows);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [review, setReview] = useState<string | null>(null);
   const [stage, setStage] = useState<"all" | "needs" | "waiting" | "entered">("all");
 
   async function run(next = f) {
@@ -176,6 +178,7 @@ export function EncounterList({
                   )}
                 </td>
                 <td>
+                  <button type="button" className="secondary sm" onClick={() => setReview(r.id)} style={{ marginRight: ".35rem" }}>Review</button>
                   <RowActions
                     id={r.id}
                     getixEntered={r.getixEntered}
@@ -191,6 +194,9 @@ export function EncounterList({
           </tbody>
         </table>
       </div>
+      {review && rows.find((r) => r.id === review) && (
+        <EncounterReview row={rows.find((r) => r.id === review)!} isAdmin={isAdmin} onClose={() => setReview(null)} onDone={() => run()} onError={setError} />
+      )}
       <p className="muted small">Entry into GetIX stays a manual step. Showing up to 300 encounters; {shown.length} shown.</p>
     </div>
   );

@@ -22,7 +22,10 @@ export default async function EmployeesPage({
 
   return (
     <>
-      <PageHead eyebrow="The people behind the practice" title="Better together." />
+      <PageHead eyebrow="The people behind the practice" title="Better together.">
+        {canEdit && <a className="btn" href="#add-employee">Invite team member</a>}
+        {isAdmin && <Link className="btn secondary" href="/admin">Manage roles and permissions</Link>}
+      </PageHead>
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted small">
         Staff records used on schedules, task tabs and timesheets. Not everyone here can sign in.
@@ -85,7 +88,7 @@ export default async function EmployeesPage({
 
       {canEdit && (
         <>
-          <h2>Add an employee</h2>
+          <h2 id="add-employee">Add an employee</h2>
           <form action={addEmployee} className="card row">
             <input name="name" placeholder="Name" required className="grow" />
             <input name="title" placeholder="Title" className="grow" />

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { deleteEncounter, restoreEncounter, setGetix } from "@/app/billing/actions";
+import { askConfirm } from "@/lib/confirm";
 
 type Props = {
   id: string;
@@ -58,8 +59,8 @@ export function RowActions({ id, getixEntered, deleted, canChange, isAdmin, onDo
               <button
                 className="danger"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm("Delete this encounter? It is hidden, not erased, and an admin can restore it.")) {
+                onClick={async () => {
+                  if (await askConfirm("Delete this encounter? It is hidden, not erased, and an admin can restore it.", { danger: true, confirmLabel: "Delete" })) {
                     run(() => deleteEncounter(id));
                   }
                 }}
