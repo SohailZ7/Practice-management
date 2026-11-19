@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { PageHead } from "@/components/PageHead";
 import { normalizeTheme } from "@/lib/theme";
 import { Banner } from "@/components/Banner";
 import { cookies } from "next/headers";
@@ -28,7 +29,7 @@ export default async function SettingsPage({
   const fresh = cookies().get(RECORDER_TOKEN_COOKIE)?.value.split("\n");
   return (
     <>
-      <h1>Settings</h1>
+      <PageHead eyebrow="Make it yours" title="Comfort, your way." />
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <div className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>This version</h2>

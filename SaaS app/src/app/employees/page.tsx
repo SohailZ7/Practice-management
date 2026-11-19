@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHead } from "@/components/PageHead";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
@@ -21,7 +22,7 @@ export default async function EmployeesPage({
 
   return (
     <>
-      <h1>Employees</h1>
+      <PageHead eyebrow="The people behind the practice" title="Better together." />
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted small">
         Staff records used on schedules, task tabs and timesheets. Not everyone here can sign in.

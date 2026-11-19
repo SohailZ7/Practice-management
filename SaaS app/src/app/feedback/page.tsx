@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { PageHead } from "@/components/PageHead";
 import { Banner } from "@/components/Banner";
 import { listComments, listEvents, listFeedback } from "@/lib/feedback/service";
 import { nextMoves, readyToPromote, SCOPES, SCOPE_LABEL, STATUS_LABEL, STATUSES, isStatus } from "@/lib/feedback/workflow";
@@ -19,7 +20,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
   const [comments, events] = await Promise.all([listComments(items.map((i) => i.id)), listEvents(items.map((i) => i.id))]);
   return (
     <>
-      <h1>Feedback</h1>
+      <PageHead eyebrow="A workspace that grows with you" title="Good ideas start here." />
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted small">Tell us what to improve or what is broken. Type only, and never include patient information. Anyone signed in can add an item; only its author can edit it.</p>
       <form action={submitFeedback} className="card">

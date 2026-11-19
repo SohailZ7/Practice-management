@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PageHead } from "@/components/PageHead";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { ensureRecurringTasks } from "@/lib/recurring";
@@ -22,7 +23,7 @@ export default async function TasksLayout({ children }: { children: ReactNode })
   if (!isAdmin && allowed.length <= 1) {
     return (
       <>
-        <h1>My tasks</h1>
+        <PageHead eyebrow="Small steps. Meaningful progress." title="A shared sense of what's next." />
         <TaskSwitch />
         {children}
       </>
@@ -53,7 +54,7 @@ export default async function TasksLayout({ children }: { children: ReactNode })
 
   return (
     <>
-      <h1>{isAdmin ? "Tasks" : "Tasks"}</h1>
+      <PageHead eyebrow="Small steps. Meaningful progress." title="A shared sense of what's next." />
       <EmployeeTabs tabs={tabs} defaultId={me?.id ?? people[0]?.id ?? UNASSIGNED} draggable={isAdmin} />
       {children}
     </>
