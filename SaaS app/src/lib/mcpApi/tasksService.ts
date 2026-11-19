@@ -9,6 +9,7 @@ import { phiCheck } from "../phiCheck";
 import type { CurrentUser } from "../session";
 import { ApiError } from "./http";
 import { parseListQuery, parseTaskBody, toTaskOut, type ListQuery } from "./shape";
+import { taskStatus, taskStatusFields, type TaskStatus } from "../taskTypes";
 
 const UNASSIGNED = "Unassigned";
 const isAdmin = (u: CurrentUser) => u.role === "ADMIN";
@@ -46,7 +47,10 @@ export async function listTasks(user: CurrentUser, tokenId: string, sp: URLSearc
   const q: ListQuery = await wrap(async () => parseListQuery(sp));
   const scope = await loadTaskScope(user);
   const where: Record<string, unknown> = {};
-  if (q.status !== "all") where.completed = q.status === "done";
+  if (q.status === "done") where.completed = true;
+  else if (q.status !== "all") where.completed = false;
+  if (q.status === "in_progress") where.status = "in_progress";
+  if (q.status === "not_started") where.status = { not: "in_progress" };
   if (q.dueBefore) where.dueDate = { lt: q.dueBefore, not: null };
   if (!isAdmin(user)) where.assigneeId = { in: scope.viewIds };
   if (q.assigneeId) {
@@ -115,9 +119,10 @@ export async function updateTask(user: CurrentUser, tokenId: string, id: string,
     if (patch.categoryId && !(await db.category.findUnique({ where: { id: patch.categoryId } }))) throw new ApiError(400, "invalid", { message: "Category not found" });
     data.categoryId = patch.categoryId;
   }
-  if (patch.done !== undefined) {
-    data.completed = patch.done;
-    data.completedAt = patch.done ? (existing.completed ? existing.completedAt : new Date()) : null;
+  // done=true means Done and done=false means Not started (older clients); status picks any of the three.
+  if (patch.done !== undefined || patch.status !== undefined) {
+    const to: TaskStatus = patch.status ?? (patch.done ? "done" : existing.completed ? "not_started" : taskStatus(existing));
+    Object.assign(data, taskStatusFields(to, existing));
   }
   let move: { id: string | null; name: string } | null = null;
   if (patch.assigneeId !== undefined) {

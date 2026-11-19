@@ -1,6 +1,6 @@
 // Pure rules for Feedback: categories, input checks, who may edit, and the dictation clean-up prompt and parser.
 import { detectPhi, type PhiKind } from "../phiGuard";
-import { isScope, isStatus, type FeedbackScope, type FeedbackStatus } from "./workflow";
+import { isScope, normalizeState, type FeedbackScope, type FeedbackStatus, type TriageOutcome } from "./workflow";
 
 export const KINDS = ["FEEDBACK", "BUG"] as const;
 export type FeedbackKind = (typeof KINDS)[number];
@@ -56,6 +56,8 @@ export type FeedbackOut = {
   updatedAt: string;
   mine: boolean;
   status: FeedbackStatus;
+  /** Triage outcome: accepted, rejected, more_info, or null (not triaged). */
+  triage: TriageOutcome | null;
   scope: FeedbackScope | null;
   testNotes: string;
   ownerApproved: boolean;
@@ -64,7 +66,7 @@ export type FeedbackOut = {
 };
 
 export function toFeedbackOut(
-  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; status?: string; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null; shippedRelease?: number | null },
+  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; status?: string; triageOutcome?: string | null; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null; shippedRelease?: number | null },
   viewerId: string,
 ): FeedbackOut {
   return {
@@ -76,7 +78,7 @@ export function toFeedbackOut(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     mine: canEditFeedback(viewerId, row.authorId),
-    status: isStatus(row.status) ? row.status : "new",
+    ...(({ status, triage }) => ({ status, triage }))(normalizeState(row)),
     scope: isScope(row.scope) ? row.scope : null,
     testNotes: row.testNotes ?? "",
     ownerApproved: !!row.ownerApprovedAt,

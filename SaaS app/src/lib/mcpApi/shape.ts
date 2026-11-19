@@ -1,7 +1,7 @@
 // Pure input parsing and output shaping for the tasks API. No database, so it is unit-tested directly.
 import { isISODate } from "../dates";
 import { detectPhi } from "../phiGuard";
-import { MAX_NOTES } from "../taskTypes";
+import { isTaskStatus, MAX_NOTES, taskStatus, type TaskStatus } from "../taskTypes";
 
 export const PHI_WITHHELD = "[withheld: possible patient info]";
 
@@ -13,11 +13,14 @@ export type TaskOut = {
   assigneeId: string | null;
   categoryId: string | null;
   dueDate: string | null;
+  /** true when status is "done" (kept for older clients). */
   done: boolean;
+  /** not_started | in_progress | done */
+  status: TaskStatus;
   phiWithheld?: string[];
 };
 
-type Row = { id: string; title: string; notes: string; assigneeId: string | null; categoryId: string | null; dueDate: string | null; completed: boolean };
+type Row = { id: string; title: string; notes: string; assigneeId: string | null; categoryId: string | null; dueDate: string | null; completed: boolean; status?: string | null };
 
 /**
  * What leaves the app for Claude. Old tasks may predate the PHI guard, so title and notes that look like they hold an
@@ -33,6 +36,7 @@ export function toTaskOut(t: Row, opts: { withNotes: boolean; ignoreEmails?: str
     categoryId: t.categoryId,
     dueDate: t.dueDate,
     done: t.completed,
+    status: taskStatus(t),
   };
   if (findings.length) {
     out.title = PHI_WITHHELD;
@@ -43,11 +47,11 @@ export function toTaskOut(t: Row, opts: { withNotes: boolean; ignoreEmails?: str
   return out;
 }
 
-export type ListQuery = { status: "open" | "done" | "all"; assigneeId?: string; dueBefore?: string; limit: number };
+export type ListQuery = { status: "open" | "done" | "all" | "not_started" | "in_progress"; assigneeId?: string; dueBefore?: string; limit: number };
 
 export function parseListQuery(sp: URLSearchParams): ListQuery {
   const status = sp.get("status") ?? "open";
-  if (status !== "open" && status !== "done" && status !== "all") throw new Error("status must be open, done or all");
+  if (status !== "open" && status !== "done" && status !== "all" && status !== "not_started" && status !== "in_progress") throw new Error("status must be open, not_started, in_progress, done or all");
   const dueBefore = sp.get("dueBefore") ?? undefined;
   if (dueBefore && !isISODate(dueBefore)) throw new Error("dueBefore must be YYYY-MM-DD");
   const limit = Math.min(200, Math.max(1, Math.floor(Number(sp.get("limit") ?? 50)) || 50));
@@ -55,7 +59,7 @@ export function parseListQuery(sp: URLSearchParams): ListQuery {
 }
 
 export type CreateInput = { title: string; notes?: string; dueDate?: string | null; assigneeId?: string | null; categoryId?: string | null };
-export type UpdateInput = Partial<{ title: string; notes: string; dueDate: string | null; assigneeId: string | null; categoryId: string | null; done: boolean }>;
+export type UpdateInput = Partial<{ title: string; notes: string; dueDate: string | null; assigneeId: string | null; categoryId: string | null; done: boolean; status: TaskStatus }>;
 
 const isStrOrNull = (v: unknown) => v === null || typeof v === "string";
 
@@ -84,6 +88,12 @@ export function parseTaskBody(body: Record<string, unknown>, mode: "create" | "u
     if (typeof body.done !== "boolean") throw new Error("done must be true or false");
     if (mode === "create") throw new Error("done is only valid when updating");
     out.done = body.done;
+  }
+  if (body.status !== undefined) {
+    if (!isTaskStatus(body.status)) throw new Error("status must be not_started, in_progress or done");
+    if (mode === "create") throw new Error("status is only valid when updating");
+    if (out.done !== undefined && out.done !== (body.status === "done")) throw new Error("done and status disagree");
+    out.status = body.status;
   }
   return out;
 }

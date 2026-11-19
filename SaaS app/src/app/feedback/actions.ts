@@ -13,10 +13,11 @@ function body(form: FormData) {
 }
 
 const WF: Record<string, string> = {
-  only_owner_can_build_it: "Only the owner can mark an item Build it.",
+  only_owner_can_triage: "Only the owner can triage an item.",
   only_owner_can_set_scope: "Only the owner can set the scope.",
-  scope_required: "Choose a scope (Small UI change or Other) before Build it.",
-  comment_required: "Write what needs to change in the comment box.",
+  triage_required: "Choose a triage outcome: Accepted, Rejected or More info needed.",
+  scope_required: "Choose a scope (Small UI change or Other) before accepting or building.",
+  comment_required: "Write a comment first: what is needed, or what needs to change.",
   test_notes_required: "Test notes are required before On staging.",
   not_allowed: "You can't do that on this item.",
   possible_phi: "This looks like it contains patient information. Remove it and try again.",
@@ -52,9 +53,10 @@ export async function editFeedback(form: FormData) {
 export async function moveFeedback(form: FormData) {
   const user = await requireUser();
   const status = str(form, "status");
+  const triage = str(form, "triage");
   try {
     await setFeedbackWorkflow(workflowActor(user), str(form, "id"), {
-      status,
+      ...(triage ? { triage } : { status }),
       ...(str(form, "scope") ? { scope: str(form, "scope") } : {}),
       ...(str(form, "comment") ? { comment: str(form, "comment") } : {}),
     });

@@ -45,7 +45,7 @@ export async function updateFeedback(user: { id: string; email: string }, id: st
 }
 
 // ---- Workflow: status changes, test notes, comments --------------------------------------------------------------
-import { checkMove, isScope, isStatus, MAX_COMMENT, MAX_TEST_NOTES, type Actor } from "./workflow";
+import { checkMove, isScope, isStatusWord, isTriage, LEGACY_MAP, MAX_COMMENT, MAX_TEST_NOTES, normalizeState, storedWordsFor, triageStatus, type Actor, type FeedbackStatus, type TriageOutcome } from "./workflow";
 import { detectPhi } from "../phiGuard";
 
 export type WorkflowActor = Actor & { email: string; name: string };
@@ -62,11 +62,12 @@ const fail = (code: string) => new FeedbackError(code === "possible_phi" ? 422 :
 export async function setFeedbackWorkflow(
   actor: WorkflowActor,
   id: string,
-  input: { status?: unknown; scope?: unknown; testNotes?: unknown; comment?: unknown; release?: unknown },
+  input: { status?: unknown; triage?: unknown; scope?: unknown; testNotes?: unknown; comment?: unknown; release?: unknown },
 ): Promise<FeedbackOut> {
   const item = await db.feedbackItem.findUnique({ where: { id }, include: withAuthor });
   if (!item) throw new FeedbackError(404, "not_found");
-  const cur = { status: isStatus(item.status) ? item.status : ("new" as const), scope: isScope(item.scope) ? item.scope : null, testNotes: item.testNotes };
+  const state = normalizeState(item);
+  const cur = { status: state.status, triage: state.triage, scope: isScope(item.scope) ? item.scope : null, testNotes: item.testNotes };
   const data: Record<string, unknown> = {};
   const events: { field: string; from: string | null; to: string | null }[] = [];
 
@@ -98,21 +99,41 @@ export async function setFeedbackWorkflow(
     if (!actor.isAdmin && actor.kind !== "agent") throw fail("not_allowed");
     if (n !== item.shippedRelease) { data.shippedRelease = n; events.push({ field: "release", from: item.shippedRelease === null ? null : String(item.shippedRelease), to: String(n) }); }
   }
-  if (input.status !== undefined) {
-    if (!isStatus(input.status)) throw fail("bad_status");
-    const m = checkMove(actor, cur, input.status, { scope, comment, testNotes });
+  // A triage outcome (Accepted, Rejected, More info needed) is a move to Triaged or Rejected plus the outcome itself.
+  let triage: TriageOutcome | undefined;
+  let target: FeedbackStatus | undefined;
+  if (input.triage !== undefined) {
+    if (!isTriage(input.triage)) throw fail("bad_triage");
+    if (!actor.isAdmin || actor.kind !== "user") throw fail("only_owner_can_triage");
+    triage = input.triage;
+    target = triageStatus(triage);
+    if (input.status !== undefined && (!isStatusWord(input.status) || normalizeState({ status: input.status }).status !== target)) throw fail("bad_status");
+  } else if (input.status !== undefined) {
+    if (!isStatusWord(input.status)) throw fail("bad_status");
+    target = normalizeState({ status: input.status }).status;
+    // The old word "build_it" means Triaged + Accepted: keep old clients working.
+    if (input.status === "build_it") triage = LEGACY_MAP.build_it.triage ?? undefined;
+  }
+  if (target !== undefined) {
+    const m = checkMove(actor, cur, target, { scope, comment, testNotes, triage });
     if (!m.ok) throw fail(m.error);
-    data.status = input.status;
-    events.push({ field: "status", from: cur.status, to: input.status });
+    data.status = target;
+    events.push({ field: "status", from: cur.status, to: target });
+    const newTriage = triage ?? (target === "triaged" || target === "new" ? cur.triage : target === "rejected" ? "rejected" : cur.triage);
+    if (newTriage !== cur.triage || triage) {
+      data.triageOutcome = newTriage;
+      if (newTriage !== cur.triage) events.push({ field: "triage", from: cur.triage, to: newTriage });
+    }
+    const toStatus = target;
     // Moving to On staging records the release it was built in: the one given, else the release this build runs (the
     // agent calls this after deploying). Production later marks the item Shipped by comparing that number.
-    if (input.status === "on_staging" && input.release === undefined) {
+    if (toStatus === "on_staging" && input.release === undefined) {
       const n = runningReleaseNumber();
       if (n !== null) data.shippedRelease = n;
     }
-    // The owner approving (from any status) is the owner's own approval click, which "other" items need.
-    if (input.status === "approved" && actor.isAdmin && actor.kind === "user") data.ownerApprovedAt = new Date();
-    if (input.status === "needs_changes" || input.status === "build_it") data.ownerApprovedAt = null;
+    // The owner marking Tested (from any status) is the owner's own approval click, which "other" items need.
+    if (toStatus === "tested" && actor.isAdmin && actor.kind === "user") data.ownerApprovedAt = new Date();
+    if (toStatus === "building" || toStatus === "triaged") data.ownerApprovedAt = null;
   }
   if (!Object.keys(data).length && !comment) throw fail("nothing_to_change");
 
@@ -152,9 +173,11 @@ export async function listEvents(itemIds: string[]): Promise<Record<string, Even
   return out;
 }
 
+/** status may be a new word or an old one (build_it reads as Triaged); a database that still holds old rows is searched for both. */
 export async function listFeedbackByStatus(viewerId: string, status?: string, limit = 50): Promise<FeedbackOut[]> {
   await shipDueItems();
-  const rows = await db.feedbackItem.findMany({ where: isStatus(status) ? { status } : {}, orderBy: { createdAt: "asc" }, take: Math.min(100, Math.max(1, limit)), include: withAuthor });
+  const want = isStatusWord(status) ? normalizeState({ status }).status : null;
+  const rows = await db.feedbackItem.findMany({ where: want ? { status: { in: storedWordsFor(want) } } : {}, orderBy: { createdAt: "asc" }, take: Math.min(100, Math.max(1, limit)), include: withAuthor });
   return rows.map((r) => toFeedbackOut(r, viewerId));
 }
 

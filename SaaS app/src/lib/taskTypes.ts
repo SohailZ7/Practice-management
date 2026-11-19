@@ -1,5 +1,25 @@
 import type { Task, TaskLink } from "@prisma/client";
 
+/** Task states. `completed` stays the source of truth for Done; the stored `status` only separates not_started from in_progress. */
+export const TASK_STATUSES = ["not_started", "in_progress", "done"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = { not_started: "Not started", in_progress: "In progress", done: "Done" };
+export const isTaskStatus = (v: unknown): v is TaskStatus => typeof v === "string" && (TASK_STATUSES as readonly string[]).includes(v);
+
+/** The state of a stored task. Old rows (done flag only, status defaulted) map: done -> Done, open -> Not started. */
+export const taskStatus = (t: { completed: boolean; status?: string | null }): TaskStatus =>
+  t.completed ? "done" : t.status === "in_progress" ? "in_progress" : "not_started";
+
+/** The columns to write when moving to `to`. completedAt is set only on the way into Done and cleared on the way out. */
+export function taskStatusFields(
+  to: TaskStatus,
+  existing: { completed: boolean; completedAt: Date | null },
+  now: Date = new Date(),
+): { status: TaskStatus; completed: boolean; completedAt: Date | null } {
+  if (to === "done") return { status: "done", completed: true, completedAt: existing.completed ? existing.completedAt : now };
+  return { status: to, completed: false, completedAt: null };
+}
+
 export type LinkDTO = { id: string; url: string; label: string; type: string };
 
 export type TaskDTO = {
@@ -13,6 +33,7 @@ export type TaskDTO = {
   /** YYYY-MM-DD after which an unfinished task no longer applies; null = no expiration. */
   expiresAt: string | null;
   completed: boolean;
+  status: TaskStatus;
   /** Epoch milliseconds when it was completed, or null (not done, or finished before dates were tracked). */
   completedAt: number | null;
   inToday: boolean;
@@ -23,7 +44,7 @@ export type TaskDTO = {
 };
 
 export type TaskPatch = Partial<
-  Pick<TaskDTO, "title" | "notes" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "inToday">
+  Pick<TaskDTO, "title" | "notes" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "status" | "inToday">
 >;
 
 export const MAX_NOTES = 20000;
@@ -40,6 +61,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     dueDate: t.dueDate,
     expiresAt: t.expiresAt,
     completed: t.completed,
+    status: taskStatus(t),
     completedAt: t.completedAt ? t.completedAt.getTime() : null,
     inToday: t.inToday,
     sortOrder: t.sortOrder,

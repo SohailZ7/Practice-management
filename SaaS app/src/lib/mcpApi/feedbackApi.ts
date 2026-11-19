@@ -4,7 +4,7 @@ import type { WorkflowActor } from "../feedback/service";
 import type { FeedbackOut } from "../feedback/rules";
 
 export const feedbackShape = (i: FeedbackOut) => ({
-  id: i.id, kind: i.kind, title: i.title, description: i.description, status: i.status, scope: i.scope,
+  id: i.id, kind: i.kind, title: i.title, description: i.description, status: i.status, triage: i.triage, scope: i.scope,
   testNotes: i.testNotes, ownerApproved: i.ownerApproved, release: i.release, createdAt: i.createdAt, updatedAt: i.updatedAt,
 });
 
