@@ -21,3 +21,10 @@ DROP TABLE "ScheduleEntry";`;
     expect(gateSchemaSql(other.rest).length).toBeGreaterThan(0);
   });
 });
+
+describe("schema-apply with an approved drop and nothing else", () => {
+  it("does not take the 'no changes' early exit when drops are pending", async () => {
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync("scripts/schema-apply.ts", "utf8")).toContain("if (drops.length === 0 && (splitDiffSql(sql).length === 0");
+  });
+});

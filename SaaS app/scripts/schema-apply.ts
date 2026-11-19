@@ -38,7 +38,7 @@ async function main() {
   let drops: string[] = [];
   if (process.env.APPROVE_DROP_SCHEDULEENTRY === "YES-DROP-SCHEDULEENTRY") ({ rest: sql, drops } = splitApprovedDrops(sql));
   if (drops.length) console.log(`APPROVED DROP of ScheduleEntry (${drops.length} statements, run only after the preflight)`);
-  if (drops.length === 0 && splitDiffSql(sql).length === 0 || /^-- This is an empty migration/m.test(sql) || !sql.trim()) {
+  if (drops.length === 0 && (splitDiffSql(sql).length === 0 || /^-- This is an empty migration/m.test(sql) || !sql.trim())) {
     console.log("GATE: PASS (no schema changes)");
     return;
   }
