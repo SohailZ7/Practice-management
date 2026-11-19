@@ -39,6 +39,9 @@ Gates, in the order the script runs them (any FAIL stops the run):
 
 Snapshot tables are not in schema.prisma, so `prisma migrate diff` wants to drop them; `schema-apply.ts` (and the rehearsal) remove exactly `DROP TABLE "_snap_YYYYMMDD_{visit,scheduleentry,inbox,meta}"` from the diff before the gate and the apply, and nothing else. A schema step therefore never drops a snapshot and is never blocked by one. This fix must be in the image that runs the schema step (it ships with Release A).
 
+## Pause the synthetic upload check first (found on staging)
+The scheduled `synthetic-upload-check` (every 5 minutes) writes made-up RecordingInbox rows. Left running it turns the recording gate red and changes the inbox count/fingerprint mid-run, so the post-run gates correctly fail. Before the recording gate: `gcloud scheduler jobs pause synthetic-upload-check --location us-east4 --project <project>`; after the run (pass or stop): `resume`. This is a Production-agent step; it is not a recording by a person, so it is the only thing paused besides the Macs.
+
 ## Expected after a clean run
 Visit grows by exactly `toInsert`; every other table count equal; `visitWithTranscript` equal; fingerprint equal; ScheduleEntry snapshot diff 0/0/0; Visit snapshot diff changed=0, missing=0, added=toInsert.
 

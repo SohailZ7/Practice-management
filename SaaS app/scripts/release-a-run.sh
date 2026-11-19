@@ -50,9 +50,10 @@ runstep() {
   local out; out=$("${exe[@]}" 2>&1); local rc=$?
   local ex; ex=$(echo "$out" | grep -o 'executions describe [A-Za-z0-9_-]*' | head -1 | sed 's/executions describe //'); [ -n "$ex" ] || ex=$(echo "$out" | grep -o 'Execution \[[^]]*\]' | head -1 | sed 's/Execution \[//;s/\]//')
   local logs="" i
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
     logs=$(gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB\" AND labels.\"run.googleapis.com/execution_name\"=\"$ex\" AND (textPayload:\"GATE\" OR textPayload:\"_COUNTS\" OR textPayload:\"FINGERPRINT\" OR textPayload:\"APPLIED\" OR textPayload:\"SNAPSHOT\" OR textPayload:\"FAILED\" OR textPayload:\"REFUSED\" OR textPayload:\"unify failed\" OR textPayload:\"COPYBACK\" OR textPayload:\"ROLLBACK\" OR textPayload:\"RECORDING\" OR textPayload:\"BEFORE\")" --project $P --freshness=30m --order=asc --format='value(textPayload)' 2>/dev/null)
-    [ -n "$logs" ] && break; sleep 5
+    # Log ingestion lags: wait until the step's final line (a GATE verdict or an error) is present, not just the first line.
+    echo "$logs" | grep -Eq 'GATE |unify failed|REFUSED|FAILED' && break; sleep 5
   done
   echo "$logs" | cut -c1-400 | sed "s/^/  [$name] /"
   LAST_LOGS="$logs"
