@@ -1,5 +1,6 @@
 // Uploading the transcripts saved on this Mac. A queued transcript is uploaded to the environment recorded when it
 // was saved (not the one currently selected) and is deleted only after the server confirms.
+import type { ConsentEvent } from "./consent";
 import { ApiFailure, FINAL_SEQ, linkInbox, pushTranscript, putInbox, sha256Hex, SignedOutError, type Session } from "./api";
 import { isEnvironment, labelFor, urlFor } from "./environments";
 import type { Engine, QueueItem } from "./engine";
@@ -108,15 +109,15 @@ export type Delivery = { via: "inbox" | "visit"; linked: boolean };
  * (never needs the visit to exist; retrying cannot duplicate) and the server must echo the SHA-256 of what it stored.
  * Until the inbox exists on the server (404) the old per-visit upload is used for items that name a visit.
  */
-export async function sendConfirmed(s: Session, item: QueueItem, text: string): Promise<Delivery> {
+export async function sendConfirmed(s: Session, item: QueueItem, text: string, consent?: ConsentEvent | null): Promise<Delivery> {
   const id = item.recording_id;
-  if (!id) { await pushTranscript(s, item.visit_id, text); return { via: "visit", linked: true }; }
+  if (!id) { await pushTranscript(s, item.visit_id, text, consent); return { via: "visit", linked: true }; }
   const want = await sha256Hex(text);
   let reply;
   try {
-    reply = await putInbox(s, id, { seq: FINAL_SEQ, final: true, text, durationSeconds: item.duration_seconds, recordedAt: item.created_at, visitId: item.link_visit ?? null });
+    reply = await putInbox(s, id, { seq: FINAL_SEQ, final: true, text, durationSeconds: item.duration_seconds, recordedAt: item.created_at, visitId: item.link_visit ?? null, consent: consent ?? null });
   } catch (e) {
-    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text); return { via: "visit", linked: true }; }
+    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text, consent); return { via: "visit", linked: true }; }
     if (e instanceof ApiFailure && e.status === 404) throw new ApiFailure(404, "inbox_pending");
     throw e;
   }
@@ -150,7 +151,8 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
         }
         let text: string;
         try { text = await engine.queueText(item.visit_id); } catch { throw new LocalReadFailure(); }
-        delivered = await sendConfirmed(s, item, text);
+        const consent = await Promise.resolve().then(() => engine.consentFor(item.visit_id)).catch(() => null);
+        delivered = await sendConfirmed(s, item, text, consent);
       }
       let warning: string | undefined;
       if (delivered && !delivered.linked && item.recording_id) warning = "Safe on the server. Link it to a visit under Needs link.";

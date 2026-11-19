@@ -296,3 +296,4 @@ button { font-size: 12px; line-height: 1.25; padding: 9px 14px; border-radius: 7
 .row .helper { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 .small, .card p, .card h3 { overflow-wrap: anywhere; }
 .card, .content-inner, .content { min-width: 0; max-width: 100%; }
+.consent-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; margin-top: 10px; }

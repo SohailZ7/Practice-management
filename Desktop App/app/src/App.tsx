@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { addedSeparator } from "./lib/append";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { Modal } from "./Modal";
+import { buildConsentEvent, CONSENT_CANCEL_LABEL, CONSENT_CHECKBOX_LABEL, CONSENT_START_LABEL, CONSENT_TEXT, CONSENT_TITLE, type ConsentEvent } from "./lib/consent";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { RowMenu } from "./RowMenu";
 import { VISIT_STATUSES, statusTone, statusValue } from "./lib/visitStatus";
@@ -621,6 +622,9 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   const askSpeaker = (speakers: { label: string; sample: string }[]) => new Promise<string | null>((resolve) => setAsk({ speakers, resolve }));
   const [chooser, setChooser] = useState(false);
   const [askAppend, setAskAppend] = useState(false);
+  const [askConsent, setAskConsent] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const consentRef = useRef<ConsentEvent | null>(null);
   // Earlier text of this visit, held in memory while the new recording runs; `fromQueue` says where it came from.
   const earlier = useRef<{ text: string; fromQueue: boolean } | null>(null);
   const gen = useSyncExternalStore(subscribe, () => generationFor(visit.id));
@@ -649,7 +653,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
       try {
         const cp = await engine.recordingCheckpoint();
         if (cp && cp.text.trim() && recId.current) {
-          await putInbox(session, recId.current, { seq: ++seq, final: false, text: cp.text, durationSeconds: cp.seconds, recordedAt: new Date(recStart.current).toISOString(), visitId: null });
+          await putInbox(session, recId.current, { seq: ++seq, final: false, text: cp.text, durationSeconds: cp.seconds, recordedAt: new Date(recStart.current).toISOString(), visitId: null, consent: consentRef.current });
         }
       } catch { /* silent */ } finally { busyCp = false; }
     }, 30_000);
@@ -681,7 +685,23 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
     await start();
   }
 
-  async function start() {
+  /** Every recording start goes through the consent question first; nothing is captured until it is answered yes. */
+  function start() { setConsentChecked(false); setAskConsent(true); }
+
+  async function confirmConsent() {
+    if (!consentChecked) return;
+    const ev = buildConsentEvent(visit.id, visit.providerName, true);
+    setAskConsent(false);
+    setBusy(true);
+    try { await engine.recordConsent(ev); } catch {
+      setBusy(false);
+      return onState(visit.id, { phase: "failed", message: "Could not save the consent record on this Mac, so nothing was recorded. Try again." });
+    }
+    consentRef.current = ev;
+    await startNow();
+  }
+
+  async function startNow() {
     setBusy(true);
     try {
       const { warning, recording_id } = await engine.startRecording(true, { visitId: visit.id, environment: env, append: hasExisting });
@@ -829,6 +849,19 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
           <button className="record" title={!ready ? "Recording is off until the transcription model is downloaded (use Download model above)." : undefined} disabled={!ready || busy} onClick={() => (hasExisting ? setAskAppend(true) : start())}>
             Record
           </button>
+          {askConsent && (
+            <Modal title={CONSENT_TITLE} onClose={() => setAskConsent(false)} width={480}
+              footer={<>
+                <button className="secondary" onClick={() => setAskConsent(false)}>{CONSENT_CANCEL_LABEL}</button>
+                <button disabled={!consentChecked} onClick={confirmConsent} data-testid="consent-start">{CONSENT_START_LABEL}</button>
+              </>}>
+              <p style={{ marginTop: 0 }} data-testid="consent-text">{CONSENT_TEXT}</p>
+              <label className="consent-check">
+                <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} data-testid="consent-checkbox" />
+                {CONSENT_CHECKBOX_LABEL}
+              </label>
+            </Modal>
+          )}
           {askAppend && (
             <Modal title="This visit already has a transcript" onClose={() => setAskAppend(false)} width={460}
               footer={<>
