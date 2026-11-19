@@ -701,6 +701,30 @@ async fn queue_relabel(visit_id: String, mapping: std::collections::HashMap<Stri
     queue::relabel(&support_dir(), &keystore::queue_key()?, &visit_id, &mapping)
 }
 
+/// Permanent consent log: one JSON line per recording start. Kept apart from the transcript queue, never swept or shredded.
+fn consent_log(dir: &Path) -> PathBuf { dir.join("consents.jsonl") }
+
+fn consent_append(dir: &Path, event: &str) -> Result<(), String> {
+    use std::io::Write;
+    let v: serde_json::Value = serde_json::from_str(event).map_err(|_| "unreadable consent record".to_string())?;
+    if v.get("visitId").and_then(|x| x.as_str()).map_or(true, |x| x.is_empty()) { return Err("consent record has no visit".into()); }
+    let _ = fs::create_dir_all(dir);
+    let mut f = fs::OpenOptions::new().create(true).append(true).open(consent_log(dir)).map_err(|_| "could not save the consent record".to_string())?;
+    writeln!(f, "{}", serde_json::to_string(&v).unwrap_or_default()).map_err(|_| "could not save the consent record".to_string())?;
+    f.sync_all().map_err(|_| "could not save the consent record".to_string())
+}
+
+fn consent_latest(dir: &Path, visit_id: &str) -> Option<String> {
+    let text = fs::read_to_string(consent_log(dir)).ok()?;
+    text.lines().rev().find(|l| serde_json::from_str::<serde_json::Value>(l).ok().and_then(|v| v.get("visitId").and_then(|x| x.as_str().map(|s| s == visit_id))).unwrap_or(false)).map(|l| l.to_string())
+}
+
+#[tauri::command]
+async fn consent_record(event: String) -> Result<(), String> { consent_append(&support_dir(), &event) }
+
+#[tauri::command]
+async fn consent_for(visit_id: String) -> Result<Option<String>, String> { Ok(consent_latest(&support_dir(), &visit_id)) }
+
 /// Called after the server confirmed the upload: marks the folder uploaded and shreds it.
 #[tauri::command]
 async fn queue_complete(visit_id: String) -> Result<(), String> {
@@ -979,7 +1003,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status_cmd, recording_checkpoint, recording_health, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
-            queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
+            queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, consent_record, consent_for, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context
         ])
         .run(tauri::generate_context!())
@@ -989,6 +1013,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consent_log_keeps_every_event_and_finds_the_latest_per_visit() {
+        let d = std::env::temp_dir().join(format!("consent-{}", journal::new_uuid()));
+        assert!(consent_append(&d, "{\"visitId\":\"v1\",\"consentGiven\":true,\"textVersion\":\"a\"}").is_ok());
+        assert!(consent_append(&d, "{\"visitId\":\"v2\",\"consentGiven\":true,\"textVersion\":\"a\"}").is_ok());
+        assert!(consent_append(&d, "{\"visitId\":\"v1\",\"consentGiven\":true,\"textVersion\":\"b\"}").is_ok());
+        assert!(consent_latest(&d, "v1").unwrap().contains("\"b\""));
+        assert!(consent_latest(&d, "v2").unwrap().contains("\"a\""));
+        assert!(consent_latest(&d, "v3").is_none());
+        assert!(consent_append(&d, "not json").is_err());
+        assert!(consent_append(&d, "{\"consentGiven\":true}").is_err());
+        assert_eq!(fs::read_to_string(consent_log(&d)).unwrap().lines().count(), 3);
+        let _ = fs::remove_dir_all(&d);
+    }
 
     /// Each test gets its own app directory. The path comes from a process-wide environment variable, so these tests
     /// must not run at the same time as each other.

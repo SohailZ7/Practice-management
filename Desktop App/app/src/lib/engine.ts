@@ -1,5 +1,6 @@
 // The recorder's bridge to the native side (src-tauri/src/lib.rs). In a plain browser, used for working on the
 // screens, it falls back to clearly labelled fakes so nothing pretends to record or transcribe.
+import type { ConsentEvent } from "./consent";
 import { DEFAULT_ENVIRONMENT, type EnvironmentId } from "./environments";
 
 export type Settings = { environment: EnvironmentId; transcript_copy_dir?: string | null };
@@ -89,6 +90,10 @@ export interface Engine {
   queueRelabel(visitId: string, mapping: Record<string, string>): Promise<void>;
   /** Marks the folder uploaded and shreds it. Only called after the server confirmed. */
   queueComplete(visitId: string): Promise<void>;
+  /** Appends one consent event to the permanent consent log on this Mac (never deleted with the transcript queue). */
+  recordConsent(event: ConsentEvent): Promise<void>;
+  /** The latest consent event stored for a visit, or null. */
+  consentFor(visitId: string): Promise<ConsentEvent | null>;
   queueDiscard(visitId: string): Promise<void>;
   /** Writes the saved transcript to Downloads as plain text and returns the path. The queued copy is kept. */
   exportQueued(visitId: string): Promise<string>;
@@ -135,6 +140,8 @@ async function nativeEngine(): Promise<Engine> {
     queueSetText: (visitId, environment, text) => invoke<void>("queue_set_text", { visitId, environment, text }),
     queueRelabel: (visitId, mapping) => invoke<void>("queue_relabel", { visitId, mapping }),
     queueComplete: (visitId) => invoke<void>("queue_complete", { visitId }),
+    recordConsent: (event) => invoke<void>("consent_record", { event: JSON.stringify(event) }),
+    consentFor: async (visitId) => { const t = await invoke<string | null>("consent_for", { visitId }); return t ? (JSON.parse(t) as ConsentEvent) : null; },
     chooseTranscriptDir: () => invoke<string | null>("choose_transcript_dir"),
     setTranscriptCopyDir: (dir) => invoke<Settings>("set_transcript_copy_dir", { dir }),
     saveTranscriptCopy: (visitId, label) => invoke<boolean>("save_transcript_copy", { visitId, label }),
@@ -154,6 +161,7 @@ function fakeEngine(): Engine {
   let environment: EnvironmentId = DEFAULT_ENVIRONMENT;
   const tokens: Record<string, string> = qaMode() ? { localhost: "qa-token", staging: "qa-token", production: "qa-token" } : {};
   const queue = new Map<string, QueueItem>();
+  const consents = new Map<string, ConsentEvent>();
   // `?qa=1&seedqueue=1` (dev only): an old-build queue with one Production and two test-environment items, fake ids.
   if (qaMode() && new URLSearchParams(location.search).has("seedqueue")) {
     for (const [id, environment] of [["fake-prod-1", "production"], ["fake-stg-1", "staging"], ["fake-loc-1", "localhost"]] as const)
@@ -196,6 +204,8 @@ function fakeEngine(): Engine {
     queueSetText: async () => {},
     queueRelabel: async () => {},
     queueComplete: async (id) => { queue.delete(id); },
+    recordConsent: async (e) => { consents.set(e.visitId, e); },
+    consentFor: async (id) => consents.get(id) ?? null,
     queueDiscard: async (id) => { queue.delete(id); },
     exportQueued: async (id) => `~/Downloads/Unsent-transcript-${id.slice(0, 8)}.txt`,
     chooseTranscriptDir: async () => null,
