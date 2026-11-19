@@ -1,10 +1,10 @@
-// Shapes for the feedback API. Only these fields leave the app: no author, no email, nothing that could hold PHI
+// Shapes for the feedback API. Only these fields leave the app: the submitter's display name (comments already carry names), no email, nothing that could hold PHI
 // beyond the title/description/test notes, which are checked for patient information when they are written.
 import type { WorkflowActor } from "../feedback/service";
 import type { FeedbackOut } from "../feedback/rules";
 
 export const feedbackShape = (i: FeedbackOut) => ({
-  id: i.id, kind: i.kind, title: i.title, description: i.description, status: i.status, triage: i.triage, scope: i.scope,
+  id: i.id, kind: i.kind, title: i.title, description: i.description, submitter: i.authorName, status: i.status, triage: i.triage, scope: i.scope,
   testNotes: i.testNotes, ownerApproved: i.ownerApproved, release: i.release, createdAt: i.createdAt, updatedAt: i.updatedAt,
 });
 
