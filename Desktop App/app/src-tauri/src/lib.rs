@@ -925,6 +925,36 @@ fn selfcheck_net(base: &str) -> i32 {
     if fails.is_empty() { 0 } else { 5 }
 }
 
+
+/// STAGING TEST BUILD ONLY. `--selfcheck-staging`: runs the real inbox contract against staging with the sign-in already
+/// stored in THIS build's Keychain item, entirely inside the process (no token is printed or written anywhere).
+#[cfg(feature = "staging-test")]
+fn selfcheck_staging() -> i32 {
+    use sha2::{Digest, Sha256};
+    let base = "https://practice-mgmt-321509350517.us-east4.run.app";
+    let mut steps: Vec<serde_json::Value> = Vec::new();
+    let mut fails: Vec<String> = Vec::new();
+    let mut rec = |name: &str, ok: bool, detail: String| { if !ok { fails.push(format!("{name}: {detail}")); } steps.push(serde_json::json!({"step": name, "ok": ok, "detail": detail})); };
+    let tok = match keystore::load_tokens("staging") { Some(t) => t.access, None => { println!("{}", serde_json::json!({"ok": false, "failures": ["no staging sign-in stored in this build's Keychain item"]})); return 5; } };
+    let id = journal::new_uuid();
+    let route = format!("/api/desktop/v1/notes/inbox/{id}");
+    let text = format!("SELFCHECK recording {id}. Safe to delete. {}", "word ".repeat(2000));
+    let sha = format!("{:x}", Sha256::digest(text.as_bytes()));
+    let put = |seq: u64, fin: bool, tk: &str, t: &str, h: &str| google::api_request(base, "PUT", &route, Some(tk), Some(&serde_json::json!({"seq": seq, "final": fin, "text": t, "sha256": h, "durationSeconds": 1.0, "recordedAt": "2026-11-18T12:00:00Z"}).to_string()));
+    // 1 checkpoint then final, echo must carry final:true and the same sha
+    match put(1, false, &tok, &text, &sha) { Ok((200, r)) => rec("checkpoint PUT", r.contains("\"ok\":true") || r.contains("\"ok\": true"), "200".into()), Ok((st, r)) => rec("checkpoint PUT", false, format!("status {st} {}", &r.chars().take(120).collect::<String>())), Err(e) => rec("checkpoint PUT", false, e) }
+    match put(1_000_000, true, &tok, &text, &sha) { Ok((200, r)) => rec("final PUT echoes final and sha", r.contains("\"final\":true") && r.contains(&sha), "200".into()), Ok((st, r)) => rec("final PUT", false, format!("status {st} {}", &r.chars().take(120).collect::<String>())), Err(e) => rec("final PUT", false, e) }
+    match put(1_000_000, true, &tok, &text, &sha) { Ok((200, _)) => rec("identical resend is idempotent", true, "200".into()), Ok((st, _)) => rec("identical resend", false, format!("status {st}")), Err(e) => rec("identical resend", false, e) }
+    match put(2, false, &tok, &text, &"0".repeat(64)) { Ok((422, _)) => rec("bad checksum refused", true, "422".into()), Ok((st, _)) => rec("bad checksum refused", false, format!("status {st}")), Err(e) => rec("bad checksum refused", false, e) }
+    match google::api_request(base, "GET", "/api/desktop/v1/notes/inbox?linked=false", Some(&tok), None) { Ok((200, r)) => rec("appears in Needs link list", r.contains(&id), "200".into()), Ok((st, _)) => rec("Needs link list", false, format!("status {st}")), Err(e) => rec("Needs link list", false, e) }
+    match google::api_request(base, "POST", &format!("{route}/link"), Some(&tok), Some("{\"visitId\":\"does-not-exist\"}")) { Ok((404, _)) => rec("link to missing visit = 404, stays in inbox", true, "404".into()), Ok((st, _)) => rec("link to missing visit", false, format!("status {st}")), Err(e) => rec("link to missing visit", false, e) }
+    match google::api_request(base, "GET", "/api/desktop/v1/notes/inbox?linked=false", Some(&tok), None) { Ok((200, r)) => rec("still in Needs link after failed link", r.contains(&id), "200".into()), Ok((st, _)) => rec("still in Needs link", false, format!("status {st}")), Err(e) => rec("still in Needs link", false, e) }
+    match put(1_000_000, true, "expired-or-bad-token", &text, &sha) { Ok((401, _)) => rec("bad/expired token = 401", true, "401".into()), Ok((st, _)) => rec("bad token", false, format!("status {st}")), Err(e) => rec("bad token", false, e) }
+    match google::api_request("http://127.0.0.1:1", "PUT", &route, Some(&tok), Some("{}")) { Err(_) => rec("offline = network error, not a rule failure", true, "unreachable".into()), Ok((st, _)) => rec("offline", false, format!("status {st}")) }
+    println!("{}", serde_json::json!({"ok": fails.is_empty(), "uuid": id, "failures": fails, "steps": steps}));
+    if fails.is_empty() { 0 } else { 5 }
+}
+
 fn wrong_key_reads(support: &Path) -> bool {
     let id = journal::new_uuid();
     let j = journal::Journal { recording_id: id.clone(), visit_id: "k".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000), append: false, done_mic: 0, done_sys: 0, seq: 1, segments: vec![] };
@@ -936,6 +966,8 @@ fn wrong_key_reads(support: &Path) -> bool {
 
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(feature = "staging-test")]
+    if args.iter().any(|a| a == "--selfcheck-staging") { std::process::exit(selfcheck_staging()); }
     if let Some(i) = args.iter().position(|a| a == "--selfcheck-net") {
         std::process::exit(selfcheck_net(args.get(i + 1).map(|s| s.as_str()).unwrap_or("http://127.0.0.1:1")));
     }
