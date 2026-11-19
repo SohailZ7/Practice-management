@@ -20,6 +20,22 @@ export function withoutSnapshotDrops(sql: string): string {
   return kept.length === stmts.length ? sql : kept.map((x) => `${x};`).join("\n\n");
 }
 
+/**
+ * Release B2b: the one narrow, approved exception to "no drops". The diff that removes the ScheduleEntry model is exactly
+ * two foreign-key drops and the table drop; those three statements, and nothing else, are split out so the apply script can
+ * run them only after its own preflight (verified copy, snapshot, backup id). Everything left still goes through the gate.
+ */
+export const SCHEDULEENTRY_DROPS = [
+  /^ALTER TABLE "ScheduleEntry" DROP CONSTRAINT "ScheduleEntry_(?:providerId|patientId)_fkey"$/,
+  /^DROP TABLE "ScheduleEntry"$/,
+];
+export function splitApprovedDrops(sql: string): { rest: string; drops: string[] } {
+  const stmts = splitDiffSql(sql);
+  const drops = stmts.filter((x) => SCHEDULEENTRY_DROPS.some((r) => r.test(x.replace(/\s+/g, " ").trim())));
+  const kept = stmts.filter((x) => !drops.includes(x));
+  return { rest: kept.map((x) => `${x};`).join("\n\n"), drops };
+}
+
 const strip = (s: string) => s.replace(/--[^\n]*/g, "").replace(/\s+/g, " ").trim();
 const tableOf = (s: string): string => /^ALTER TABLE (?:ONLY )?(?:IF EXISTS )?"?(?:public"?\.)?"?([A-Za-z0-9_]+)"?/i.exec(s)?.[1] ?? "";
 
