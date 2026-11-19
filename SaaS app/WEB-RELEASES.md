@@ -39,3 +39,4 @@ Web 1.36 | See full names switch on the web (Settings, off by default, same as D
 Web 1.37 | Feedback API for Claude (list_feedback, get_feedback) now includes the submitter name | PENDING
 Web 1.38 | Appointment unification Release A: additive Visit columns, backfill/fingerprint/snapshot/rehearsal scripts and runbook (no visible change) | pending
 Web 1.39 | Patients tab, phase 0 (staging only): /patients list (appointments, seen, absent, missed, cancelled, upcoming, last seen, providers, program, visit types) and /patients/[id] chart (visits, documents, encounters for billing viewers), derived from existing Visits and ScheduleEntry; notes view; no nav change yet | 25e47f9 | staging practice-mgmt-00141-soz
+Web 1.40 | Phase 1 start: Visit statuses Missed and Other added to the shared list (recorder API shape unchanged); Patients tab counts Other | pending (committed, not deployed; staging deploys held until Release A is done on prod)

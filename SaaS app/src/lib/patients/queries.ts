@@ -24,6 +24,6 @@ export async function patientList(q: string, today: string): Promise<PatientList
     entries.map((e) => ({ patientId: e.patientId as string, date: e.date, completed: e.completed, absent: e.absent, canceled: e.canceled, missed: e.missed, provider: e.providerName, program: e.trackName, type: e.typeName })),
     today,
   );
-  const empty = (id: string): PatientRollup => ({ patientId: id, appointments: 0, seen: 0, absent: 0, missed: 0, canceled: 0, upcoming: 0, unmarked: 0, lastSeen: "", lastProvider: "", currentProgram: "", providers: [], visitTypes: [] });
+  const empty = (id: string): PatientRollup => ({ patientId: id, appointments: 0, seen: 0, absent: 0, missed: 0, canceled: 0, other: 0, upcoming: 0, unmarked: 0, lastSeen: "", lastProvider: "", currentProgram: "", providers: [], visitTypes: [] });
   return patients.map((p) => ({ ...(r.get(p.id) ?? empty(p.id)), name: `${p.lastName}, ${p.firstName}`, mrn: p.mrn }));
 }

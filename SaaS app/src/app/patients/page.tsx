@@ -23,14 +23,14 @@ export default async function PatientsTab({ searchParams }: { searchParams: { q?
       </form>
       <table>
         <thead>
-          <tr><th>Patient</th><th>Providers (visits)</th><th>Appts</th><th>Seen</th><th>Absent</th><th>Missed</th><th>Cancelled</th><th>Upcoming</th><th>Last seen</th><th>Last provider</th><th>Program</th><th>Visit types</th></tr>
+          <tr><th>Patient</th><th>Providers (visits)</th><th>Appts</th><th>Seen</th><th>Absent</th><th>Missed</th><th>Cancelled</th><th>Other</th><th>Upcoming</th><th>Last seen</th><th>Last provider</th><th>Program</th><th>Visit types</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.patientId}>
               <td><Link href={`/patients/${r.patientId}`}><PatientName initials={initialsFor(r.name)} fullName={full ? r.name : null} /></Link></td>
               <td>{r.providers.map((p) => `${p.name} (${p.visits})`).join(", ")}</td>
-              <td>{r.appointments}</td><td>{r.seen}</td><td>{r.absent}</td><td>{r.missed}</td><td>{r.canceled}</td><td>{r.upcoming}</td>
+              <td>{r.appointments}</td><td>{r.seen}</td><td>{r.absent}</td><td>{r.missed}</td><td>{r.canceled}</td><td>{r.other}</td><td>{r.upcoming}</td>
               <td>{r.lastSeen}</td><td>{r.lastProvider}</td><td>{r.currentProgram}</td><td>{r.visitTypes.join(", ")}</td>
             </tr>
           ))}

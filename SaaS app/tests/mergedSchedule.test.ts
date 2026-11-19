@@ -4,7 +4,7 @@ import { VISIT_STATUSES, flagsForStatus, isVisitStatus, statusLabel } from "@/li
 
 describe("visit statuses", () => {
   it("the final list", () => {
-    expect(VISIT_STATUSES.map((s) => s.value)).toEqual(["scheduled", "seen", "note_signed", "no_show", "cancelled"]);
+    expect(VISIT_STATUSES.map((s) => s.value)).toEqual(["scheduled", "seen", "note_signed", "no_show", "cancelled", "missed", "other"]);
     expect(isVisitStatus("seen")).toBe(true);
     expect(isVisitStatus("done")).toBe(false);
     expect(statusLabel("no_show")).toBe("No-show");
@@ -14,6 +14,8 @@ describe("visit statuses", () => {
     expect(flagsForStatus("note_signed").completed).toBe(true);
     expect(flagsForStatus("no_show").absent).toBe(true);
     expect(flagsForStatus("cancelled").canceled).toBe(true);
+    expect(flagsForStatus("missed").missed).toBe(true);
+    expect(flagsForStatus("other")).toEqual({ completed: false, absent: false, canceled: false, missed: false });
     expect(flagsForStatus("scheduled")).toEqual({ completed: false, absent: false, canceled: false, missed: false });
   });
 });
