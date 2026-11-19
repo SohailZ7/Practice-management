@@ -66,4 +66,12 @@ PROD="https://practice-mgmt-802176721153.us-east4.run.app"
 [ "$(strings "$BIN" | grep -cF "localhost:3000" || true)" -eq 0 ] || fail "C: the released app contains the localhost address"
 [ "$(cat dist/assets/*.js 2>/dev/null | grep -cE "321509350517|localhost:3000" || true)" -eq 0 ] || fail "C: the built web bundle (dist/) contains a staging or localhost address"
 pass "C released app is Production only"
+# D. the BUILT binary's own network and storage paths (not mocks): every HTTP method and a 300 KB PUT through its real
+#    api_request to a local server, then encrypted journal -> crash recovery -> queue -> confirm -> 24 h sweep -> wrong key
+GP=$((3900 + RANDOM % 90)); python3 scripts/gate-server.py "$GP" & GSRV=$!; sleep 1
+rm -rf "$W/neth"; mkdir -p "$W/neth"
+NOUT="$(HOME="$W/neth" PRACTICE_APP_DIR="$W/neth/app" "$BIN" --selfcheck-net "http://127.0.0.1:$GP" 2>&1)" && NRC=0 || NRC=$?
+kill "$GSRV" 2>/dev/null || true
+[ "$NRC" = 0 ] && echo "$NOUT" | jq -e '.ok==true' >/dev/null || fail "D: built app network/storage self-check failed (rc=$NRC): $NOUT"
+pass "D built app: all HTTP methods + large upload + journal/recovery/queue/sweep: $NOUT"
 echo "[gate] ALL CHECKS PASSED"

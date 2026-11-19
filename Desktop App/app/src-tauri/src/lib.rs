@@ -885,8 +885,60 @@ fn selfcheck(transcribe_too: bool) -> i32 {
     if where_ == "missing" { 3 } else if ok_transcribe == serde_json::json!(false) { 4 } else { 0 }
 }
 
+/// Headless check of the BUILT app's own Rust paths (used by the release gate): every HTTP method and a 300 KB upload
+/// through the real api_request to `base`, then an encrypted journal -> recovery -> queue -> confirm -> sweep round trip.
+fn selfcheck_net(base: &str) -> i32 {
+    let mut fails: Vec<String> = Vec::new();
+    let id = journal::new_uuid();
+    let route = format!("/api/desktop/v1/notes/inbox/{id}");
+    for m in ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] {
+        let body = if matches!(m, "GET" | "HEAD" | "DELETE") { None } else { Some("{\"x\":1}") };
+        match google::api_request(base, m, &route, Some("selfcheck"), body) {
+            Ok((200, _)) => {}
+            Ok((st, _)) => fails.push(format!("{m}: status {st}")),
+            Err(e) => fails.push(format!("{m}: {e}")),
+        }
+    }
+    let big = format!("{{\"seq\":1000000,\"final\":true,\"text\":\"{}\"}}", "word ".repeat(60_000));
+    match google::api_request(base, "PUT", &route, Some("selfcheck"), Some(&big)) {
+        Ok((200, r)) if r.contains(&big.len().to_string()) => {}
+        Ok((st, _)) => fails.push(format!("large PUT: status {st} or size not echoed")),
+        Err(e) => fails.push(format!("large PUT: {e}")),
+    }
+    let support = support_dir();
+    let key = [7u8; 32];
+    let j = journal::Journal { recording_id: id.clone(), visit_id: "selfcheck-visit".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000),
+        append: false, done_mic: 0, done_sys: 0, seq: 1,
+        segments: vec![queue::Segment { id: "s1".into(), text: "hello".into(), timestamp: "[00:00]".into(), channel: "mic".into(), speaker: "Provider".into(), audio_start_time: Some(0.0), audio_end_time: Some(1.0), sequence_id: 1 }] };
+    if let Err(e) = j.save(&support, &key) { fails.push(format!("journal save: {e}")); }
+    if journal::recover(&support, &key, None) != 1 { fails.push("journal recovery did not produce one queue item".into()); }
+    let listed = queue::list(&support, &key);
+    if !listed.iter().any(|m| m.recording_id.as_deref() == Some(id.as_str())) { fails.push("recovered item missing from the queue".into()); }
+    if let Some(m) = listed.first() {
+        if queue::read_text(&support, &key, &m.visit_id).map(|t| t.contains("hello")).unwrap_or(false) == false { fails.push("encrypted text did not read back".into()); }
+        if queue::mark_confirmed(&support, &key, &m.visit_id, &queue::rfc3339_utc(1_700_000_000)).is_err() { fails.push("mark confirmed".into()); }
+        if queue::sweep_confirmed(&support, &key, 1_700_000_000 + 25 * 3600, 24 * 3600) != 1 { fails.push("24 h sweep did not remove the item".into()); }
+    } else { fails.push("queue empty after recovery".into()); }
+    if !queue::list(&support, &key).is_empty() { fails.push("queue not empty after the sweep".into()); }
+    if wrong_key_reads(&support) { fails.push("a wrong key read data".into()); }
+    println!("{}", serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "ok": fails.is_empty(), "failures": fails }));
+    if fails.is_empty() { 0 } else { 5 }
+}
+
+fn wrong_key_reads(support: &Path) -> bool {
+    let id = journal::new_uuid();
+    let j = journal::Journal { recording_id: id.clone(), visit_id: "k".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000), append: false, done_mic: 0, done_sys: 0, seq: 1, segments: vec![] };
+    let _ = j.save(support, &[1u8; 32]);
+    let r = journal::Journal::load(support, &[2u8; 32], &id).is_ok();
+    journal::Journal::remove(support, &id);
+    r
+}
+
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--selfcheck-net") {
+        std::process::exit(selfcheck_net(args.get(i + 1).map(|s| s.as_str()).unwrap_or("http://127.0.0.1:1")));
+    }
     if args.iter().any(|a| a == "--selfcheck") {
         std::process::exit(selfcheck(args.iter().any(|a| a == "--transcribe")));
     }
