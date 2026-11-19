@@ -251,6 +251,7 @@ static LIVE: std::sync::Mutex<Option<(std::sync::Arc<journal::Live>, std::thread
 
 /// Stops the checkpoint thread and returns the journal it kept.
 fn finish_live() -> Option<journal::Journal> {
+    if let Ok(mut g) = LIVE_SHARED.lock() { *g = None; }
     let (live, handle) = LIVE.lock().ok()?.take()?;
     live.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     let _ = handle.join();
@@ -440,6 +441,8 @@ async fn start_recording(
         return Err("a recording is already running".into());
     }
     let (recorder, warning) = capture::Session::start(with_system_audio)?;
+    if let Ok(mut g) = LIVE_SHARED.lock() { *g = Some(recorder.shared()); }
+    if let Ok(mut w) = MIC_WATCH.lock() { *w = None; }
     let mut recording_id = None;
     // A visit recording keeps a local journal (checkpoints every ~30 s); a dictation keeps nothing.
     if let (Some(v), Some(e)) = (visit_id, environment) {
@@ -466,6 +469,27 @@ async fn start_recording(
 /// What the app can send to the server while still recording: the words so far (decrypted from memory only).
 #[derive(Serialize)]
 pub struct Checkpoint { recording_id: String, seq: u32, text: String, seconds: f64 }
+
+/// The audio buffers of the recording in progress, for the microphone health check (dictations too).
+static LIVE_SHARED: std::sync::Mutex<Option<std::sync::Arc<std::sync::Mutex<capture::Channels>>>> = std::sync::Mutex::new(None);
+static MIC_WATCH: std::sync::Mutex<Option<(usize, std::time::Instant)>> = std::sync::Mutex::new(None);
+
+/// Is the microphone still delivering audio? `lost` is the stream error flag; `silent` is no new audio for 10 s.
+#[derive(serde::Serialize)]
+pub struct MicHealth { lost: bool, silent: bool }
+
+#[tauri::command]
+async fn recording_health() -> MicHealth {
+    let lost = capture::MIC_LOST.load(std::sync::atomic::Ordering::SeqCst);
+    let len = LIVE_SHARED.lock().ok().and_then(|g| g.as_ref().and_then(|c| c.lock().ok().map(|c| c.mic.len())));
+    let mut silent = false;
+    if let (Some(len), Ok(mut w)) = (len, MIC_WATCH.lock()) {
+        let now = std::time::Instant::now();
+        let (prev, at) = w.unwrap_or((0, now));
+        if len > prev || w.is_none() { *w = Some((len, now)); } else { silent = capture::stalled(prev, len, now.duration_since(at).as_secs_f64(), 10.0); }
+    }
+    MicHealth { lost, silent }
+}
 
 #[tauri::command]
 async fn recording_checkpoint() -> Option<Checkpoint> {
@@ -609,6 +633,7 @@ async fn stop_dictation(app: tauri::AppHandle) -> Result<String, String> {
 /// Throws away a recording without transcribing it.
 #[tauri::command]
 async fn cancel_recording() -> Result<(), String> {
+    if let Ok(mut g) = LIVE_SHARED.lock() { *g = None; }
     if let Ok(mut slot) = RECORDER.lock() {
         slot.take();
     }
@@ -868,7 +893,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, recording_checkpoint, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
+            engine_status_cmd, recording_checkpoint, recording_health, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context

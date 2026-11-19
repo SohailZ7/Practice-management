@@ -25,11 +25,12 @@ import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
-import { isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
+import { endedEnvironments, isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
 import logo from "./assets/logo.png";
 import { SavedTranscripts } from "./SavedTranscripts";
 import { Health } from "./Health";
 import { nextDelay } from "./lib/backoff";
+import { micWarning } from "./lib/micHealth";
 import { shouldRefresh } from "./lib/tokenKeeper";
 
 // "Today" is the practice's day, not the device's, so everyone means the same thing by it.
@@ -85,11 +86,8 @@ export function App() {
       return next;
     });
     // The server ended the session for good: make every screen agree that this environment is signed out.
-    const ended = results.find((r) => r.failure?.serverEnded);
-    if (ended?.failure && engineRef.current) {
-      const en = engineRef.current, e = ended.failure.environment;
-      void en.signOut(e).catch(() => {}).then(() => en.status()).then(setStatus).catch(() => {});
-    }
+    const en = engineRef.current;
+    if (en) for (const e of endedEnvironments(results)) void en.signOut(e).catch(() => {}).then(() => en.status()).then(setStatus).catch(() => {});
   }, []);
   const [retrying, setRetrying] = useState(false);
 
@@ -651,6 +649,16 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
     }, 30_000);
     return () => clearInterval(t);
   }, [since]);
+
+  // Every 5 s: is the microphone still delivering audio? An unplugged or blocked mic must not look like a normal recording.
+  useEffect(() => {
+    if (!since) return;
+    const t = setInterval(async () => {
+      const w = micWarning(await engine.recordingHealth().catch(() => null));
+      if (w && state.phase === "recording" && state.warning !== w) onState(visit.id, { phase: "recording", since: state.since, warning: w });
+    }, 5_000);
+    return () => clearInterval(t);
+  }, [since, state.phase === "recording" ? state.warning : undefined]);
 
   /** Record on a visit that already has a transcript: read the earlier text first, so adding never loses it. */
   async function startAdding() {

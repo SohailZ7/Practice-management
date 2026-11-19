@@ -168,3 +168,11 @@ export async function retryAll(engine: Engine): Promise<UploadResult[]> {
   const items = (await engine.queueList()).filter((i) => i.status !== "uploaded");
   return Promise.all(items.map((i) => uploadQueued(engine, i)));
 }
+
+/** The environments whose session the SERVER ended for good in these results (each listed once). The app signs those out
+ *  everywhere at once; a network failure or a missing token is never in this list. */
+export function endedEnvironments(results: UploadResult[]): QueueItem["environment"][] {
+  const out: QueueItem["environment"][] = [];
+  for (const r of results) if (r.failure?.serverEnded && !out.includes(r.failure.environment)) out.push(r.failure.environment);
+  return out;
+}

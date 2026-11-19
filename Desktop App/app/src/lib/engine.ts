@@ -39,6 +39,7 @@ export type QueueItem = {
   confirmed_at?: string | null;
 };
 
+export type MicHealth = { lost: boolean; silent: boolean };
 export type Checkpoint = { recording_id: string; seq: number; text: string; seconds: number };
 export type RecordingContext = { visitId: string; environment: EnvironmentId; append: boolean };
 
@@ -68,6 +69,8 @@ export interface Engine {
   startRecording(withSystemAudio: boolean, ctx?: RecordingContext): Promise<{ warning: string | null; recording_id?: string | null }>;
   /** The words so far of the recording in progress (from memory), or null. */
   recordingCheckpoint(): Promise<Checkpoint | null>;
+  /** Is the microphone still delivering audio? `lost` = the stream reported an error; `silent` = nothing new for 10 s. */
+  recordingHealth(): Promise<MicHealth>;
   /** Shreds confirmed safety copies older than 24 h. */
   queueSweep(): Promise<number>;
   /** Turns recordings left by a crash into queue items. Returns how many. */
@@ -120,6 +123,7 @@ async function nativeEngine(): Promise<Engine> {
     startRecording: (withSystemAudio, ctx) =>
       invoke<{ warning: string | null; recording_id?: string | null }>("start_recording", { withSystemAudio, visitId: ctx?.visitId ?? null, environment: ctx?.environment ?? null, append: ctx?.append ?? false }),
     recordingCheckpoint: () => invoke<Checkpoint | null>("recording_checkpoint"),
+    recordingHealth: () => invoke<MicHealth>("recording_health"),
     queueSweep: () => invoke<number>("queue_sweep"),
     recoverRecordings: () => invoke<number>("recover_recordings"),
     stopRecording: (visitId, environment, previous, separator) =>
@@ -174,6 +178,7 @@ function fakeEngine(): Engine {
     refreshAccessToken: async () => null,
     startRecording: async () => ({ warning: "Fake engines: nothing is being recorded.", recording_id: "00000000-0000-4000-8000-000000000000" }),
     recordingCheckpoint: async () => null,
+    recordingHealth: async () => ({ lost: false, silent: false }),
     queueSweep: async () => 0,
     recoverRecordings: async () => 0,
     stopRecording: async (visitId, env, previous, separator) => {

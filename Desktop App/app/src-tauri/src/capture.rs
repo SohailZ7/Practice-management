@@ -78,6 +78,14 @@ pub fn to_mono_16k(input: &[f32], channels: u16, rate: u32) -> Vec<i16> {
     out
 }
 
+/// Set by the microphone stream's error callback (device unplugged, permission revoked, stream stopped).
+pub static MIC_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True when the microphone has produced no new audio for at least `threshold_secs`. Pure, so it is tested.
+pub fn stalled(prev_len: usize, now_len: usize, secs_since_change: f64, threshold_secs: f64) -> bool {
+    now_len <= prev_len && secs_since_change >= threshold_secs
+}
+
 /// A recording in progress. Dropping it stops both streams.
 pub struct Recorder {
     channels: Arc<Mutex<Channels>>,
@@ -109,6 +117,7 @@ impl Recorder {
     /// recording.
     pub fn start(with_system_audio: bool) -> Result<(Self, Option<String>), String> {
         let channels = Arc::new(Mutex::new(Channels::default()));
+        MIC_LOST.store(false, std::sync::atomic::Ordering::SeqCst);
 
         let host = cpal::default_host();
         let device = host.default_input_device().ok_or("no microphone is available")?;
@@ -125,7 +134,7 @@ impl Recorder {
                         c.mic.extend_from_slice(&converted);
                     }
                 },
-                |_| { /* a dropped buffer costs a moment of audio; never log, it may describe the room */ },
+                |_| { MIC_LOST.store(true, std::sync::atomic::Ordering::SeqCst); /* never log: it may describe the room */ },
                 None,
             )
             .map_err(|_| "cannot open the microphone".to_string())?;
@@ -267,5 +276,13 @@ mod tests {
         let samples: Vec<i16> = r.into_samples::<i16>().map(|s| s.unwrap()).collect();
         // Interleaved, and the shorter side is padded with silence rather than truncating the longer one.
         assert_eq!(samples, vec![100, -100, 200, -200, 300, 0]);
+    }
+
+    #[test]
+    fn a_silent_microphone_is_noticed_after_the_threshold_and_growth_resets_it() {
+        assert!(!stalled(100, 200, 30.0, 10.0), "audio is arriving");
+        assert!(!stalled(200, 200, 4.0, 10.0), "a short pause is fine");
+        assert!(stalled(200, 200, 10.0, 10.0), "no audio for 10 s: unplugged or blocked");
+        assert!(stalled(200, 150, 60.0, 10.0), "a buffer that shrank is not progress");
     }
 }

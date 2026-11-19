@@ -26,3 +26,4 @@ v1.0.23 | 2026-11-18 | built on 1ceee02 | Recordings now save every 30 seconds a
 v1.0.24 | 2026-11-18 | built on 3a56aa3 | When the server ends a session for good, every screen now flips to Signed out with the plain reason, instead of showing Signed in and Sign in again at once.
 v1.0.25 | 2026-11-18 | built on 84580ec | Ivory and plum redesign (shared with the web app), plus more safety tests and a guard on the retry timer.
 v1.0.26 | 2026-11-18 | built on 66a365b | Several waiting recordings now share one sign-in renewal instead of racing; 80 more safety tests.
+v1.0.27 | 2026-11-18 | built on ff0374b | An unplugged or blocked microphone during a visit now shows a clear warning instead of looking like a normal recording.
