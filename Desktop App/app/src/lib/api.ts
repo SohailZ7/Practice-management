@@ -2,6 +2,7 @@
 //
 // It pulls the day's visits and pushes back a transcript. The audio never leaves this Mac, and the recorder keeps
 // no patient record of its own: visits arrive as initials and are forgotten when the day changes.
+import type { ConsentEvent } from "./consent";
 import { record, recentEvents, routeTemplate, safeCode } from "./diagnostics";
 import { assertSafeBaseUrl } from "./environments";
 
@@ -190,14 +191,14 @@ export async function sha256Hex(text: string): Promise<string> {
 export const FINAL_SEQ = 1_000_000;
 
 export type InboxReply = { ok: true; uuid: string; seq: number; sha256: string; final: boolean; visitId: string | null; stale?: boolean };
-export type InboxBody = { seq: number; final: boolean; text: string; durationSeconds: number; recordedAt: string; visitId?: string | null };
+export type InboxBody = { seq: number; final: boolean; text: string; durationSeconds: number; recordedAt: string; visitId?: string | null; consent?: ConsentEvent | null };
 
 /** Sends (or updates) a recording by its UUID. Retrying the same call can never create a second copy. */
 export async function putInbox(session: Session, uuid: string, b: InboxBody): Promise<InboxReply> {
   const sha256 = await sha256Hex(b.text);
   return call<InboxReply>(session, `/notes/inbox/${encodeURIComponent(uuid)}`, {
     method: "PUT",
-    body: JSON.stringify({ ...b, sha256, ...(b.visitId ? { visitId: b.visitId } : {}) }),
+    body: JSON.stringify({ ...b, sha256, ...(b.visitId ? { visitId: b.visitId } : {}), ...(b.consent ? { consent: b.consent } : {}) }),
   });
 }
 
