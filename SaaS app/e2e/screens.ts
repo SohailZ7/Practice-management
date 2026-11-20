@@ -33,6 +33,7 @@ export const SCREENS: Screen[] = [
   { name: "Billing: history", path: "/billing/history", expect: [], notFoundOk: true /* needs ?entity=&id=; bare URL is a 404 by design */ },
   { name: "Billing: Incorrect billing", path: "/billing/incorrect", expect: [/incorrect/i] },
   { name: "Billing: Files", path: "/billing/files", expect: ["synthetic-report.csv"] },
+  { name: "Billing: GetIX compare", path: "/billing/compare", expect: [/GetIX compare/i] },
   { name: "Billing: patients", path: "/billing/patients", expect: ["E2E-100"] },
   { name: "Billing: programs", path: "/billing/programs", expect: [/program/i] },
   { name: "Reports", path: "/reports", expect: [/report/i] },

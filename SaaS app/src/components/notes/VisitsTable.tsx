@@ -1,5 +1,6 @@
 "use client";
 
+import { isOverdue, practiceToday, rowTone } from "@/lib/notes/rowColor";
 import { groupVisits } from "@/lib/notes/groups";
 import { useState, type ReactNode } from "react";
 import { VisitDrawer } from "./VisitDrawer";
@@ -48,6 +49,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
   onProvider?: (v: VisitRow, name: string) => void;
 }) {
   const [detail, setDetail] = useState<VisitRow | null>(null);
+  const today = practiceToday();
   const shown = detail ? visits.find((v) => v.id === detail.id) ?? null : null; // follows edits to the row
   return (
     <div className="visits-wrap">
@@ -90,7 +92,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
             ...g.rows.map((v) => ({ v, color: g.key ? g.color : "" })).map(({ v, color }) => {
             const docs = docsOf(v);
             return (
-              <tr key={v.id} className={v.trackingOnly ? "tracking-row" : undefined} style={color ? { borderLeft: `4px solid ${color}`, background: `${color}0d` } : undefined} title={v.trackingOnly ? "Not B&B: tracking only. Counted for volume and revenue, never billed." : undefined}>
+              <tr key={v.id} className={v.trackingOnly ? "tracking-row" : `row-${rowTone({ status: v.status, docCount: docs.length, hasDraft: v.documents.some((d) => d.draft) })}`} style={color ? { borderLeft: `4px solid ${color}` } : undefined} title={v.trackingOnly ? "Not B&B: tracking only. Counted for volume and revenue, never billed." : undefined}>
                 <td className="v-pat" title={v.fullName ? "Full name when See full names is on (Settings)" : "Shown as initials"}>
                   <span className="v-pat-wrap">
                     {canEdit && <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => onSelect(v.id, e.target.checked)} />}
@@ -126,6 +128,7 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                   ) : (
                     <span className={`status-pill tone-${statusTone(v.status)}`}>{VISIT_STATUSES.find((s) => s.value === v.status)?.label ?? "Scheduled"}</span>
                   )}
+                  {isOverdue(v.visitDate, v.status, today) && <span className="overdue-flag" title="Not completed within 7 days of the visit date">OVERDUE</span>}
                 </td>
                 <td>
                   <span className="v-docs">

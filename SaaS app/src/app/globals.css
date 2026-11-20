@@ -775,3 +775,16 @@ html[data-density="compact"] .stage-card, html[data-density="compact"] .ov-stat 
 .upd-btn.unseen { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
 .upd-list { list-style: none; margin: 0 0 .75rem; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .upd-list li { border-bottom: 1px solid var(--line); padding-bottom: .4rem; white-space: pre-wrap; }
+
+/* Schedule row colours (Web 1.75) */
+table.visits tr.row-gray td { background: #eceeef; color: #4b5563; }
+table.visits tr.row-yellow td { background: #fff7d1; }
+table.visits tr.row-blue td { background: #e2eefc; }
+table.visits tr.row-green td { background: #e0f4e6; }
+.overdue-flag { display: inline-block; margin-left: .4rem; padding: 0 .4rem; border-radius: 4px; background: #b42318; color: #fff; font-size: .7rem; font-weight: 700; letter-spacing: .03em; }
+@media (prefers-color-scheme: dark) {
+  table.visits tr.row-gray td { background: #2b2f33; color: #b6bcc2; }
+  table.visits tr.row-yellow td { background: #3f3a14; }
+  table.visits tr.row-blue td { background: #1b2c44; }
+  table.visits tr.row-green td { background: #16341f; }
+}
