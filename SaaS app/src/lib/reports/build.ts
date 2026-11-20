@@ -94,7 +94,14 @@ export function buildReport(id: string, all: ReportVisit[], opts: { today: strin
     }
     case "trends": {
       const rows = tally(vs, (v) => weekStart(v.date)).map(([k, l]) => [k, l.length, l.filter((v) => isSeen(v.status)).length, l.filter((v) => isNotSeen(v.status)).length, l.filter((v) => isSeen(v.status) && v.trackingOnly).length, l.filter((v) => overdueNow(v, opts.today)).length] as Cell[]);
-      return [{ title: "Per week (weeks start Monday)", columns: [{ key: "w", label: "Week of" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "t", label: "Seen, tracking only" }, { key: "o", label: "Overdue now" }], rows }];
+      const age = (v: ReportVisit) => Math.floor((Date.parse(opts.today) - Date.parse(v.date)) / 86_400_000);
+      const od = vs.filter((v) => overdueNow(v, opts.today));
+      const ageRows: Cell[][] = [["8 to 14 days", od.filter((v) => age(v) <= 14).length], ["15 to 30 days", od.filter((v) => age(v) > 14 && age(v) <= 30).length], ["Over 30 days", od.filter((v) => age(v) > 30).length]];
+      const left = tally(vs.filter((v) => isSeen(v.status) && v.trackingOnly), (v) => v.chargeCode || "(none)").map(([k, l]) => [k, l.length] as Cell[]);
+      return [{ title: "Per week (weeks start Monday)", columns: [{ key: "w", label: "Week of" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "t", label: "Seen, tracking only" }, { key: "o", label: "Overdue now" }], rows },
+        { title: "Overdue ageing (Scheduled or Other, past 7 days)", columns: [{ key: "a", label: "Age" }, { key: "n", label: "Visits" }], rows: ageRows },
+        { title: "Seen by tracking-only providers, by charge code (not billed by us)", columns: [{ key: "c", label: "Charge code" }, { key: "n", label: "Visits" }], rows: left },
+      ];
     }
     case "timesheet": {
       const seen = vs.filter((v) => isSeen(v.status) && !v.trackingOnly);
