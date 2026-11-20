@@ -12,7 +12,7 @@ vi.mock("../src/lib/db", () => ({
       findMany: async () => [...store.rows.values()],
     },
     visit: {
-      findUnique: async ({ where }: { where: { id: string } }) => (store.visits.has(where.id) ? { id: where.id } : null),
+      findUnique: async ({ where }: { where: { id: string } }) => (store.visits.has(where.id) ? { id: where.id, transcript: store.visits.get(where.id)?.transcript ?? "" } : null),
       update: async ({ where, data }: { where: { id: string }; data: { transcript: string } }) => { store.writes++; store.visits.set(where.id, { transcript: data.transcript }); },
     },
   },
@@ -122,7 +122,7 @@ describe("visit missing, then linked later", () => {
     await linkInbox(U, "v9");
     await linkInbox(U, "v9");
     expect(store.visits.get("v9")!.transcript).toBe("note text");
-    expect(store.writes).toBe(2);
+    expect(store.writes).toBe(1);
   });
   it("link of an unknown recording is 404, of a bad id is 400", async () => {
     expect(await code(() => linkInbox(U, "v"))).toBe("not_found");

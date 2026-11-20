@@ -12,12 +12,12 @@ vi.mock("../src/lib/db", () => ({
       findMany: async ({ where }: { where: { visitId?: unknown } }) => [...store.rows.values()].filter((r) => (where.visitId === null ? r.visitId === null : where.visitId ? r.visitId !== null : true)),
     },
     visit: {
-      findUnique: async ({ where }: { where: { id: string } }) => (store.visits.has(where.id) ? { id: where.id } : null),
+      findUnique: async ({ where }: { where: { id: string } }) => (store.visits.has(where.id) ? { id: where.id, transcript: store.visits.get(where.id)?.transcript ?? "" } : null),
       update: async ({ where, data }: { where: { id: string }; data: { transcript: string } }) => { store.visits.set(where.id, { transcript: data.transcript }); },
     },
   },
 }));
-const { parseInboxPut, putInbox, linkInbox, listInbox, sha256Hex } = await import("../src/lib/notes/inbox");
+const { parseInboxPut, putInbox, linkInbox, listInbox, sha256Hex, APPEND_SEPARATOR } = await import("../src/lib/notes/inbox");
 
 const U = "3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b";
 const body = (seq: number, text: string, extra: object = {}) => ({ seq, final: false, text, sha256: sha256Hex(text), durationSeconds: 10, recordedAt: "2026-11-18T14:03:00Z", ...extra });
@@ -66,8 +66,8 @@ describe("link and list", () => {
     expect((await listInbox(false)).items).toHaveLength(1);
     expect(await code(linkInbox(U, "ghost"))).toBe("visit_not_found");
     store.visits.set("v1", {}); store.visits.set("v2", {});
-    expect(await linkInbox(U, "v1")).toEqual({ ok: true, visitId: "v1" });
-    expect(await linkInbox(U, "v1")).toEqual({ ok: true, visitId: "v1" });
+    expect(await linkInbox(U, "v1")).toEqual({ ok: true, visitId: "v1", result: expect.any(String) });
+    expect(await linkInbox(U, "v1")).toEqual({ ok: true, visitId: "v1", result: expect.any(String) });
     expect(await code(linkInbox(U, "v2"))).toBe("already_linked");
     expect((await listInbox(false)).items).toHaveLength(0);
     expect(store.visits.get("v1")?.transcript).toBe("hi");
@@ -91,5 +91,45 @@ describe("synthetic check", () => {
     const r = await runSyntheticCheck();
     expect(r.ok).toBe(true);
     expect([...store.rows.values()][0]).toMatchObject({ final: true, seq: 2, createdByEmail: "synthetic-check@bbc.invalid" });
+  });
+});
+
+describe("link never silently destroys an earlier transcript", () => {
+  const OLD = "[00:01] Provider: first visit text";
+  const NEW = "[00:01] Patient: recovered part";
+  beforeEach(() => { store.visits.set("v1", { transcript: OLD }); });
+  it("PUT with a visitId onto a visit with different text stays unlinked and writes nothing", async () => {
+    expect((await put(1, NEW, { visitId: "v1" })).visitId).toBeNull();
+    expect(store.visits.get("v1")?.transcript).toBe(OLD);
+  });
+  it("Link without a mode is 409 transcript_not_empty and writes nothing", async () => {
+    await put(1, NEW);
+    expect(await code(linkInbox(U, "v1"))).toBe("transcript_not_empty");
+    expect(store.visits.get("v1")?.transcript).toBe(OLD);
+    expect(store.rows.get(U)?.visitId).toBeNull();
+  });
+  it("Link with mode append adds a separator and the new text, keeps the old, and is idempotent", async () => {
+    await put(1, NEW);
+    expect(await linkInbox(U, "v1", "append")).toEqual({ ok: true, visitId: "v1", result: "appended" });
+    expect(store.visits.get("v1")?.transcript).toBe(OLD + APPEND_SEPARATOR + NEW);
+    expect(await linkInbox(U, "v1", "append")).toMatchObject({ result: "unchanged" });
+    expect(store.visits.get("v1")?.transcript).toBe(OLD + APPEND_SEPARATOR + NEW);
+  });
+  it("append over the 200,000 cap is 409 too_long and writes nothing", async () => {
+    store.visits.set("v1", { transcript: "x".repeat(199_990) });
+    await put(1, NEW);
+    expect(await code(linkInbox(U, "v1", "append"))).toBe("too_long");
+    expect(store.visits.get("v1")?.transcript).toBe("x".repeat(199_990));
+  });
+  it("an empty visit, or text that extends the existing text, is still replaced", async () => {
+    store.visits.set("v1", { transcript: "" });
+    await put(1, NEW);
+    expect(await linkInbox(U, "v1")).toMatchObject({ result: "replaced" });
+    expect(store.visits.get("v1")?.transcript).toBe(NEW);
+    store.visits.set("v2", { transcript: "abc" });
+    const U2 = "4f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6c";
+    await putInbox(U2, parseInboxPut(U2, body(1, "abcdef")), "a@b.org");
+    expect(await linkInbox(U2, "v2")).toMatchObject({ result: "replaced" });
+    expect(store.visits.get("v2")?.transcript).toBe("abcdef");
   });
 });

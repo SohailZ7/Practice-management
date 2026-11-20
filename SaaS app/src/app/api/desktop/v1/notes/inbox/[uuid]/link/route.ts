@@ -9,7 +9,8 @@ export const POST = (req: Request, { params }: { params: { uuid: string } }) =>
     const { user } = await authenticate(req, { module: "notes", level: "edit" });
     const body = await readJson(req);
     if (typeof body.visitId !== "string" || !body.visitId) throw new ApiError(400, "bad_request");
-    const out = await linkInbox(params.uuid, body.visitId);
-    await audit(user.email, "desktop.inbox.link", `rec ${params.uuid} visit ${out.visitId}`);
+    const mode = body.mode === "append" ? "append" : undefined;
+    const out = await linkInbox(params.uuid, body.visitId, mode);
+    await audit(user.email, "desktop.inbox.link", `rec ${params.uuid} visit ${out.visitId} ${out.result}`);
     return json(out);
   })(req);

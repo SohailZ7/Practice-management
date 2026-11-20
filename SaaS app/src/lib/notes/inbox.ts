@@ -31,12 +31,26 @@ const reply = (r: { id: string; seq: number; sha256: string; final: boolean; vis
   ok: true, uuid: r.id, seq: r.seq, sha256: r.sha256, final: r.final, visitId: r.visitId, ...extra,
 });
 
-/** Writes the transcript to the visit exactly as POST /notes/visits/:id/transcript does. */
-async function writeToVisit(visitId: string, text: string): Promise<boolean> {
-  const v = await db.visit.findUnique({ where: { id: visitId }, select: { id: true } });
-  if (!v) return false;
-  await db.visit.update({ where: { id: visitId }, data: { transcript: text.slice(0, 200_000), transcriptAt: new Date() } });
-  return true;
+export const MAX_VISIT_TRANSCRIPT = 200_000;
+export const APPEND_SEPARATOR = "\n\n--- Added recording ---\n\n";
+
+/** A visit transcript may be replaced only when it is empty, already part of the new text (a growing checkpoint), or the same. Anything else would destroy earlier text. */
+export function canReplaceTranscript(existing: string, incoming: string): boolean {
+  return !existing.trim() || incoming.includes(existing);
+}
+
+/**
+ * Writes the transcript to the visit. "blocked" = the visit already has different, non-empty text that the new text does not contain;
+ * nothing is written (the caller decides: PUT keeps the checkpoint unlinked, Link answers 409 and offers append).
+ */
+async function writeToVisit(visitId: string, text: string): Promise<"written" | "blocked" | "missing"> {
+  const v = await db.visit.findUnique({ where: { id: visitId }, select: { id: true, transcript: true } });
+  if (!v) return "missing";
+  const existing = v.transcript ?? "";
+  if (existing.includes(text) && existing.trim() && existing !== text) return "written"; // already contains this text: leave it
+  if (!canReplaceTranscript(existing, text)) return "blocked";
+  await db.visit.update({ where: { id: visitId }, data: { transcript: text.slice(0, MAX_VISIT_TRANSCRIPT), transcriptAt: new Date() } });
+  return "written";
 }
 
 /** Stores the optional consent once per recording (checkpoints repeat it); ties it to the visit when there is one. */
@@ -58,13 +72,17 @@ export async function putInbox(uuid: string, p: InboxPut, who: string | { id?: s
 async function putInboxCore(uuid: string, p: InboxPut, email: string) {
   const cur = await db.recordingInbox.findUnique({ where: { id: uuid } });
   let linkTo: string | null = null;
-  if (p.visitId && (!cur || !cur.visitId) && (await db.visit.findUnique({ where: { id: p.visitId }, select: { id: true } }))) linkTo = p.visitId;
+  let written = false;
+  if (p.visitId && (!cur || !cur.visitId) && (await db.visit.findUnique({ where: { id: p.visitId }, select: { id: true } }))) {
+    // Never replace an existing different transcript: a recovered/append recording then stays unlinked in the inbox until a person chooses Link > Append.
+    const w = await writeToVisit(p.visitId, p.text);
+    if (w === "written") { linkTo = p.visitId; written = true; }
+  }
 
   if (!cur) {
     const row = await db.recordingInbox.create({
       data: { id: uuid, seq: p.seq, final: p.final, text: p.text, sha256: p.sha256, durationSeconds: p.durationSeconds, recordedAt: p.recordedAt, visitId: linkTo, createdByEmail: email },
     });
-    if (linkTo) await writeToVisit(linkTo, p.text);
     return reply(row);
   }
   if (cur.final) {
@@ -85,19 +103,37 @@ async function putInboxCore(uuid: string, p: InboxPut, email: string) {
     where: { id: uuid },
     data: { seq: p.seq, final: p.final, text: p.text, sha256: p.sha256, durationSeconds: p.durationSeconds, recordedAt: p.recordedAt, visitId },
   });
-  if (visitId) await writeToVisit(visitId, p.text);
+  if (visitId && !written) await writeToVisit(visitId, p.text);
   return reply(row);
 }
 
-export async function linkInbox(uuid: string, visitId: string) {
+export type LinkMode = "append";
+
+/**
+ * Links a recording to a visit. A visit with different, non-empty text is never silently replaced:
+ * - no mode: 409 transcript_not_empty (nothing written), unless the text is empty / already contained / extends the existing text.
+ * - mode "append": adds APPEND_SEPARATOR + the recording text after the existing text (409 too_long if over the cap).
+ */
+export async function linkInbox(uuid: string, visitId: string, mode?: LinkMode) {
   if (!isUuidV4(uuid)) throw new ApiError(400, "bad_uuid");
   const cur = await db.recordingInbox.findUnique({ where: { id: uuid } });
   if (!cur) throw new ApiError(404, "not_found");
   if (cur.visitId && cur.visitId !== visitId) throw new ApiError(409, "already_linked");
-  if (!(await writeToVisit(visitId, cur.text))) throw new ApiError(404, "visit_not_found");
+  const v = await db.visit.findUnique({ where: { id: visitId }, select: { id: true, transcript: true } });
+  if (!v) throw new ApiError(404, "visit_not_found");
+  const existing = v.transcript ?? "";
+  let result: "replaced" | "appended" | "unchanged" = "replaced";
+  if (existing.trim() && existing.includes(cur.text) ) result = "unchanged";
+  else if (canReplaceTranscript(existing, cur.text)) await writeToVisit(visitId, cur.text);
+  else if (mode === "append") {
+    const next = existing + APPEND_SEPARATOR + cur.text;
+    if (next.length > MAX_VISIT_TRANSCRIPT) throw new ApiError(409, "too_long");
+    await db.visit.update({ where: { id: visitId }, data: { transcript: next, transcriptAt: new Date() } });
+    result = "appended";
+  } else throw new ApiError(409, "transcript_not_empty", undefined, "append_or_cancel");
   if (cur.visitId !== visitId) await db.recordingInbox.update({ where: { id: uuid }, data: { visitId } });
   await db.recordingConsent.updateMany({ where: { recordingId: uuid, visitId: null }, data: { visitId } });
-  return { ok: true, visitId };
+  return { ok: true, visitId, result };
 }
 
 export async function listInbox(linked: boolean | null) {
