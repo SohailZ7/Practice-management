@@ -1,7 +1,7 @@
 // Recording-consent gate: wording lives in one file, every start asks first, the answer is stored and travels with the transcript.
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildConsentEvent, consentWire, CONSENT_TEXT, CONSENT_TEXT_VERSION } from "../src/lib/consent";
+import { buildConsentEvent, consentWire, CONSENT_START_LABEL, CONSENT_TEXT, CONSENT_TEXT_VERSION } from "../src/lib/consent";
 import { sendConfirmed } from "../src/lib/queue";
 
 const app = readFileSync("src/App.tsx", "utf8");
@@ -13,11 +13,12 @@ describe("consent gate", () => {
     expect(readFileSync("src/lib/consent.ts", "utf8")).toContain("no audio is saved");
     expect(CONSENT_TEXT_VERSION).toMatch(/draft/);
   });
-  it("Record only opens the question; capture starts only from the confirm button, which needs the checkbox", () => {
-    expect(app).toMatch(/function start\(\) \{ setConsentChecked\(false\); setAskConsent\(true\); \}/);
-    expect(app).toMatch(/disabled=\{!consentChecked\} onClick=\{confirmConsent\}/);
-    expect(app).toMatch(/async function confirmConsent\(\) \{\s*if \(!consentChecked\) return;/);
-    expect(app).toMatch(/useState\(false\);\s*\n\s*const \[consentChecked/);   // unchecked by default
+  it("Record only opens the question; capture starts only from the one-tap confirm button, which records consent first", () => {
+    expect(app).toMatch(/function start\(\) \{ setAskConsent\(true\); \}/);
+    expect(app).toMatch(/<button onClick=\{confirmConsent\}/);
+    expect(app).not.toContain("consent-checkbox");
+    expect(CONSENT_START_LABEL).toBe("Patient agrees, start");
+    expect(app.indexOf("engine.recordConsent(ev)")).toBeLessThan(app.indexOf("await startNow()"));
     const calls = [...app.matchAll(/engine\.startRecording\(/g)].length;
     expect(calls).toBe(1);   // the only capture start is inside startNow, reached only through confirmConsent
     expect(app.indexOf("await startNow()")).toBeGreaterThan(app.indexOf("async function confirmConsent"));

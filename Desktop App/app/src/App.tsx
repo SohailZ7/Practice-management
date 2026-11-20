@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { addedSeparator } from "./lib/append";
 import { TranscriptDialog } from "./TranscriptDialog";
 import { Modal } from "./Modal";
-import { buildConsentEvent, CONSENT_CANCEL_LABEL, CONSENT_CHECKBOX_LABEL, CONSENT_START_LABEL, CONSENT_TEXT, CONSENT_TITLE, type ConsentEvent } from "./lib/consent";
+import { buildConsentEvent, CONSENT_CANCEL_LABEL, CONSENT_START_LABEL, CONSENT_TEXT, CONSENT_TITLE, type ConsentEvent } from "./lib/consent";
 import { DocumentIcons, GenerateDialog } from "./DocumentDialogs";
 import { RowMenu } from "./RowMenu";
 import { VISIT_STATUSES, statusTone, statusValue } from "./lib/visitStatus";
@@ -638,7 +638,6 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   // The "Start recording" strip starts this row's own recording (same path as its Record button).
   useEffect(() => { quickStarters.set(visit.id, () => (hasExisting ? setAskAppend(true) : void start())); return () => { quickStarters.delete(visit.id); }; });
   const [askConsent, setAskConsent] = useState(false);
-  const [consentChecked, setConsentChecked] = useState(false);
   const consentRef = useRef<ConsentEvent | null>(null);
   // Earlier text of this visit, held in memory while the new recording runs; `fromQueue` says where it came from.
   const earlier = useRef<{ text: string; fromQueue: boolean } | null>(null);
@@ -730,10 +729,9 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   }
 
   /** Every recording start goes through the consent question first; nothing is captured until it is answered yes. */
-  function start() { setConsentChecked(false); setAskConsent(true); }
+  function start() { setAskConsent(true); }
 
   async function confirmConsent() {
-    if (!consentChecked) return;
     const ev = buildConsentEvent(visit.id, visit.providerName, true);
     setAskConsent(false);
     setBusy(true);
@@ -905,13 +903,9 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
             <Modal title={CONSENT_TITLE} onClose={() => setAskConsent(false)} width={480}
               footer={<>
                 <button className="secondary" onClick={() => setAskConsent(false)}>{CONSENT_CANCEL_LABEL}</button>
-                <button disabled={!consentChecked} onClick={confirmConsent} data-testid="consent-start">{CONSENT_START_LABEL}</button>
+                <button onClick={confirmConsent} data-testid="consent-start">{CONSENT_START_LABEL}</button>
               </>}>
               <p style={{ marginTop: 0 }} data-testid="consent-text">{CONSENT_TEXT}</p>
-              <label className="consent-check">
-                <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} data-testid="consent-checkbox" />
-                {CONSENT_CHECKBOX_LABEL}
-              </label>
             </Modal>
           )}
           {askAppend && (
