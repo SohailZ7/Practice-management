@@ -159,6 +159,10 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
 export const fetchVisits = (session: Session, date: string) =>
   call<{ date: string; visits: Visit[] }>(session, `/notes/visits?date=${encodeURIComponent(date)}`);
 
+/** Only the signed-in provider's own visits (server Web 1.91+). `scope` is "all" when the server ignored the flag. */
+export const fetchMyVisits = (session: Session, date: string) =>
+  call<{ date: string; visits: Visit[]; scope?: "mine" | "all" }>(session, `/notes/visits?date=${encodeURIComponent(date)}&mine=1`);
+
 export type LoadResult = {
   created: number;
   skippedExisting: number;

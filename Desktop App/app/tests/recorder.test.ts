@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { fetchVisits, pushTranscript, type Session } from "../src/lib/api";
+import { fetchVisits, fetchMyVisits, pushTranscript, type Session } from "../src/lib/api";
 import { patientInitials } from "../src/lib/initials";
 
 const session: Session = { baseUrl: "https://notes.example.test/", accessToken: "tok" };
@@ -14,6 +14,14 @@ describe("the practice API client", () => {
     await fetchVisits(session, "2026-11-01");
     expect(seen[0][0]).toBe("https://notes.example.test/api/desktop/v1/notes/visits?date=2026-11-01");
     expect((seen[0][1]!.headers as Record<string, string>).authorization).toBe("Bearer tok");
+  });
+
+  it("asks for only the signed-in provider's visits with mine=1", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (u: string) => (seen.push(u), ok({ date: "2026-11-01", visits: [], scope: "mine" })));
+    const r = await fetchMyVisits(session, "2026-11-01");
+    expect(seen[0]).toBe("https://notes.example.test/api/desktop/v1/notes/visits?date=2026-11-01&mine=1");
+    expect(r.scope).toBe("mine");
   });
 
   it("sends a transcript as JSON", async () => {

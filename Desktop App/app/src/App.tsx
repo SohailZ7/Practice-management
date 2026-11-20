@@ -17,7 +17,7 @@ import { canShowFullNames, displayVisits, loadShowFull, saveShowFull } from "./l
 import { clientNameToSend, formChoices, visitFormErrors } from "./lib/visitForm";
 import { ComboField, StrictSelect, TimeCell, TimeField } from "./Fields";
 import { normalizeTime } from "./lib/times";
-import { sendDiagnostics, putInbox, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
+import { sendDiagnostics, putInbox, pushTranscript, fetchVisitOptions, type VisitOptions, createVisit, deleteVisit, deleteVisits, updateVisit, visitErrorMessage, fetchAuthConfig, fetchTranscript, fetchVisits, fetchMyVisits, SignedOutError, syncSchedule, type Session, type Visit } from "./lib/api";
 import { getEngine, type Engine, type EngineStatus, type ModelProgress, type QueueItem } from "./lib/engine";
 import { DEFAULT_ENVIRONMENT, ENVIRONMENTS, STAGING_TEST, isEnvironment, labelFor, urlFor, type EnvironmentId } from "./lib/environments";
 import { UpdateBanner } from "./UpdateBanner";
@@ -57,6 +57,8 @@ export function App() {
   const [tab, setTab] = useState<"visits" | "search" | "tasks" | "feedback" | "health" | "setup">("visits");
   const [date, setDate] = useState(practiceToday);
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  // Ids of the signed-in provider's own visits, for the Start-recording strip. null = unknown (older server): show all.
+  const [myIds, setMyIds] = useState<Set<string> | null>(null);
   const [showFull, setShowFull] = useState(loadShowFull);
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [message, setMessage] = useState("");
@@ -168,6 +170,10 @@ export function App() {
     try {
       const r = await fetchVisits(session, date);
       if (mine === loadSeq.current) setVisits(r.visits);
+      try {
+        const m = await fetchMyVisits(session, date);
+        if (mine === loadSeq.current) setMyIds(m.scope === "mine" ? new Set(m.visits.map((v) => v.id)) : null);
+      } catch { if (mine === loadSeq.current) setMyIds(null); }
     } catch (e) {
       if (mine !== loadSeq.current) return;
       setVisits(null);
@@ -358,7 +364,7 @@ export function App() {
           <>
             <div id="rec-stage" />
             {date === practiceToday() && !recording && ready && !!session && (
-              <QuickStart visits={(visits ?? []).filter((v) => (v.status ?? "scheduled") === "scheduled" && !v.hasTranscript && v.documentCount === 0)} disabled={busy} />
+              <QuickStart visits={(visits ?? []).filter((v) => (myIds === null || myIds.has(v.id)) && (v.status ?? "scheduled") === "scheduled" && !v.hasTranscript && v.documentCount === 0)} disabled={busy} />
             )}
             <div className="datebar">
               <button className="secondary" aria-label="Previous day" onClick={() => setDate(shift(date, -1))}>&lt;</button>
