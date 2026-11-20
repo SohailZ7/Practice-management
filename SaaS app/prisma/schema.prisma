@@ -19,6 +19,8 @@ model User {
   showFullNames           Boolean             @default(false)
   // May approve, request changes on, or reject Feedback items that are On staging. Set by an admin per user.
   feedbackApprover        Boolean             @default(false)
+  // Final approver of Ledger expenses (Sohail). Set by an admin per user; existing users default to false.
+  ledgerApprover          Boolean             @default(false)
   // Last Desktop version this person's recorder reported, and the newest version whose update banner they dismissed.
   desktopVersion          String?
   desktopSeenAt           DateTime?
@@ -447,6 +449,12 @@ model LedgerEntry {
   categoryId  String?
   methodId    String?
   comments    String          @default("")
+  // pending | approved | rejected. Existing and cash-in rows are approved (default); every new expense (cash out) starts pending.
+  // Approved entries are locked. Only a ledgerApprover can approve or reject.
+  approvalStatus String       @default("approved")
+  approvedById   String?
+  approvedAt     DateTime?
+  approvalNote   String       @default("")
   createdById String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @default(now()) @updatedAt

@@ -763,3 +763,8 @@ html[data-density="compact"] .stage-card, html[data-density="compact"] .ov-stat 
 .upd-btn.unseen { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
 .upd-list { list-style: none; margin: 0 0 .75rem; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .upd-list li { border-bottom: 1px solid var(--line); padding-bottom: .4rem; white-space: pre-wrap; }
+.appr-cell { display: inline-flex; align-items: center; gap: .3rem; }
+.appr-pill { font-size: .75rem; padding: .08rem .55rem; border-radius: 999px; border: 1px solid var(--line); }
+.appr-pill.pending { color: #b26a00; border-color: #b26a00; }
+.appr-pill.approved { color: var(--muted); }
+.appr-pill.rejected { color: var(--danger); border-color: var(--danger); }

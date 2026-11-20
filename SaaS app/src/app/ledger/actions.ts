@@ -7,6 +7,7 @@ import { requireAccess } from "@/lib/session";
 import { formatMoney } from "@/lib/ledger/money";
 import { ledgerEntryError } from "@/lib/ledger/validate";
 import { isLinkedLedgerEntry, LINKED_LEDGER_MESSAGE } from "@/lib/timesheets/payments";
+import { approvalOf, canApprove, isLocked, LOCKED_MESSAGE, statusForSave } from "@/lib/ledger/approval";
 import { queryLedger, toLedgerDTO } from "@/lib/ledger/queries";
 import type { LedgerDTO, LedgerFilters, LedgerPatch, OptionKind } from "@/lib/ledger/types";
 
@@ -24,7 +25,7 @@ async function checkRefs(e: { partyId?: string | null; categoryId?: string | nul
 const describe = (e: { date: string; cashIn: number; cashOut: number }) =>
   `${e.date} ${e.cashIn > 0 ? `in ${formatMoney(e.cashIn)}` : `out ${formatMoney(e.cashOut)}`}`;
 
-export async function createLedgerEntry(input: Omit<LedgerDTO, "id">): Promise<LedgerDTO> {
+export async function createLedgerEntry(input: Omit<LedgerDTO, "id" | "approval" | "approvalNote">): Promise<LedgerDTO> {
   const user = await requireAccess("ledger", "edit");
   const entry = {
     date: clean(input.date, 10),
@@ -38,7 +39,7 @@ export async function createLedgerEntry(input: Omit<LedgerDTO, "id">): Promise<L
   const error = ledgerEntryError(entry);
   if (error) throw new Error(error);
   await checkRefs(entry);
-  const row = await db.ledgerEntry.create({ data: { ...entry, createdById: user.id } });
+  const row = await db.ledgerEntry.create({ data: { ...entry, approvalStatus: statusForSave(entry.cashOut), createdById: user.id } });
   await audit(user.email, "ledger.add", `${row.id}: ${describe(row)}`);
   revalidatePath("/ledger", "layout");
   return toLedgerDTO(row);
@@ -49,6 +50,7 @@ export async function updateLedgerEntry(id: string, patch: LedgerPatch): Promise
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) throw new Error("Entry not found.");
   if (await isLinkedLedgerEntry(id)) throw new Error(LINKED_LEDGER_MESSAGE);
+  if (isLocked(approvalOf(existing.approvalStatus)) && existing.cashOut > 0) throw new Error(LOCKED_MESSAGE);
   const next = {
     date: patch.date !== undefined ? clean(patch.date, 10) : existing.date,
     cashIn: patch.cashIn ?? existing.cashIn,
@@ -61,7 +63,8 @@ export async function updateLedgerEntry(id: string, patch: LedgerPatch): Promise
   const error = ledgerEntryError(next);
   if (error) throw new Error(error);
   await checkRefs(next);
-  const row = await db.ledgerEntry.update({ where: { id }, data: next });
+  // Editing a pending or rejected expense sends it back for approval.
+  const row = await db.ledgerEntry.update({ where: { id }, data: { ...next, approvalStatus: statusForSave(next.cashOut, approvalOf(existing.approvalStatus)), ...(next.cashOut > 0 ? { approvedById: null, approvedAt: null } : {}) } });
   await audit(user.email, "ledger.edit", `${id}: ${describe(existing)} -> ${describe(row)}`);
   revalidatePath("/ledger", "layout");
   return toLedgerDTO(row);
@@ -72,6 +75,7 @@ export async function deleteLedgerEntry(id: string): Promise<void> {
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) return;
   if (await isLinkedLedgerEntry(id)) throw new Error(LINKED_LEDGER_MESSAGE);
+  if (isLocked(approvalOf(existing.approvalStatus)) && existing.cashOut > 0) throw new Error(LOCKED_MESSAGE);
   await db.ledgerEntry.delete({ where: { id } });
   // The audit log keeps what was removed (date and amount only).
   await audit(user.email, "ledger.delete", `${id}: ${describe(existing)}`);
@@ -122,4 +126,21 @@ export async function deleteLedgerOption(kind: OptionKind, id: string): Promise<
   await (model(kind) as any).delete({ where: { id } }).catch(() => undefined);
   await audit(user.email, `ledger.${kind}.delete`, id);
   revalidatePath("/ledger", "layout");
+}
+
+/** Final approver only. Approving locks the entry; rejecting sends it back (the entering person can edit and resubmit). */
+export async function decideLedgerEntry(id: string, decision: "approved" | "rejected", note = ""): Promise<LedgerDTO> {
+  const user = await requireAccess("ledger", "edit");
+  if (!canApprove(user)) {
+    await audit(user.email, "ledger.approval.denied", id);
+    throw new Error("Only the ledger approver can approve or reject expenses.");
+  }
+  if (decision !== "approved" && decision !== "rejected") throw new Error("Invalid decision");
+  const existing = await db.ledgerEntry.findUnique({ where: { id } });
+  if (!existing) throw new Error("Entry not found.");
+  if (existing.cashOut <= 0) throw new Error("Only expenses need approval.");
+  const row = await db.ledgerEntry.update({ where: { id }, data: { approvalStatus: decision, approvedById: user.id, approvedAt: new Date(), approvalNote: clean(note, 300) } });
+  await audit(user.email, `ledger.${decision === "approved" ? "approve" : "reject"}`, `${id}: ${describe(row)}`);
+  revalidatePath("/ledger", "layout");
+  return toLedgerDTO(row);
 }

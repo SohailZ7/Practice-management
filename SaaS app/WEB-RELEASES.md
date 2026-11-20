@@ -49,3 +49,4 @@ Web 1.50 | Transcript viewer shows speaker turns with the speaker label and time
 Web 1.51 | Tasks: priority (High / Normal / Low, new nullable-default column), Auto sort by priority then due date with a Manual order toggle | PENDING
 Web 1.52 | Tasks: everyone sees every employee's tasks; non-admins change status/Today on their own tasks and can assign any task to anyone with a tab; title, dates, notes, priority and links need the admin | PENDING
 Web 1.53 | Tasks: Add update on a task (dated, with an Update badge for the assignee until opened; new TaskUpdate table); links need the admin | PENDING
+Web 1.54 | Ledger expense approval: every expense starts Pending, only the ledger approver (set in Admin) approves or rejects, approved entries lock; Claude ledger API follows the same rule | PENDING
