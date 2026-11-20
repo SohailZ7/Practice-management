@@ -808,3 +808,14 @@ input[type=file] { max-width: 100%; }
 .fb-live { font-size: .75rem; white-space: nowrap; color: var(--muted); }
 .fb-live-short { display: none; }
 @media (max-width: 640px) { .fb-live-long { display: none; } .fb-live-short { display: inline; } }
+
+/* Environment bar: always visible across the top, signed in or not. */
+.env-bar { position: fixed; top: 0; left: 0; right: 0; height: 26px; z-index: 80; display: flex; align-items: center; justify-content: center; gap: .6rem; font-size: .75rem; line-height: 1; padding: 0 .75rem; white-space: nowrap; overflow: hidden; border-bottom: 1px solid var(--line); }
+.env-bar strong { letter-spacing: .12em; }
+.env-bar span { overflow: hidden; text-overflow: ellipsis; }
+.env-bar.production { background: var(--card); color: var(--muted); }
+.env-bar.staging { background: var(--amber); color: #fff; border-bottom-color: var(--amber); }
+.env-bar.development { background: #475569; color: #fff; border-bottom-color: #475569; }
+body.has-envbar { padding-top: 26px; }
+body.has-envbar .side { top: 26px; }
+@media print { .env-bar { display: none; } body.has-envbar { padding-top: 0; } }

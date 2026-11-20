@@ -151,3 +151,24 @@ test("Feedback list: rows stay on one line at 900 and 390, show a description sn
   await expect(row.locator(".fb-snip")).toContainText("Snippet text here.");
   await expect(row.locator(".fb-live-long")).toHaveText("Live in production, Web 1.77");
 });
+
+test("Environment bar shows on signed-in and signed-out pages, at 900 and 390, and does not cover the page", async ({ page, context }) => {
+  for (const width of [900, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/login", { waitUntil: "networkidle" });
+    const bar = page.locator(".env-bar");
+    await expect(bar).toBeVisible();
+    await expect(bar).toHaveAttribute("data-env", "development");
+  }
+  await signIn(context);
+  for (const width of [900, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/feedback", { waitUntil: "networkidle" });
+    await expect(page.locator(".env-bar")).toBeVisible();
+    const barBottom = await page.locator(".env-bar").evaluate((e) => e.getBoundingClientRect().bottom);
+    const topbarTop = await page.locator(".topbar").first().evaluate((e) => e.getBoundingClientRect().top);
+    expect(topbarTop, `topbar starts below the bar at ${width}`).toBeGreaterThanOrEqual(barBottom - 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.title()).toContain("[DEV]");
+  }
+});
