@@ -65,8 +65,21 @@ export type FeedbackOut = {
   release: number | null;
 };
 
+/**
+ * Items filed through the Feedback API / MCP are authored by the token's user (shown as "Agent"), and createFeedbackAsAgent writes the
+ * real submitter as the first description line ("Submitted by: Sohail"). Show that name. Only for source "mcp", so a person typing the
+ * same words into the web form cannot pose as someone else. Older items need no backfill: this reads the line they already have.
+ */
+export function submitterName(row: { author: { name: string }; source?: string; description: string }): string {
+  if (row.source === "mcp") {
+    const m = /^Submitted by: ([^\n]{1,80})/.exec(row.description);
+    if (m && m[1].trim()) return m[1].trim();
+  }
+  return row.author.name;
+}
+
 export function toFeedbackOut(
-  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; status?: string; triageOutcome?: string | null; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null; shippedRelease?: number | null },
+  row: { id: string; kind: string; title: string; description: string; authorId: string; createdAt: Date; updatedAt: Date; author: { name: string }; source?: string; status?: string; triageOutcome?: string | null; scope?: string | null; testNotes?: string; ownerApprovedAt?: Date | null; shippedRelease?: number | null },
   viewerId: string,
 ): FeedbackOut {
   return {
@@ -74,7 +87,7 @@ export function toFeedbackOut(
     kind: isKind(row.kind) ? row.kind : "FEEDBACK",
     title: row.title,
     description: row.description,
-    authorName: row.author.name,
+    authorName: submitterName(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     mine: canEditFeedback(viewerId, row.authorId),
