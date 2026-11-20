@@ -98,7 +98,15 @@ export function applyReorder<T extends { id: string }>(all: T[], orderedIds: str
   const inSet = new Set(orderedIds);
   const byId = new Map(all.map((t) => [t.id, t]));
   let cursor = 0;
-  return all.map((t) => (inSet.has(t.id) ? (byId.get(orderedIds[cursor++]) ?? t) : t));
+  const moved = all.map((t) => (inSet.has(t.id) ? (byId.get(orderedIds[cursor++]) ?? t) : t));
+  // The server hands the moved tasks' sort values to them in the new order (reorderTasks). Mirror that here, because
+  // Past due is sorted by sortOrder: without it the dragged row snapped back until the page was reloaded.
+  const withOrder = (t: T): t is T & { sortOrder: number } => typeof (t as { sortOrder?: unknown }).sortOrder === "number";
+  const slots = orderedIds.map((id) => byId.get(id)).filter((t): t is T & { sortOrder: number } => !!t && withOrder(t)).map((t) => t.sortOrder).sort((a, b) => a - b);
+  if (slots.length !== orderedIds.length) return moved;
+  const distinct = slots.every((v, i) => i === 0 || v > slots[i - 1]);
+  const next = new Map(orderedIds.map((id, i) => [id, distinct ? slots[i] : slots[0] + i]));
+  return moved.map((t) => (next.has(t.id) ? { ...t, sortOrder: next.get(t.id)! } : t));
 }
 
 /** True when an unfinished task has passed its expiration date. */

@@ -150,8 +150,12 @@ export function TaskBoard({ access, initialTasks, categories: initialCategories,
     }
   }
 
-  const reorder = (orderedIds: string[]) =>
-    mutate(applyReorder(tasks, orderedIds), () => reorderTasks(orderedIds));
+  const reorder = (orderedIds: string[]) => {
+    // Auto sort puts the list straight back by priority and due date, so a drag there looked dead. Dragging means
+    // "I want this order": switch to Manual order, which shows the saved drag order.
+    setAuto(false);
+    return mutate(applyReorder(tasks, orderedIds), () => reorderTasks(orderedIds));
+  };
 
   async function addLink(id: string, url: string) {
     setError("");

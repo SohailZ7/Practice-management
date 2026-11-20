@@ -73,6 +73,17 @@ describe("applyReorder", () => {
   it("leaves the list alone for an identical order", () => {
     expect(applyReorder(all, ["b", "d"])).toEqual(all);
   });
+  it("hands the sort values to the moved tasks in the new order, like the server (Past due is sorted by them)", () => {
+    const rows = [{ id: "a", sortOrder: 1 }, { id: "b", sortOrder: 2 }, { id: "c", sortOrder: 3 }];
+    const out = applyReorder(rows, ["c", "a"]);
+    expect(out.map((t) => [t.id, t.sortOrder])).toEqual([["c", 1], ["b", 2], ["a", 3]]);
+    // sorting by sortOrder (what Past due does) now shows the dragged order
+    expect([...out].sort((x, y) => x.sortOrder - y.sortOrder).map((t) => t.id)).toEqual(["c", "b", "a"]);
+  });
+  it("falls back to consecutive values when the sort values collide", () => {
+    const rows = [{ id: "a", sortOrder: 0 }, { id: "b", sortOrder: 0 }];
+    expect(applyReorder(rows, ["b", "a"]).map((t) => [t.id, t.sortOrder])).toEqual([["b", 0], ["a", 1]]);
+  });
 });
 
 import { normalizeTheme, themeAttribute } from "../src/lib/theme";

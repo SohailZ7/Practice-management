@@ -38,3 +38,30 @@ test("Feedback: a new item can be submitted and appears", async ({ page, context
     await expect(page.getByText("Synthetic regression item").first()).toBeVisible();
   }
 });
+
+test("Tasks: dragging a task works, switches Auto sort to Manual order, and the new order sticks", async ({ page, context }) => {
+  await signIn(context);
+  await page.goto("/tasks", { waitUntil: "networkidle" });
+  await expect(page.getByRole("button", { name: "Auto sort" })).toBeVisible();
+  // Past due has several seeded tasks; take its first two handles.
+  const section = page.locator("section.todo-section").filter({ has: page.locator(".drag-handle") }).first();
+  const handles = section.locator(".drag-handle");
+  expect(await handles.count()).toBeGreaterThanOrEqual(2);
+  const rows = section.locator(".todo-item");
+  const title = async (i: number) => (await rows.nth(i).locator(".todo-row").innerText()).split("\n").find((l) => l.trim().length > 3 && l.trim() !== "⠿") ?? "";
+  const first = await title(0);
+  const a = await handles.nth(0).boundingBox();
+  const b = await handles.nth(1).boundingBox();
+  if (!a || !b) throw new Error("no handle box");
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2 + 12, { steps: 4 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height + 30, { steps: 12 });
+  await page.mouse.up();
+  await expect(page.getByRole("button", { name: "Manual order" })).toBeVisible();
+  await expect.poll(async () => title(1)).toBe(first);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Auto sort|Manual order/ }).click();
+  await expect(page.getByRole("button", { name: "Manual order" })).toBeVisible();
+  await expect.poll(async () => (await section.locator(".todo-item").nth(1).locator(".todo-row").innerText()).includes(first.trim())).toBe(true);
+});
