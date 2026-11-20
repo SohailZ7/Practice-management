@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pre-promote gate, staging only. Runs EVERY smoke step with nothing skipped:
 #   1) makes fake @bbc.invalid users + tokens via the staging schema job, 2) runs the anonymous and signed-in checks,
-#   3) revokes the tokens and restores the job. Needs gcloud signed in with access to bbc-practice-mgmt-staging.
+#   3) revokes the tokens and restores the job, 4) runs the screen regression suite (npm run test:screens) on this commit. Needs gcloud signed in with access to bbc-practice-mgmt-staging.
 # Usage: scripts/staging-gate.sh   (run from "SaaS app"; the candidate revision with this script must already be deployed)
 set -uo pipefail
 P=bbc-practice-mgmt-staging; REG=us-east4; JOB=bbc-schema-push; SVC=practice-mgmt
@@ -15,4 +15,9 @@ rc=0
 SMOKE_BASE=$BASE SYNTHETIC_KEY=${SYNTHETIC_KEY:-} PROD_BASE=${PROD_BASE:-} DESKTOP_TOKEN=$(python3 -c "import json,sys;print(json.load(open('$TOK'))['edit'])") npx tsx scripts/staging-smoke.ts || rc=1
 SMOKE_BASE=$BASE SMOKE_TOKENS_FILE=$TOK npx tsx scripts/staging-live.ts || rc=1
 runjob revoke
+# 4) Screen regression suite (every page: renders, layout, overflow, console errors, core actions) on THIS exact commit, against a
+#    local throwaway database with synthetic data. Needs local Postgres (docker compose up -d db) and Chrome. Any failure fails the gate.
+echo "== screen regression suite @ $(git rev-parse --short HEAD) =="
+E2E_PROD=1 npx playwright test || { echo "SCREEN REGRESSION SUITE FAILED: do not promote"; rc=1; }
+echo "screen-suite-commit: $(git rev-parse HEAD)"
 exit $rc

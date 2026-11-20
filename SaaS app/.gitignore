@@ -12,3 +12,5 @@ next-env.d.ts
 *.xlsx
 *.xls
 !tests/fixtures/.gitkeep
+e2e/.results
+playwright-report

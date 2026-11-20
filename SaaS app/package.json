@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:screens": "playwright test",
     "db:push": "tsx scripts/safe-db-push.ts",
     "db:seed": "tsx prisma/seed.ts",
     "setup": "prisma generate && tsx scripts/safe-db-push.ts && npm run db:harden && tsx prisma/seed.ts",
@@ -39,6 +40,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
