@@ -47,4 +47,5 @@ Web 1.44 | Unification Release B2b: ScheduleEntry model removed (table dropped o
 Web 1.45 | Unlink on a copied unmatched row now clears its patient link (found in the staging browser check); no schema | e2140b3 pushed | staging 00151-naj, smoke 142/0, unlink re-checked in browser
 Web 1.50 | Transcript viewer shows speaker turns with the speaker label and time on each (read from the stored text, nothing stored or rewritten); design note for speaker correction and segments | pending
 Web 1.46 | Schedule day order now uses the shared exact-time-first rule (10 AM, 9-11, 9-12, 1 PM, 12-3), same as Notes; no schema | local, staging pending
+Web 1.46 | Schedule day order now uses the shared exact-time-first rule (10 AM, 9-11, 9-12, 1 PM, 12-3), same as Notes; no schema | 60ea486, staging 00153-vum, smoke 142/0
 Web 1.47 | Full names switch (Settings) now defaults ON for users an admin allowed (was off, so ticking the Admin box still showed initials); Privacy mode still wins; no schema | local, staging pending
