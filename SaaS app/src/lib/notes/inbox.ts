@@ -2,6 +2,8 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/desktop/api";
+import { patientInitials } from "@/lib/notes/patientFolder";
+import { localParts, suggestVisit, type Suggestion } from "@/lib/notes/suggestVisit";
 import { parseConsent, saveConsent, type ConsentInput } from "@/lib/consent/recordingConsent";
 
 export const MAX_INBOX_TEXT = 2_000_000;
@@ -136,12 +138,32 @@ export async function linkInbox(uuid: string, visitId: string, mode?: LinkMode) 
   return { ok: true, visitId, result };
 }
 
-export async function listInbox(linked: boolean | null) {
+export async function listInbox(linked: boolean | null, opts: { suggest?: boolean } = {}) {
   const rows = await db.recordingInbox.findMany({
     where: linked === null ? {} : linked ? { visitId: { not: null } } : { visitId: null },
     orderBy: { recordedAt: "desc" },
     take: 200,
-    select: { id: true, recordedAt: true, durationSeconds: true, final: true, seq: true, visitId: true },
+    select: { id: true, recordedAt: true, durationSeconds: true, final: true, seq: true, visitId: true, createdByEmail: true },
   });
-  return { items: rows.map((r) => ({ uuid: r.id, recordedAt: r.recordedAt.toISOString(), durationSeconds: r.durationSeconds, final: r.final, seq: r.seq, visitId: r.visitId })) };
+  const suggestions = new Map<string, Suggestion | null>();
+  if (opts.suggest) {
+    const open = rows.filter((r) => !r.visitId);
+    const days = Array.from(new Set(open.map((r) => localParts(r.recordedAt).date)));
+    const emails = Array.from(new Set(open.map((r) => r.createdByEmail)));
+    const [visits, users] = days.length
+      ? await Promise.all([
+          db.visit.findMany({ where: { visitDate: { in: days } }, include: { patient: { select: { firstName: true, lastName: true } } } }),
+          db.user.findMany({ where: { email: { in: emails } }, select: { email: true, name: true } }),
+        ])
+      : [[], []];
+    const nameOf = new Map(users.map((u) => [u.email, u.name]));
+    const pool = visits.map((v) => ({ id: v.id, visitDate: v.visitDate, apptTime: v.apptTime, startTime: v.startTime, providerName: v.providerName, status: v.status, transcript: v.transcript, initials: patientInitials(v.patient.lastName, v.patient.firstName) }));
+    for (const r of open) suggestions.set(r.id, suggestVisit(r, nameOf.get(r.createdByEmail) ?? "", pool));
+  }
+  return {
+    items: rows.map((r) => ({
+      uuid: r.id, recordedAt: r.recordedAt.toISOString(), durationSeconds: r.durationSeconds, final: r.final, seq: r.seq, visitId: r.visitId,
+      ...(opts.suggest && !r.visitId ? { suggestion: suggestions.get(r.id) ?? null } : {}),
+    })),
+  };
 }
