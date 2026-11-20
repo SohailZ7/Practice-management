@@ -7,6 +7,7 @@ import { isISODate } from "../dates";
 import { validatePatient } from "../billing/validate";
 import { apptTimeOf, parseClient } from "./scheduleParse";
 import { loadVisitOptions, matchOption } from "./options";
+import { autoEncounterForVisit } from "@/lib/billing/autoEncounter";
 import { timeColumns } from "../unify/plan";
 import { scheduleFieldsFor } from "./visitSchedule";
 import { isVisitStatus, type VisitStatus } from "./visitStatus";
@@ -126,6 +127,7 @@ export async function addVisit(
     },
   });
   await audit(actor.email, "notes.visit.add", `visit ${visit.id} ${input.date}`);
+  if (fields.status !== undefined) await autoEncounterForVisit(actor, visit.id);
   return visit;
 }
 
@@ -137,6 +139,8 @@ export async function updateVisit(actor: { email: string }, id: string, patch: V
   const data = touches ? { ...clean, ...(await unifiedColumns({ ...existing, ...clean })) } : clean;
   const visit = await db.visit.update({ where: { id }, data });
   await audit(actor.email, "notes.visit.update", `visit ${id} fields=${Object.keys(clean).join(",")}`);
+  // Seen to Billing: a visit that is now Seen or Note signed gets its draft Encounter (once). Never blocks the update.
+  if (clean.status !== undefined) await autoEncounterForVisit(actor, id);
   return visit;
 }
 

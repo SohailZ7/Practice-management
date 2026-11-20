@@ -91,6 +91,7 @@ describe("getixBlocker", () => {
     expect(getixBlocker({ mrn: null }, { deletedAt: null, getixEntered: false })).toMatch(/MRN/);
     expect(getixBlocker({ mrn: "A1" }, { deletedAt: new Date(), getixEntered: false })).toMatch(/deleted/i);
     expect(getixBlocker({ mrn: "A1" }, { deletedAt: null, getixEntered: false })).toBeNull();
+    expect(getixBlocker({ mrn: "A1" }, { deletedAt: null, getixEntered: false, chargeCode: "NB DC" })).toMatch(/not entered in GetIX/);
   });
 });
 

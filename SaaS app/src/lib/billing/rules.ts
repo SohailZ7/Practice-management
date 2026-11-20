@@ -16,8 +16,10 @@ export const ownsEncounter = (user: Actor, e: Pick<EncounterState, "createdById"
 export const canChangeEncounter = (user: Actor, e: EncounterState) =>
   (isAdmin(user) || ownsEncounter(user, e)) && !e.getixEntered && !e.deletedAt;
 
-export function getixBlocker(patient: { mrn: string | null }, e: Pick<EncounterState, "deletedAt" | "getixEntered">): string | null {
+export function getixBlocker(patient: { mrn: string | null }, e: Pick<EncounterState, "deletedAt" | "getixEntered"> & { chargeCode?: string }): string | null {
   if (e.deletedAt) return "A deleted encounter can't be marked.";
+  // NB DC is billable to FFX but never entered in GetIX.
+  if ((e.chargeCode ?? "").trim().toUpperCase() === "NB DC") return "NB DC is billable to FFX but is not entered in GetIX.";
   if (!patient.mrn) return "Add the patient's MRN before marking this encounter as entered into GetIX.";
   return null;
 }
