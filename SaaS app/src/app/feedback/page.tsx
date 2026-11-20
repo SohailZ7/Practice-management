@@ -8,6 +8,7 @@ import { StatusButtons } from "@/components/StatusButtons";
 import { KINDS, KIND_LABEL, MAX_DESCRIPTION, MAX_TITLE } from "@/lib/feedback/rules";
 import { submitFeedback, editFeedback, moveFeedback, saveTestNotes, commentOnFeedback, addScreenshots } from "./actions";
 import { workflowActor } from "@/lib/feedback/actor";
+import { liveBadge, rowHover, rowSnippet } from "@/lib/feedback/rowText";
 import { listImages, MAX_IMAGES_PER_ITEM } from "@/lib/feedback/images";
 
 export const dynamic = "force-dynamic";
@@ -70,8 +71,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
       {items.map((i) => (
         <details key={i.id} className="card fb-item">
           <summary className="fb-line">
-            <span className="fb-title">{i.title}</span>
+            <span className="fb-title" title={rowHover(i.title, i.description)}>{i.title}{rowSnippet(i.title, i.description) && <span className="fb-snip"> — {rowSnippet(i.title, i.description)}</span>}</span>
             <span className="muted small fb-by">{i.authorName} · {when(i.createdAt)}</span>
+            {liveBadge(i.status, i.release) && <span className="fb-live" title={liveBadge(i.status, i.release)!}><span className="fb-live-long">{liveBadge(i.status, i.release)}</span><span className="fb-live-short">Live, Web 1.{i.release}</span></span>}
             <span className={`fb-status fb-${i.status}`}>{STATUS_LABEL[i.status]}{i.status === "triaged" && i.triage ? ` · ${TRIAGE_LABEL[i.triage]}` : ""}</span>
           </summary>
           <div className="muted small" style={{ marginTop: ".5rem" }}>{KIND_LABEL[i.kind]} · {i.authorName} · {when(i.createdAt)}</div>

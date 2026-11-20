@@ -128,3 +128,26 @@ test("Feedback: a screenshot attaches on submit, shows on the item, and a non-im
   await item.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText(/must be PNG, JPEG, GIF or WebP/)).toBeVisible();
 });
+
+test("Feedback list: rows stay on one line at 900 and 390, show a description snippet, and Released shows the live badge", async ({ page, context }) => {
+  await signIn(context);
+  const prisma = new PrismaClient({ datasources: { db: { url: E2E_DATABASE_URL } } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { email: "e2e-admin@bbc.invalid" } });
+  const long = "A very long title that goes on and on about how the thing should behave differently on every screen size we support ".repeat(2);
+  await prisma.feedbackItem.create({ data: { kind: "FEEDBACK", title: "Live badge item", description: "Snippet text here.", authorId: admin.id, status: "released", shippedRelease: 77 } });
+  await prisma.feedbackItem.create({ data: { kind: "FEEDBACK", title: long, description: "x", authorId: admin.id } });
+  await prisma.$disconnect();
+  for (const width of [900, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/feedback", { waitUntil: "networkidle" });
+    const lines = page.locator(".fb-line");
+    const heights = await lines.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+    expect(Math.max(...heights), `row heights at ${width}`).toBeLessThan(48);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("/feedback", { waitUntil: "networkidle" });
+  const row = page.locator("details.fb-item", { hasText: "Live badge item" }).first();
+  await expect(row.locator(".fb-snip")).toContainText("Snippet text here.");
+  await expect(row.locator(".fb-live-long")).toHaveText("Live in production, Web 1.77");
+});
