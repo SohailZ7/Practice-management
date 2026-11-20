@@ -18,6 +18,8 @@ export const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // Nothing uses next/image; turning the optimizer off removes the unauthenticated /_next/image endpoint (F1 exposure check).
+  images: { unoptimized: true },
   experimental: {
     serverComponentsExternalPackages: ["exceljs"],
     // src/instrumentation.ts refuses to start production without PHI_ENCRYPTION_KEY.
