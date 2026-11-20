@@ -4,7 +4,8 @@
 //   the item waits as Triaged until the author or owner replies and the owner triages again).
 //   owner (ADMIN)     any change; only the owner triages (Accepted needs a scope) and sets Tested for "other" items.
 //   approver (flag)   on an item that is On Staging: Tested, back to Building (comment required), Rejected.
-//   agent (API token) Triaged+Accepted -> Building, Building -> On Staging (needs test notes), Tested -> Release to Prod.
+//   agent (API token) New -> Triaged (counts as Accepted, no scope), Triaged+Accepted -> Building, Building -> On Staging (needs test
+//                     notes), On Staging -> Tested, Tested -> Release to Prod. Never: Rejected, More info, owner approval, deletes.
 // Small UI changes auto-promote once Tested; "other" items also need the owner's own approval click.
 //
 // Older rows keep their old words in the database until migrated; normalizeState() reads them as the new states:
@@ -77,7 +78,7 @@ export type MoveExtra = { scope?: FeedbackScope | null; comment?: string; testNo
 
 /** Agent path. Building from Triaged needs the Accepted outcome (checked in checkMove). */
 function agentMoves(status: FeedbackStatus): FeedbackStatus[] {
-  return status === "triaged" ? ["building"] : status === "building" ? ["on_staging"] : status === "tested" ? ["released"] : [];
+  return status === "new" ? ["triaged"] : status === "triaged" ? ["building"] : status === "building" ? ["on_staging"] : status === "on_staging" ? ["tested"] : status === "tested" ? ["released"] : [];
 }
 
 export function checkMove(actor: Actor, item: Item, to: FeedbackStatus, extra: MoveExtra): Move {

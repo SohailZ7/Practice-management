@@ -18,7 +18,7 @@ describe("feedback workflow permissions", () => {
     expect(checkMove(owner, item("new"), "triaged", { triage: "more_info" })).toEqual({ ok: false, error: "comment_required" });
     expect(checkMove(owner, item("new"), "triaged", { triage: "more_info", comment: "Which screen?" })).toEqual({ ok: true });
     expect(checkMove(owner, item("new"), "rejected", {})).toEqual({ ok: true });
-    for (const a of [approver, staff, agent]) expect(checkMove(a, item("new"), "triaged", { triage: "accepted", scope: "ui_small" }).ok).toBe(false);
+    for (const a of [approver, staff]) expect(checkMove(a, item("new"), "triaged", { triage: "accepted", scope: "ui_small" }).ok).toBe(false);
     expect(checkMove(approver, item("new"), "triaged", { triage: "accepted", scope: "ui_small" })).toEqual({ ok: false, error: "only_owner_can_triage" });
   });
   it("re-triaging from More info needed to Accepted is allowed even though the status stays Triaged", () => {
@@ -48,8 +48,11 @@ describe("feedback workflow permissions", () => {
     expect(checkMove(agent, item("building"), "on_staging", {})).toEqual({ ok: false, error: "test_notes_required" });
     expect(checkMove(agent, item("building"), "on_staging", { testNotes: "Open Schedule; check the row." })).toEqual({ ok: true });
     expect(checkMove(agent, item("tested"), "released", {}).ok).toBe(true);
-    for (const to of ["tested", "triaged", "rejected", "building"] as const) expect(checkMove(agent, item("on_staging"), to, {}).ok).toBe(false);
-    expect(checkMove(agent, item("new"), "building", {}).ok).toBe(false);
+    expect(checkMove(agent, item("new"), "triaged", {}).ok).toBe(true);
+    expect(checkMove(agent, item("on_staging"), "tested", {}).ok).toBe(true);
+    for (const to of ["triaged", "rejected", "building", "released"] as const) expect(checkMove(agent, item("on_staging"), to, {}).ok).toBe(false);
+    for (const to of ["rejected", "building", "tested", "released"] as const) expect(checkMove(agent, item("new"), to, {}).ok).toBe(false);
+    expect(checkMove(agent, item("triaged", { triage: "accepted" }), "rejected", {}).ok).toBe(false);
     expect(checkMove(agent, item("on_staging"), "released", {}).ok).toBe(false);
   });
   it("no change to the same status", () => expect(checkMove(owner, item("new"), "new", {})).toEqual({ ok: false, error: "already_in_status" }));
@@ -59,6 +62,8 @@ describe("feedback workflow permissions", () => {
     expect(nextMoves(approver, "building")).toEqual([]);
     expect(nextMoves(staff, "on_staging")).toEqual([]);
     expect(nextMoves(agent, "tested")).toEqual(["released"]);
+    expect(nextMoves(agent, "new")).toEqual(["triaged"]);
+    expect(nextMoves(agent, "on_staging")).toEqual(["tested"]);
     expect(nextMoves(agent, "triaged", "more_info")).toEqual([]);
     expect(nextMoves(agent, "triaged", "accepted")).toEqual(["building"]);
   });
