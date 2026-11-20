@@ -2,8 +2,8 @@
 // the text of a feedback item (which may have been dictated) is never written to the audit log or any log.
 import { db } from "../db";
 import { audit } from "../audit";
-import { canEditFeedback, checkFeedback, toFeedbackOut, type FeedbackOut, type FeedbackPatch } from "./rules";
-import type { PhiKind } from "../phiGuard";
+import { canEditFeedback, checkFeedback, MAX_DESCRIPTION, toFeedbackOut, type FeedbackOut, type FeedbackPatch } from "./rules";
+import { detectPhi, type PhiKind } from "../phiGuard";
 import { releaseNumber, runningReleaseNumber, shipDueItems } from "./autoShip";
 
 export class FeedbackError extends Error {
@@ -32,6 +32,36 @@ export async function createFeedback(user: { id: string; email: string }, body: 
   return toFeedbackOut(row, user.id);
 }
 
+/** Agent intake (practice-production MCP create_feedback): the item starts Triaged + Accepted, authored by the token's user. The named submitter goes in the first description line (no schema change). */
+export async function createFeedbackAsAgent(
+  user: { id: string; email: string },
+  input: { title?: unknown; description?: unknown; submitter?: unknown; scope?: unknown; kind?: unknown },
+): Promise<FeedbackOut> {
+  const submitter = typeof input.submitter === "string" ? input.submitter.trim() : "";
+  if (!submitter || submitter.length > 80) throw new FeedbackError(400, "bad_submitter");
+  if (input.scope !== undefined && input.scope !== null && !isScope(input.scope)) throw new FeedbackError(400, "bad_scope");
+  const body = { kind: input.kind ?? "FEEDBACK", title: input.title, description: typeof input.description === "string" ? input.description : "" };
+  const c = checkFeedback(body, "create");
+  if (!c.ok) throw new FeedbackError(c.phi ? 422 : 400, c.phi ? "possible_phi" : c.error, c.phi);
+  if (detectPhi(submitter).length) throw new FeedbackError(422, "possible_phi");
+  const v = c.value;
+  const scope = isScope(input.scope) ? input.scope : null;
+  const description = `Submitted by: ${submitter}${v.description ? `\n\n${v.description}` : ""}`.slice(0, MAX_DESCRIPTION);
+  const row = await db.$transaction(async (tx) => {
+    const r = await tx.feedbackItem.create({
+      data: { kind: v.kind!, title: v.title!, description, authorId: user.id, source: "mcp", status: "triaged", triageOutcome: "accepted", scope },
+      include: withAuthor,
+    });
+    const ev = (field: string, from: string | null, to: string | null) => tx.feedbackEvent.create({ data: { itemId: r.id, actorName: "Agent", actorKind: "agent", field, fromValue: from, toValue: to } });
+    await ev("status", "new", "triaged");
+    await ev("triage", null, "accepted");
+    if (scope) await ev("scope", null, scope);
+    return r;
+  });
+  await audit(user.email, "feedback.add", `${row.id} ${row.kind} via mcp`);
+  return toFeedbackOut(row, user.id);
+}
+
 export async function updateFeedback(user: { id: string; email: string }, id: string, body: Record<string, unknown>, source: "web" | "desktop"): Promise<FeedbackOut> {
   const existing = await db.feedbackItem.findUnique({ where: { id } });
   if (!existing) throw new FeedbackError(404, "not_found");
@@ -46,7 +76,6 @@ export async function updateFeedback(user: { id: string; email: string }, id: st
 
 // ---- Workflow: status changes, test notes, comments --------------------------------------------------------------
 import { checkMove, isScope, isStatusWord, isTriage, LEGACY_MAP, MAX_COMMENT, MAX_TEST_NOTES, normalizeState, storedWordsFor, triageStatus, type Actor, type FeedbackStatus, type TriageOutcome } from "./workflow";
-import { detectPhi } from "../phiGuard";
 
 export type WorkflowActor = Actor & { email: string; name: string };
 export type CommentOut = { id: string; authorName: string; authorKind: string; body: string; createdAt: string };
