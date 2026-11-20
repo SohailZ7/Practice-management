@@ -6,8 +6,9 @@ import { listComments, listEvents, listFeedback } from "@/lib/feedback/service";
 import { FLOW, nextMoves, readyToPromote, SCOPES, SCOPE_LABEL, STATUS_LABEL, STATUSES, TRIAGE_LABEL, TRIAGE_OUTCOMES, isStatusWord, normalizeState } from "@/lib/feedback/workflow";
 import { StatusButtons } from "@/components/StatusButtons";
 import { KINDS, KIND_LABEL, MAX_DESCRIPTION, MAX_TITLE } from "@/lib/feedback/rules";
-import { submitFeedback, editFeedback, moveFeedback, saveTestNotes, commentOnFeedback } from "./actions";
+import { submitFeedback, editFeedback, moveFeedback, saveTestNotes, commentOnFeedback, addScreenshots } from "./actions";
 import { workflowActor } from "@/lib/feedback/actor";
+import { listImages, MAX_IMAGES_PER_ITEM } from "@/lib/feedback/images";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +35,13 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
       title: st === "building" && (i.status === "on_staging" || i.status === "tested") ? "Send back to Building (comment required)" : undefined,
     }));
   };
-  const [comments, events] = await Promise.all([listComments(items.map((i) => i.id)), listEvents(items.map((i) => i.id))]);
+  const [comments, events, images] = await Promise.all([listComments(items.map((i) => i.id)), listEvents(items.map((i) => i.id)), listImages(items.map((i) => i.id))]);
   return (
     <>
       <PageHead eyebrow="A workspace that grows with you" title="Good ideas start here." />
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted small">Tell us what to improve or what is broken. Type only, and never include patient information. Anyone signed in can add an item; only its author can edit it.</p>
-      <form action={submitFeedback} className="card">
+      <form action={submitFeedback} className="card" encType="multipart/form-data">
         <div className="row">
           <select name="kind" defaultValue="FEEDBACK" aria-label="Category">
             {KINDS.map((k) => (
@@ -50,6 +51,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
           <input name="title" placeholder="Title" maxLength={MAX_TITLE} className="grow" required />
         </div>
         <textarea name="description" placeholder="Description" rows={4} maxLength={MAX_DESCRIPTION} style={{ width: "100%", marginTop: ".5rem" }} />
+        <label className="small muted" style={{ display: "block", marginTop: ".5rem" }}>Screenshots (optional, up to {MAX_IMAGES_PER_ITEM}, 3 MB each; hide any patient information first){" "}
+          <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" multiple />
+        </label>
         <button type="submit" style={{ marginTop: ".5rem" }}>Submit</button>
       </form>
 
@@ -77,6 +81,23 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
               Scope: {i.scope ? SCOPE_LABEL[i.scope] : "not set"}{i.release ? ` · built in Web 1.${i.release}${i.status === "released" ? ", live in production" : ""}` : ""}
               {i.status === "tested" ? (readyToPromote(i).ready ? " · ready to promote" : " · needs the owner's approval before promotion") : ""}
             </p>
+          )}
+          {(images[i.id] ?? []).length > 0 && (
+            <div className="fb-shots" aria-label="Screenshots">
+              {images[i.id].map((im) => (
+                <a key={im.id} href={`/api/feedback/images/${im.id}`} target="_blank" rel="noopener noreferrer"><img src={`/api/feedback/images/${im.id}`} alt={im.name} loading="lazy" /></a>
+              ))}
+            </div>
+          )}
+          {i.mine && (images[i.id] ?? []).length < MAX_IMAGES_PER_ITEM && (
+            <details>
+              <summary className="small">Add screenshot</summary>
+              <form action={addScreenshots} className="row" encType="multipart/form-data">
+                <input type="hidden" name="id" value={i.id} />
+                <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" multiple required aria-label="Screenshot" />
+                <button type="submit" className="secondary">Add</button>
+              </form>
+            </details>
           )}
           {i.testNotes && <div className="fb-notes"><strong className="small">Test notes</strong><p style={{ whiteSpace: "pre-wrap", margin: ".25rem 0 0" }}>{i.testNotes}</p></div>}
           {(comments[i.id] ?? []).length > 0 && (

@@ -22,6 +22,8 @@ const nextConfig = {
     serverComponentsExternalPackages: ["exceljs"],
     // src/instrumentation.ts refuses to start production without PHI_ENCRYPTION_KEY.
     instrumentationHook: true,
+    // Feedback screenshots arrive with the form: up to 5 images of 3 MB.
+    serverActions: { bodySizeLimit: "16mb" },
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

@@ -5,12 +5,15 @@ import { requireUser } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
 import { addFeedbackComment, createFeedback, FeedbackError, setFeedbackWorkflow, updateFeedback } from "@/lib/feedback/service";
 import { workflowActor } from "@/lib/feedback/actor";
+import { addFeedbackImages } from "@/lib/feedback/images";
 
 const BASE = "/feedback";
 
 function body(form: FormData) {
   return { kind: str(form, "kind"), title: str(form, "title"), description: typeof form.get("description") === "string" ? (form.get("description") as string) : "" };
 }
+
+const files = (form: FormData) => form.getAll("image").filter((f): f is File => f instanceof File);
 
 const WF: Record<string, string> = {
   only_owner_can_triage: "Only the owner can triage an item.",
@@ -23,18 +26,30 @@ const WF: Record<string, string> = {
   possible_phi: "This looks like it contains patient information. Remove it and try again.",
   already_in_status: "It is already in that status.",
   nothing_to_change: "Nothing to change.",
+  too_many_images: "An item can have up to 5 screenshots.",
+  image_too_large: "Each screenshot must be under 3 MB.",
+  not_an_image: "Screenshots must be PNG, JPEG, GIF or WebP images.",
 };
 const message = (e: FeedbackError) => (WF[e.code] ? WF[e.code] : e.code === "possible_phi" ? "This looks like it contains patient information. Remove it and try again." : e.code === "forbidden" ? "Only the author can edit this." : e.code === "not_found" ? "That item no longer exists." : e.code);
 
 export async function submitFeedback(form: FormData) {
   const user = await requireUser();
+  let id: string;
   try {
-    await createFeedback(user, body(form), "web");
+    id = (await createFeedback(user, body(form), "web")).id;
   } catch (e) {
     if (e instanceof FeedbackError) flash(BASE, "error", message(e));
     throw e;
   }
+  let imageError = "";
+  try {
+    await addFeedbackImages(user, id, files(form));
+  } catch (e) {
+    if (!(e instanceof FeedbackError)) throw e;
+    imageError = message(e);
+  }
   revalidatePath(BASE);
+  if (imageError) flash(BASE, "error", `Your feedback was added, but the screenshots were not: ${imageError} Use Add screenshot on the item to try again.`);
   flash(BASE, "notice", "Thank you. Your feedback was added.");
 }
 
@@ -90,4 +105,17 @@ export async function commentOnFeedback(form: FormData) {
   }
   revalidatePath(BASE);
   flash(BASE, "notice", "Comment added.");
+}
+
+export async function addScreenshots(form: FormData) {
+  const user = await requireUser();
+  try {
+    const n = await addFeedbackImages(user, str(form, "id"), files(form));
+    if (n === 0) flash(BASE, "error", "Choose an image first.");
+  } catch (e) {
+    if (e instanceof FeedbackError) flash(BASE, "error", message(e));
+    throw e;
+  }
+  revalidatePath(BASE);
+  flash(BASE, "notice", "Screenshot added.");
 }

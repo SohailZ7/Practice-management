@@ -103,3 +103,28 @@ test("Patient chart: account number and allergies save and show", async ({ page,
   await expect(page.getByLabel("Account no")).toHaveValue("AC777");
   await expect(page.getByLabel("Allergies")).toHaveValue("Penicillin");
 });
+
+// 1x1 transparent PNG.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+
+test("Feedback: a screenshot attaches on submit, shows on the item, and a non-image is refused", async ({ page, context }) => {
+  await signIn(context);
+  await page.goto("/feedback", { waitUntil: "networkidle" });
+  await page.getByPlaceholder("Title").first().fill("Shot test item");
+  await page.locator('form.card input[type=file]').setInputFiles({ name: "shot.png", mimeType: "image/png", buffer: PNG });
+  await page.getByRole("button", { name: "Submit" }).click();
+  await expect(page.getByText("Thank you. Your feedback was added.")).toBeVisible();
+  const item = page.locator("details.fb-item", { hasText: "Shot test item" });
+  await item.locator("summary").first().click();
+  const img = item.locator(".fb-shots img");
+  await expect(img).toHaveCount(1);
+  const src = await img.getAttribute("src");
+  const res = await page.request.get(src!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toBe("image/png");
+  // A text file renamed .png is refused by signature.
+  await item.getByText("Add screenshot").click();
+  await item.locator('input[type=file]').setInputFiles({ name: "fake.png", mimeType: "image/png", buffer: Buffer.from("<html>not an image</html>") });
+  await item.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(/must be PNG, JPEG, GIF or WebP/)).toBeVisible();
+});

@@ -614,6 +614,7 @@ model FeedbackItem {
   shippedRelease  Int?
   events          FeedbackEvent[]
   comments        FeedbackComment[]
+  images          FeedbackImage[]
 
   @@index([createdAt])
   @@index([status])
@@ -865,4 +866,18 @@ model VisitChecklistItem {
 
   @@unique([visitId, kind, label])
   @@index([visitId])
+}
+
+// A screenshot attached to a feedback item. Raster images only (PNG, JPEG, GIF, WebP), 3 MB each, up to 5 per item, kept in the database. Additive.
+model FeedbackImage {
+  id        String       @id @default(cuid())
+  itemId    String
+  name      String
+  mime      String
+  size      Int
+  data      Bytes
+  createdAt DateTime     @default(now())
+  item      FeedbackItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, createdAt])
 }
