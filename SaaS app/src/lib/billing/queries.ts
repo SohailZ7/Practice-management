@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { canChangeEncounter, isAdmin, type Actor } from "./rules";
 import { patientScope, patientSearch } from "./scope";
+import { stageOf, incorrectState } from "./stage";
 import type { EncounterFilters, EncounterRow, PatientFilters, PatientRow } from "./types";
 
 const LIMIT = 300;
@@ -54,6 +55,9 @@ export async function queryEncounters(user: Actor, f: EncounterFilters): Promise
     getixEnteredAt: e.getixEnteredAt ? e.getixEnteredAt.toISOString().slice(0, 10) : null,
     deleted: e.deletedAt !== null,
     canChange: canChangeEncounter(user, e),
+    stage: stageOf(e),
+    incorrect: incorrectState(e),
+    isOwner: e.createdById === user.id,
   }));
 }
 

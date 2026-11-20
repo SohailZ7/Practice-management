@@ -50,6 +50,9 @@ export type EncounterRow = {
   getixEnteredAt: string | null;
   deleted: boolean;
   canChange: boolean;
+  stage: "draft" | "submitted" | "verified" | "entered";
+  incorrect: "none" | "open" | "complete";
+  isOwner: boolean;
 };
 
 export type PatientFilters = {

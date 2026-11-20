@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { deleteEncounter, restoreEncounter, setGetix } from "@/app/billing/actions";
+import { deleteEncounter, restoreEncounter, setGetix, setSubmitted, setVerified, flagIncorrect } from "@/app/billing/actions";
 import { askConfirm } from "@/lib/confirm";
 
 type Props = {
   id: string;
   getixEntered: boolean;
+  stage: "draft" | "submitted" | "verified" | "entered";
+  incorrect: "none" | "open" | "complete";
+  isOwner: boolean;
+  nbdc: boolean;
   deleted: boolean;
   canChange: boolean;
   isAdmin: boolean;
@@ -15,7 +19,7 @@ type Props = {
   onError: (message: string) => void;
 };
 
-export function RowActions({ id, getixEntered, deleted, canChange, isAdmin, onDone, onError }: Props) {
+export function RowActions({ id, getixEntered, stage, incorrect, isOwner, nbdc, deleted, canChange, isAdmin, onDone, onError }: Props) {
   const [busy, setBusy] = useState(false);
 
   async function run(fn: () => Promise<{ error?: string }>) {
@@ -41,7 +45,22 @@ export function RowActions({ id, getixEntered, deleted, canChange, isAdmin, onDo
         )
       ) : (
         <>
-          {isAdmin && !getixEntered && (
+          {(stage === "draft") && !getixEntered && (isOwner || isAdmin || canChange) && (
+            <button disabled={busy} onClick={() => run(() => setSubmitted(id, true))} title="Mark documentation submitted">Submit</button>
+          )}
+          {stage === "submitted" && !getixEntered && (isOwner || isAdmin) && (
+            <button className="secondary" disabled={busy} onClick={() => run(() => setSubmitted(id, false))} title="Take back the submitted mark">Unsubmit</button>
+          )}
+          {isAdmin && (stage === "draft" || stage === "submitted") && (
+            <button disabled={busy} onClick={() => run(() => setVerified(id, true))} title="Review date and diagnosis, then verify">Verify</button>
+          )}
+          {isAdmin && stage === "verified" && (
+            <button className="secondary" disabled={busy} onClick={() => run(() => setVerified(id, false))} title="Remove verification (the encounter must be checked again)">Unverify</button>
+          )}
+          {isAdmin && incorrect !== "open" && (
+            <button className="secondary" disabled={busy} onClick={() => run(() => flagIncorrect(id, ""))} title="Move to Incorrect Billing: action needed, delete it in GetIX">Incorrect</button>
+          )}
+          {isAdmin && !getixEntered && stage === "verified" && !nbdc && (
             <button disabled={busy} onClick={() => run(() => setGetix(id, true))} title="Mark as entered into GetIX">
               Mark entered
             </button>

@@ -16,6 +16,9 @@ type Row = {
   getixEnteredAt: string | null;
   deleted: boolean;
   canChange: boolean;
+  stage: "draft" | "submitted" | "verified" | "entered";
+  incorrect: "none" | "open" | "complete";
+  isOwner: boolean;
 };
 
 export function PatientEncounters({ rows, isAdmin }: { rows: Row[]; isAdmin: boolean }) {
@@ -71,6 +74,10 @@ export function PatientEncounters({ rows, isAdmin }: { rows: Row[]; isAdmin: boo
                   <RowActions
                     id={r.id}
                     getixEntered={r.getixEntered}
+                    stage={r.stage}
+                    incorrect={r.incorrect}
+                    isOwner={r.isOwner}
+                    nbdc={r.chargeCode.toUpperCase() === "NB DC"}
                     deleted={r.deleted}
                     canChange={r.canChange}
                     isAdmin={isAdmin}

@@ -12,8 +12,8 @@ export function nextStep(r: Pick<EncounterRow, "deleted" | "getixEntered" | "mrn
   if (r.deleted) return "This encounter is deleted (hidden, not erased). An administrator can restore it.";
   if (r.getixEntered) return "Entered in GetIX by hand. It is locked; an administrator can remove the mark to unlock it.";
   if (!r.mrn) return "Add the patient's MRN first. Then it is ready for manual entry into GetIX.";
-  if (!r.chargeCode) return "Add a charge code or a note, then it is ready for manual entry into GetIX.";
-  return "Ready for manual entry into GetIX. Entry stays a manual step; mark it entered once done.";
+  if (!r.chargeCode) return "Add a charge code or a note, then submit it.";
+  return "Submit it, then an admin verifies the date and diagnosis. After that it is ready for manual entry into GetIX (NB DC stops at verified). Entry stays a manual step.";
 }
 
 /** The Encounter review side panel from the Billing board: the facts, what happens next, and the row's actions. */
@@ -54,7 +54,7 @@ export function EncounterReview({ row, isAdmin, onClose, onDone, onError }: { ro
           <p className="small"><Link href={`/billing/patients/${row.patientId}`}>Open this patient&apos;s encounters</Link></p>
         </div>
         <footer className="vd-foot">
-          <RowActions id={row.id} getixEntered={row.getixEntered} deleted={row.deleted} canChange={row.canChange} isAdmin={isAdmin} onDone={async () => { await onDone(); onClose(); }} onError={onError} />
+          <RowActions id={row.id} getixEntered={row.getixEntered} stage={row.stage} incorrect={row.incorrect} isOwner={row.isOwner} nbdc={row.chargeCode.toUpperCase() === "NB DC"} deleted={row.deleted} canChange={row.canChange} isAdmin={isAdmin} onDone={async () => { await onDone(); onClose(); }} onError={onError} />
         </footer>
       </aside>
     </div>,

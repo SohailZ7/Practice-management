@@ -419,6 +419,16 @@ model Encounter {
   updatedAt        DateTime?
   deletedAt        DateTime?
   deletedById      String?
+  // Documentation check flow (Web 1.67): submitted > verified > entered in GetIX. All nullable, additive.
+  submittedAt      DateTime?
+  submittedById    String?
+  verifiedAt       DateTime?
+  verifiedById     String?
+  // Incorrect Billing bucket: flagged by an admin, action needed until marked complete.
+  incorrectAt         DateTime?
+  incorrectById       String?
+  incorrectNote       String    @default("")
+  incorrectResolvedAt DateTime?
   patient          Patient   @relation(fields: [patientId], references: [id])
   program          Program   @relation(fields: [programId], references: [id])
   visits           Visit[]
@@ -802,4 +812,18 @@ model VisitNote {
   resolvedByEmail String?
 
   @@index([visitId, createdAt])
+}
+
+// Files uploaded in Billing (GetIX reports and other files). Small files only (5 MB each), kept in the database. Additive.
+model BillingFile {
+  id           String   @id @default(cuid())
+  name         String
+  mime         String   @default("application/octet-stream")
+  size         Int
+  data         Bytes
+  note         String   @default("")
+  uploadedByEmail String
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }

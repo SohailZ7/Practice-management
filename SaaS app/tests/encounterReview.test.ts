@@ -8,6 +8,6 @@ describe("encounter review: what happens next", () => {
     expect(nextStep({ ...r, getixEntered: true })).toMatch(/locked/);
     expect(nextStep({ ...r, mrn: null })).toMatch(/MRN first/);
     expect(nextStep({ ...r, chargeCode: "" })).toMatch(/charge code or a note/);
-    expect(nextStep(r)).toMatch(/Ready for manual entry/);
+    expect(nextStep(r)).toMatch(/ready for manual entry/);
   });
 });

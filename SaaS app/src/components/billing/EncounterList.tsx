@@ -171,8 +171,12 @@ export function EncounterList({
                     <span className="pill bad">Deleted</span>
                   ) : r.getixEntered ? (
                     <span className="pill ok" title="Locked">In GetIX {r.getixEnteredAt}</span>
+                  ) : r.stage === "verified" ? (
+                    <span className="pill ok">{r.chargeCode.toUpperCase() === "NB DC" ? "Verified (NB DC, not GetIX)" : "Verified"}</span>
+                  ) : r.stage === "submitted" ? (
+                    <span className="pill">Submitted</span>
                   ) : r.mrn ? (
-                    <span className="pill">Ready to bill</span>
+                    <span className="pill">Draft</span>
                   ) : (
                     <span className="pill warn">Needs details</span>
                   )}
@@ -182,6 +186,10 @@ export function EncounterList({
                   <RowActions
                     id={r.id}
                     getixEntered={r.getixEntered}
+                    stage={r.stage}
+                    incorrect={r.incorrect}
+                    isOwner={r.isOwner}
+                    nbdc={r.chargeCode.toUpperCase() === "NB DC"}
                     deleted={r.deleted}
                     canChange={r.canChange}
                     isAdmin={isAdmin}
@@ -197,6 +205,7 @@ export function EncounterList({
       {review && rows.find((r) => r.id === review) && (
         <EncounterReview row={rows.find((r) => r.id === review)!} isAdmin={isAdmin} onClose={() => setReview(null)} onDone={() => run()} onError={setError} />
       )}
+      <p className="small"><a href={`/billing/export?from=${encodeURIComponent(f.from)}&to=${encodeURIComponent(f.to)}`}>Download redacted charge data (no patient names)</a></p>
       <p className="muted small">Entry into GetIX stays a manual step. Showing up to 300 encounters; {shown.length} shown.</p>
     </div>
   );

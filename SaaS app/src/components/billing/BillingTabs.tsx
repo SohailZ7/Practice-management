@@ -9,6 +9,8 @@ export function BillingTabs({ canEdit, isAdmin }: { canEdit: boolean; isAdmin: b
     { href: "/billing", label: "Encounters", exact: true },
     { href: "/billing/patients", label: "Patients" },
     ...(canEdit ? [{ href: "/billing/new", label: "New encounter" }] : []),
+    ...(isAdmin ? [{ href: "/billing/incorrect", label: "Incorrect billing" }] : []),
+    { href: "/billing/files", label: "Files" },
     ...(isAdmin ? [{ href: "/billing/programs", label: "Programs" }] : []),
   ];
   return (

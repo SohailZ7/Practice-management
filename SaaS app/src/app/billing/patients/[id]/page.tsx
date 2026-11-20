@@ -6,6 +6,7 @@ import { auditDenied, requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { canChangeEncounter, isAdmin } from "@/lib/billing/rules";
 import { patientScope } from "@/lib/billing/scope";
+import { stageOf, incorrectState } from "@/lib/billing/stage";
 import { userNames } from "@/lib/billing/queries";
 import { PatientAdmin } from "@/components/billing/PatientAdmin";
 import { PatientEncounters } from "@/components/billing/PatientEncounters";
@@ -39,6 +40,9 @@ export default async function PatientPage({ params }: { params: { id: string } }
     getixEnteredAt: e.getixEnteredAt ? e.getixEnteredAt.toISOString().slice(0, 10) : null,
     deleted: e.deletedAt !== null,
     canChange: canChangeEncounter(user, e),
+    stage: stageOf(e),
+    incorrect: incorrectState(e),
+    isOwner: e.createdById === user.id,
   }));
 
   return (

@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { auditDenied, requireAccess, requireAdmin } from "@/lib/session";
 import { recordHistory } from "@/lib/billing/history";
 import { canChangeEncounter, getixBlocker } from "@/lib/billing/rules";
+import { submitBlocker, verifyBlocker, getixNeedsVerify } from "@/lib/billing/stage";
 import { patientScope, patientSearch } from "@/lib/billing/scope";
 import {
   cleanName,
@@ -60,6 +61,9 @@ export async function saveEncounter(input: EncounterFormInput): Promise<SaveResu
           note: values.note,
           updatedById: user.id,
           updatedAt: new Date(),
+          // Changing the date, diagnosis or charge after verification means it must be checked again.
+          verifiedAt: null,
+          verifiedById: null,
         },
       });
     });
@@ -182,7 +186,7 @@ export async function setGetix(id: string, entered: boolean): Promise<{ error?: 
   const existing = await db.encounter.findUnique({ where: { id }, include: { patient: true } });
   if (!existing) return { error: "Encounter not found." };
   if (entered) {
-    const blocker = getixBlocker(existing.patient, existing);
+    const blocker = getixBlocker(existing.patient, existing) ?? (existing.getixEntered ? null : getixNeedsVerify(existing));
     if (blocker) return { error: blocker };
     if (existing.getixEntered) return {};
   } else if (!existing.getixEntered) {
@@ -356,4 +360,63 @@ export async function listPatients(filters: PatientFilters): Promise<PatientRow[
   const rows = await queryPatients(user, filters);
   await audit(user.email, "billing.patients.list", listDetail(rows.length, filters));
   return rows;
+}
+
+/** Provider, the person who entered it, or an admin marks an encounter submitted (or takes the mark back). */
+export async function setSubmitted(id: string, submitted: boolean): Promise<{ error?: string }> {
+  const user = await requireAccess("billing", "edit");
+  const e = await db.encounter.findUnique({ where: { id } });
+  if (!e) return { error: "Encounter not found." };
+  const blocker = submitBlocker(user.role, e.createdById === user.id, e);
+  if (blocker) return { error: blocker };
+  await db.encounter.update({ where: { id }, data: submitted ? { submittedAt: new Date(), submittedById: user.id } : { submittedAt: null, submittedById: null } });
+  await audit(user.email, submitted ? "billing.encounter.submit" : "billing.encounter.unsubmit", `encounter ${id}`);
+  revalidatePath("/billing", "layout");
+  return {};
+}
+
+/** Admin reviews date and diagnosis, then verifies (or removes the verification). Verifying also counts as submitted. */
+export async function setVerified(id: string, verified: boolean): Promise<{ error?: string }> {
+  const admin = await requireAdmin();
+  const e = await db.encounter.findUnique({ where: { id } });
+  if (!e) return { error: "Encounter not found." };
+  if (verified) {
+    const blocker = verifyBlocker(admin.role, e);
+    if (blocker) return { error: blocker };
+  } else if (e.getixEntered) {
+    return { error: "Remove the GetIX mark first." };
+  }
+  await db.$transaction(async (tx) => {
+    await recordHistory(tx, "encounter", id, verified ? "verify" : "unverify", e, admin.id);
+    await tx.encounter.update({
+      where: { id },
+      data: verified
+        ? { verifiedAt: new Date(), verifiedById: admin.id, submittedAt: e.submittedAt ?? new Date(), submittedById: e.submittedById ?? admin.id }
+        : { verifiedAt: null, verifiedById: null },
+    });
+  });
+  await audit(admin.email, verified ? "billing.encounter.verify" : "billing.encounter.unverify", `encounter ${id}`);
+  revalidatePath("/billing", "layout");
+  return {};
+}
+
+/** Incorrect Billing bucket: the admin flags an encounter that was billed wrongly; the action is to delete it (in GetIX) and then mark complete. */
+export async function flagIncorrect(id: string, note: string): Promise<{ error?: string }> {
+  const admin = await requireAdmin();
+  const e = await db.encounter.findUnique({ where: { id } });
+  if (!e) return { error: "Encounter not found." };
+  await db.encounter.update({ where: { id }, data: { incorrectAt: new Date(), incorrectById: admin.id, incorrectNote: str(note).slice(0, 500), incorrectResolvedAt: null } });
+  await audit(admin.email, "billing.encounter.incorrect.flag", `encounter ${id}`);
+  revalidatePath("/billing", "layout");
+  return {};
+}
+
+export async function resolveIncorrect(id: string): Promise<{ error?: string }> {
+  const admin = await requireAdmin();
+  const e = await db.encounter.findUnique({ where: { id } });
+  if (!e || !e.incorrectAt) return { error: "That encounter is not in Incorrect Billing." };
+  await db.encounter.update({ where: { id }, data: { incorrectResolvedAt: new Date() } });
+  await audit(admin.email, "billing.encounter.incorrect.complete", `encounter ${id}`);
+  revalidatePath("/billing", "layout");
+  return {};
 }
