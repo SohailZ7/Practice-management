@@ -46,7 +46,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: npx next build
+      # next/font downloads Google Fonts during the build and that fails at random from GitHub's network, so retry up to 3 times.
+      - run: npx next build || (sleep 10 && npx next build) || (sleep 30 && npx next build)
       # Same safeguards the staging gate checks, against the throwaway database.
       - name: Create schema and audit triggers
         run: |
