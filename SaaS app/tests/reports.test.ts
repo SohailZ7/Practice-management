@@ -40,3 +40,18 @@ describe("reports", () => {
     expect(toCsv([{ title: "t", columns: [{ key: "a", label: "A" }], rows: [["=cmd()"], ['a,"b"']] }])).toContain("'=cmd()");
   });
 });
+
+import { filterVisits } from "../src/lib/reports/build";
+describe("drill-down and trends", () => {
+  it("filters visits by the clicked status, provider, type or code", () => {
+    expect(filterVisits(data, { s: "Not Seen" }).map((x) => x.id)).toEqual(["2"]);
+    expect(filterVisits(data, { p: "fitsum" }).map((x) => x.id)).toEqual(["4"]);
+    expect(filterVisits(data, { c: "99203" }).map((x) => x.id)).toEqual(["3"]);
+    expect(filterVisits(data, { t: "(none)" })).toEqual([]);
+  });
+  it("trends group by Monday week and count overdue", () => {
+    const t = buildReport("trends", [...data, v({ id: "9", status: "scheduled", date: "2026-10-01" })], { today: "2026-11-10" })[0];
+    expect(t.rows[0]).toEqual(["2026-09-28", 1, 0, 0, 0, 1]);
+    expect(t.rows.find((r) => r[0] === "2026-11-02")![1]).toBe(4);
+  });
+});

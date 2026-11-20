@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { audit } from "@/lib/audit";
-import { REPORTS, buildReport, redact, toCsv } from "@/lib/reports/build";
+import { REPORTS, buildReport, filterVisits, redact, toCsv } from "@/lib/reports/build";
 import { cleanRange, loadReportVisits, ownProviderName } from "@/lib/reports/load";
 import { practiceToday } from "@/lib/notes/rowColor";
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const own = user.role === "ADMIN" ? null : (await ownProviderName(user.email)) ?? "\u0000none";
   const { visits } = await loadReportVisits({ from, to, providerOnly: own });
   const red = u.searchParams.get("redacted") === "1" || !canAccess(user, "notes", "view");
-  let tables = buildReport(def.id, visits, { today: practiceToday() });
+  let tables = buildReport(def.id, filterVisits(visits, Object.fromEntries(((["s", "p", "t", "c"] as const).map((k) => [k, (u.searchParams.get(k) ?? "").slice(0, 120)] as const)).filter(([, v]) => v))), { today: practiceToday() });
   if (red) tables = redact(tables);
   await audit(user.email, "reports.export", `${def.id} rows=${visits.length} redacted=${red}`);
   return new NextResponse(toCsv(tables), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="report-${def.id}${red ? "-redacted" : ""}.csv"`, "cache-control": "no-store" } });

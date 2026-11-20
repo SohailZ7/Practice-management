@@ -4,8 +4,9 @@ export type ReportVisit = {
   id: string; date: string; time: string; status: string; program: string; type: string; provider: string; trackingOnly: boolean;
   patientId: string; patientName: string; chargeCode: string; billed: boolean; hasEncounter: boolean; docCount: number; docDraft: boolean;
 };
+export type Drill = "s" | "p" | "t" | "c";
 export type Cell = string | number;
-export type Table = { title: string; columns: { key: string; label: string; name?: boolean }[]; rows: Cell[][] };
+export type Table = { title: string; drill?: { col: number; param: Drill }; columns: { key: string; label: string; name?: boolean }[]; rows: Cell[][] };
 export type ReportDef = { id: string; label: string; blurb: string };
 
 export const REPORTS: ReportDef[] = [
@@ -15,6 +16,7 @@ export const REPORTS: ReportDef[] = [
   { id: "patients", label: "Patients summary", blurb: "Per patient: appointments, seen, Not Seen split, upcoming, last seen, providers." },
   { id: "types", label: "Visit Types", blurb: "Totals per visit type: seen, not seen, billed, seen but not billed." },
   { id: "providers", label: "Provider productivity", blurb: "Per provider: visits, seen, not seen, billed." },
+  { id: "trends", label: "Trends", blurb: "Per week: visits, seen, not seen, seen by tracking-only providers (not billed by us), and unfinished visits past 7 days." },
   { id: "timesheet", label: "Timesheet and invoice data", blurb: "Seen visits per provider for sign-off, and invoice lines by program and charge code. Tracking-only providers are left out." },
 ];
 
@@ -32,13 +34,22 @@ const visitCols = [
 ];
 const visitRow = (v: ReportVisit): Cell[] => [v.date, v.patientName, v.type, v.program, v.provider, statusText(v.status)];
 
+export type VisitFilter = Partial<Record<Drill, string>>;
+const eq = (a: string, b: string) => (b === "(none)" ? a.trim() === "" : a.trim().toLowerCase() === b.trim().toLowerCase());
+/** Drill-down: keeps only visits matching the clicked status label (s), provider (p), visit type (t) or charge code (c). */
+export function filterVisits(vs: ReportVisit[], f: VisitFilter): ReportVisit[] {
+  return vs.filter((v) => (!f.s || statusText(v.status) === f.s) && (!f.p || eq(v.provider, f.p)) && (!f.t || eq(v.type, f.t)) && (!f.c || eq(v.chargeCode, f.c)));
+}
+const weekStart = (iso: string) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+const overdueNow = (v: ReportVisit, today: string) => (v.status === "scheduled" || v.status === "other") && (Date.parse(today) - Date.parse(v.date)) / 86_400_000 > 7;
+
 export function buildReport(id: string, all: ReportVisit[], opts: { today: string }): Table[] {
   const vs = [...all].sort(byDate);
   switch (id) {
     case "seen": {
       const g = tally(vs, (v) => statusText(v.status));
       return [
-        { title: "By status", columns: [{ key: "status", label: "Status" }, { key: "n", label: "Visits" }, { key: "share", label: "Share" }], rows: g.map(([k, l]) => [k, l.length, pct(l.length, vs.length)]) },
+        { title: "By status", drill: { col: 0, param: "s" }, columns: [{ key: "status", label: "Status" }, { key: "n", label: "Visits" }, { key: "share", label: "Share" }], rows: g.map(([k, l]) => [k, l.length, pct(l.length, vs.length)]) },
         { title: "Visits", columns: visitCols, rows: vs.map(visitRow) },
       ];
     }
@@ -47,7 +58,7 @@ export function buildReport(id: string, all: ReportVisit[], opts: { today: strin
       const code = (v: ReportVisit) => v.chargeCode || "(none)";
       const g = tally(seen, code);
       return [
-        { title: "By charge code", columns: [{ key: "c", label: "Charge code" }, { key: "need", label: "Needs billing" }, { key: "done", label: "Billed" }], rows: g.map(([k, l]) => [k, l.filter((v) => !v.billed).length, l.filter((v) => v.billed).length]) },
+        { title: "By charge code", drill: { col: 0, param: "c" }, columns: [{ key: "c", label: "Charge code" }, { key: "need", label: "Needs billing" }, { key: "done", label: "Billed" }], rows: g.map(([k, l]) => [k, l.filter((v) => !v.billed).length, l.filter((v) => v.billed).length]) },
         { title: "Needs billing", columns: [...visitCols.slice(0, 5), { key: "code", label: "Charge code" }], rows: seen.filter((v) => !v.billed).map((v) => [...visitRow(v).slice(0, 5), v.chargeCode]) },
       ];
     }
@@ -75,11 +86,15 @@ export function buildReport(id: string, all: ReportVisit[], opts: { today: strin
         const seen = l.filter((v) => isSeen(v.status));
         return [k, l.length, seen.length, l.filter((v) => isNotSeen(v.status)).length, seen.filter((v) => v.billed).length, seen.filter((v) => !v.billed && !v.trackingOnly).length] as Cell[];
       });
-      return [{ title: "By visit type", columns: [{ key: "t", label: "Visit type" }, { key: "n", label: "Total" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "b", label: "Billed" }, { key: "snb", label: "Seen, not billed" }], rows }];
+      return [{ title: "By visit type", drill: { col: 0, param: "t" }, columns: [{ key: "t", label: "Visit type" }, { key: "n", label: "Total" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "b", label: "Billed" }, { key: "snb", label: "Seen, not billed" }], rows }];
     }
     case "providers": {
       const rows = tally(vs, (v) => v.provider || "(none)").map(([k, l]) => [k, l.length, l.filter((v) => isSeen(v.status)).length, l.filter((v) => isNotSeen(v.status)).length, l.filter((v) => v.billed).length, l[0].trackingOnly ? "tracking only" : ""] as Cell[]);
-      return [{ title: "By provider", columns: [{ key: "p", label: "Provider" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "b", label: "Billed" }, { key: "t", label: "" }], rows }];
+      return [{ title: "By provider", drill: { col: 0, param: "p" }, columns: [{ key: "p", label: "Provider" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "b", label: "Billed" }, { key: "t", label: "" }], rows }];
+    }
+    case "trends": {
+      const rows = tally(vs, (v) => weekStart(v.date)).map(([k, l]) => [k, l.length, l.filter((v) => isSeen(v.status)).length, l.filter((v) => isNotSeen(v.status)).length, l.filter((v) => isSeen(v.status) && v.trackingOnly).length, l.filter((v) => overdueNow(v, opts.today)).length] as Cell[]);
+      return [{ title: "Per week (weeks start Monday)", columns: [{ key: "w", label: "Week of" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "t", label: "Seen, tracking only" }, { key: "o", label: "Overdue now" }], rows }];
     }
     case "timesheet": {
       const seen = vs.filter((v) => isSeen(v.status) && !v.trackingOnly);
