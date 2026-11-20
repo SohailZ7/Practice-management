@@ -18,4 +18,9 @@ describe("a crashed appended recording keeps the earlier text", () => {
   it("says plainly that an unlinked recovered recording has not changed the visit", () => {
     expect(read("src/lib/queue.ts")).toContain("Recovered recording saved. The visit has not changed yet. Link it under Needs link.");
   });
+
+  it("the link call can carry the server's append mode and keeps a blocked link safe in the inbox", () => {
+    expect(read("src/lib/api.ts")).toMatch(/mode\?: "append"/);
+    expect(read("src/lib/queue.ts")).toContain("the visit already has different text, so it was not changed");
+  });
 });

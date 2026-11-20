@@ -204,8 +204,9 @@ export async function putInbox(session: Session, uuid: string, b: InboxBody): Pr
   });
 }
 
-export const linkInbox = (session: Session, uuid: string, visitId: string) =>
-  call<{ ok: true; visitId: string }>(session, `/notes/inbox/${encodeURIComponent(uuid)}/link`, { method: "POST", body: JSON.stringify({ visitId }) });
+/** Links a recording to a visit. Without `mode` the server refuses (409 transcript_not_empty) when the visit already has different text; "append" adds the recording after it. */
+export const linkInbox = (session: Session, uuid: string, visitId: string, mode?: "append") =>
+  call<{ ok: true; visitId: string; result?: "replaced" | "appended" | "unchanged" }>(session, `/notes/inbox/${encodeURIComponent(uuid)}/link`, { method: "POST", body: JSON.stringify({ visitId, ...(mode ? { mode } : {}) }) });
 
 export type InboxItem = { uuid: string; recordedAt: string; durationSeconds: number; final: boolean; seq: number; visitId: string | null };
 export const listInbox = (session: Session, linked = false) =>
