@@ -92,18 +92,25 @@ async function unifiedColumns(v: { apptTime: string; program: string; appointmen
 /** Adds one visit for a day. `patient` is the name as typed: "First Last" or "Last, First". Finds or creates the patient. */
 export async function addVisit(
   actor: { id: string; email: string },
-  input: { date: string; patient: string } & VisitPatch,
+  input: { date: string; patient?: string; patientId?: string } & VisitPatch,
 ) {
   if (!isISODate(input.date)) throw new VisitError("bad_date", "Invalid date");
-  const parsed = parseClient(text(input.patient, 200));
-  if (!parsed) throw new VisitError("bad_patient", "Enter the patient's name.");
-  const { values, errors } = validatePatient({ lastName: parsed.lastName, firstName: parsed.firstName });
-  if (Object.keys(errors).length) throw new VisitError("bad_patient", Object.values(errors)[0] ?? "Enter the patient's name.");
-
+  let patient: { id: string };
+  if (input.patientId) {
+    // Patient-first: the visit links to an existing, unmerged patient chosen by search.
+    const found = await db.patient.findFirst({ where: { id: input.patientId, mergedIntoId: null }, select: { id: true } });
+    if (!found) throw new VisitError("bad_patient", "Choose a patient from the search results.");
+    patient = found;
+  } else {
+    const parsed = parseClient(text(input.patient, 200));
+    if (!parsed) throw new VisitError("bad_patient", "Enter the patient's name.");
+    const { values, errors } = validatePatient({ lastName: parsed.lastName, firstName: parsed.firstName });
+    if (Object.keys(errors).length) throw new VisitError("bad_patient", Object.values(errors)[0] ?? "Enter the patient's name.");
+    patient =
+      (await db.patient.findFirst({ where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null } })) ??
+      (await db.patient.create({ data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id } }));
+  }
   const fields = await cleanFields(input);
-  const patient =
-    (await db.patient.findFirst({ where: { lastName: values.lastName, firstName: values.firstName, mergedIntoId: null } })) ??
-    (await db.patient.create({ data: { lastName: values.lastName, firstName: values.firstName, createdById: actor.id } }));
 
   const visit = await db.visit.create({
     data: {

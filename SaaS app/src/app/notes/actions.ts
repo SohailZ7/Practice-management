@@ -115,8 +115,10 @@ async function guard<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | 
 }
 
 /** Adds one visit by hand, in addition to pasting a whole board. */
-export async function addVisitAction(input: { date: string; patient: string } & VisitPatch) {
+export async function addVisitAction(input: { date: string; patientId: string } & VisitPatch) {
   const user = await requireAccess("notes", "edit");
+  // Web form is patient-first: a visit links to an existing patient picked by search (or created first), never free text.
+  if (!input.patientId) return { ok: false as const, error: "Search for the patient and pick them, or add a new patient first." };
   const r = await guard(() => addVisit(user, input));
   revalidatePath("/notes"); revalidatePath("/schedule");
   return r.ok ? { ok: true as const } : r;

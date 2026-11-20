@@ -9,9 +9,11 @@ import { initialsFor } from "@/lib/prefs";
 import { LIVE_VISITS } from "@/lib/unify/visible";
 import { statusLabel } from "@/lib/notes/visitStatus";
 import { PatientName } from "@/components/PatientName";
+import { Banner } from "@/components/Banner";
+import { saveBasics, admitPatient, dischargePatient } from "./actions";
 
 // The chart: everything for one patient. Visits, documents and (for people with billing access) encounters.
-export default async function PatientChart({ params }: { params: { id: string } }) {
+export default async function PatientChart({ params, searchParams }: { params: { id: string }; searchParams: { error?: string; notice?: string } }) {
   const user = await requireAccess("notes", "view");
   const patient = await db.patient.findFirst({ where: { id: params.id, mergedIntoId: null } });
   if (!patient) {
@@ -19,6 +21,9 @@ export default async function PatientChart({ params }: { params: { id: string } 
     notFound();
   }
   const billing = canAccess(user, "billing", "view");
+  const canEdit = canAccess(user, "notes", "edit");
+  const stays = await db.patientAdmission.findMany({ where: { patientId: patient.id }, orderBy: { admitDate: "desc" } });
+  const open = stays.find((s) => s.dischargeDate === null);
   const [visits, allEntries, encounters] = await Promise.all([
     db.visit.findMany({
       where: { ...LIVE_VISITS, patientId: patient.id },
@@ -37,6 +42,54 @@ export default async function PatientChart({ params }: { params: { id: string } 
     <>
       <p><Link href="/patients">← Patients</Link></p>
       <h2><PatientName initials={initialsFor(name)} fullName={full ? name : null} /></h2>
+      <Banner error={searchParams.error} notice={searchParams.notice} />
+      <h3>Chart basics</h3>
+      {canEdit ? (
+        <form action={saveBasics} className="card row" style={{ flexWrap: "wrap" }}>
+          <input type="hidden" name="id" value={patient.id} />
+          {billing && <label>MRN <input name="mrn" defaultValue={patient.mrn ?? ""} /></label>}
+          {billing && <label>FFX MRN <input name="ffxMrn" defaultValue={patient.ffxMrn ?? ""} /></label>}
+          <label>Date of birth <input type="date" name="dob" defaultValue={patient.dob ?? ""} /></label>
+          <label>Sex <input name="sex" defaultValue={patient.sex ?? ""} style={{ width: "6rem" }} /></label>
+          <label>Insurance <input name="insurance" defaultValue={patient.insurance ?? ""} /></label>
+          <button type="submit">Save</button>
+        </form>
+      ) : (
+        <p className="muted small">DOB {patient.dob ?? "not recorded"}; insurance {patient.insurance ?? "not recorded"}.</p>
+      )}
+      <h3>Admissions</h3>
+      {stays.length === 0 ? <p className="muted">No admission recorded.</p> : (
+        <table>
+          <thead><tr><th>Admitted</th><th>Discharged</th>{canEdit && <th aria-label="Actions" />}</tr></thead>
+          <tbody>
+            {stays.map((s) => (
+              <tr key={s.id}>
+                <td>{s.admitDate}</td>
+                <td>{s.dischargeDate ?? "Current stay"}</td>
+                {canEdit && (
+                  <td>
+                    {s.dischargeDate === null && (
+                      <form action={dischargePatient} className="row">
+                        <input type="hidden" name="id" value={patient.id} />
+                        <input type="hidden" name="stayId" value={s.id} />
+                        <input type="date" name="dischargeDate" aria-label="Discharge date" />
+                        <button type="submit">Discharge</button>
+                      </form>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {canEdit && !open && (
+        <form action={admitPatient} className="row" style={{ marginTop: ".5rem" }}>
+          <input type="hidden" name="id" value={patient.id} />
+          <input type="date" name="admitDate" aria-label="Admit date" />
+          <button type="submit">{stays.length ? "Readmit" : "Admit"}</button>
+        </form>
+      )}
       <h3>Visits</h3>
       <table>
         <thead><tr><th>Date</th><th>Provider</th><th>Status</th><th>Type</th><th>Program</th><th>Documents</th></tr></thead>

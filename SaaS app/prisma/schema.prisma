@@ -237,6 +237,12 @@ model Patient {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   mergedIntoId    String?
+  // Chart basics (Web 1.60). All nullable and additive. mrn above is B&B's own MRN; ffxMrn is the Fairfax hospital MRN.
+  ffxMrn          String?
+  dob             String? // YYYY-MM-DD
+  sex             String?
+  insurance       String?
+  admissions      PatientAdmission[]
   encounters      Encounter[]
   consents        PatientConsent[]
   Visit           Visit[]
@@ -764,4 +770,18 @@ model TaskUpdate {
   task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+}
+
+// One row per stay. A readmission is a NEW row on the SAME patient, so history is kept; at most one row is open
+// (dischargeDate null) at a time, enforced in code. Dates are YYYY-MM-DD. Additive.
+model PatientAdmission {
+  id             String   @id @default(cuid())
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  admitDate      String
+  dischargeDate  String?
+  createdByEmail String
+  createdAt      DateTime @default(now())
+
+  @@index([patientId, admitDate])
 }

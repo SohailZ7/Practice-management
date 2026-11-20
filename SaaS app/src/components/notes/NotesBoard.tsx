@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
+import { searchPatients, createPatient, type PatientOption } from "@/app/schedule/patient-actions";
 import type { VisitOptions } from "@/lib/notes/options";
 import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import type { DocSummary } from "@/lib/notes/docsClient";
@@ -277,7 +278,17 @@ function EditableTime({ visitId, value, military, onSaved, onError }: { visitId:
 
 function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProvider: string; onDone: (m: string) => void }) {
   // (times may be typed as 0900 or 0900-1200 too)
-  const [f, setF] = useState({ patient: "", apptTime: "", program: "", appointmentType: "", providerName: defaultProvider });
+  const [f, setF] = useState({ apptTime: "", program: "", appointmentType: "", providerName: defaultProvider });
+  const [picked, setPicked] = useState<PatientOption | null>(null);
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<PatientOption[]>([]);
+  const [newName, setNewName] = useState({ firstName: "", lastName: "" });
+  const [showNew, setShowNew] = useState(false);
+  useEffect(() => {
+    if (picked || q.trim().length < 2) { setResults([]); return; }
+    const t = setTimeout(() => { void searchPatients(q).then(setResults).catch(() => setResults([])); }, 200);
+    return () => clearTimeout(t);
+  }, [q, picked]);
   const [opts, setOpts] = useState<VisitOptions | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -290,7 +301,40 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>
       <div className="row" style={{ flexWrap: "wrap" }}>
-        <label>Patient <input value={f.patient} onChange={set("patient")} placeholder="First Last" required /></label>
+        <div style={{ minWidth: "16rem" }}>
+          {picked ? (
+            <p style={{ margin: 0 }}>
+              <strong>Patient:</strong> {picked.name}{picked.mrn ? ` (${picked.mrn})` : ""}{" "}
+              <button type="button" onClick={() => { setPicked(null); setQ(""); }}>Change</button>
+            </p>
+          ) : (
+            <>
+              <label>Patient <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or MRN" aria-label="Search patients" /></label>
+              {results.length > 0 && (
+                <ul className="small" style={{ listStyle: "none", margin: ".25rem 0", padding: 0 }}>
+                  {results.map((p) => (
+                    <li key={p.id}><button type="button" onClick={() => setPicked(p)}>{p.name}{p.mrn ? ` (${p.mrn})` : ""}</button></li>
+                  ))}
+                </ul>
+              )}
+              {q.trim().length >= 2 && results.length === 0 && <p className="small muted" style={{ margin: ".25rem 0" }}>No match. Check the spelling, or add a new patient.</p>}
+              {!showNew ? (
+                <button type="button" onClick={() => setShowNew(true)}>New patient</button>
+              ) : (
+                <div className="row" style={{ marginTop: ".25rem" }}>
+                  <input value={newName.firstName} onChange={(e) => setNewName({ ...newName, firstName: e.target.value })} placeholder="First name" aria-label="New patient first name" />
+                  <input value={newName.lastName} onChange={(e) => setNewName({ ...newName, lastName: e.target.value })} placeholder="Last name" aria-label="New patient last name" />
+                  <button type="button" disabled={!newName.firstName.trim() || !newName.lastName.trim()} onClick={async () => {
+                    setErr("");
+                    const r = await createPatient(newName);
+                    if (r.ok) { setPicked(r.patient); setShowNew(false); setNewName({ firstName: "", lastName: "" }); }
+                    else setErr(Object.values(r.errors)[0] ?? "Could not add the patient.");
+                  }}>Add patient</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
         <label>
           Time{" "}
           <input value={f.apptTime} onChange={set("apptTime")} list="visit-times" placeholder="2:00 PM or 14:00" style={{ width: "9.5rem" }} aria-invalid={!timeOk} />
@@ -318,11 +362,11 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
       </div>
       {!timeOk && <p role="alert" className="small">Enter the time like 2:00 PM or 14:00.</p>}
       {err && <p role="alert" className="small">{err}</p>}
-      <button disabled={!f.patient.trim() || !timeOk || busy} onClick={async () => {
+      <button disabled={!picked || !timeOk || busy} onClick={async () => {
         setBusy(true);
         setErr("");
         try {
-          const r = await addVisitAction({ date, ...f, apptTime: normalizeTyped(f.apptTime.trim()) });
+          const r = await addVisitAction({ date, patientId: picked!.id, ...f, apptTime: normalizeTyped(f.apptTime.trim()) });
           if (r.ok) onDone("Visit added.");
           else setErr(r.error);
         } catch {
