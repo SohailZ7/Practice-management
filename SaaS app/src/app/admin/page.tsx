@@ -51,7 +51,6 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
                 <label className="check" title="Can approve, request changes on, or reject Feedback items that are On staging">
                   <input type="checkbox" name="feedbackApprover" defaultChecked={u.feedbackApprover} /> Feedback approver
                 </label>
-                <label className="check" title="Final approval of Ledger expenses. Only this person can approve or reject them."><input type="checkbox" name="ledgerApprover" defaultChecked={u.ledgerApprover} /> Ledger approver</label>
               </div>
               <div className="row access" style={{ marginTop: ".4rem" }}>
                 {u.role === "ADMIN" ? (

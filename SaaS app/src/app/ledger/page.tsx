@@ -1,4 +1,3 @@
-import { canApprove } from "@/lib/ledger/approval";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { todayISO } from "@/lib/dates";
@@ -18,7 +17,6 @@ export default async function LedgerPage() {
       methods={options.methods}
       parties={options.parties}
       canEdit={canAccess(user, "ledger", "edit")}
-      canApprove={canApprove(user)}
       today={today}
     />
   );

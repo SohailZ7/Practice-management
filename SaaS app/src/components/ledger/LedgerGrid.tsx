@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { createLedgerEntry, decideLedgerEntry, deleteLedgerEntry, listLedger, updateLedgerEntry } from "@/app/ledger/actions";
+import { createLedgerEntry, deleteLedgerEntry, listLedger, updateLedgerEntry } from "@/app/ledger/actions";
 import { addDays } from "@/lib/dates";
 import { editableMoney, formatMoney, parseMoney } from "@/lib/ledger/money";
 import { ledgerTotals } from "@/lib/ledger/validate";
@@ -17,14 +17,12 @@ type Props = {
   methods: Opt[];
   parties: Opt[];
   canEdit: boolean;
-  /** The final approver (Sohail) sees Approve / Reject on pending expenses. */
-  canApprove?: boolean;
   today: string;
 };
 
 let draftCounter = 0;
 
-export function LedgerGrid({ initialRows, initialFilters, categories, methods, parties, canEdit, canApprove = false, today }: Props) {
+export function LedgerGrid({ initialRows, initialFilters, categories, methods, parties, canEdit, today }: Props) {
   const [f, setF] = useState(initialFilters);
   const [rows, setRows] = useState<Row[]>(() => initialRows.map((r) => ({ ...r, key: r.id, draft: false })));
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "saved" | "error"; text: string }>({ kind: "idle", text: "" });
@@ -122,35 +120,12 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
     }
   }
 
-  async function decide(row: Row, decision: "approved" | "rejected") {
-    const note = "";
-    setStatus({ kind: "saving", text: "Saving…" });
-    try {
-      const dto = await decideLedgerEntry(row.id, decision, note);
-      patchLocal(row.key, dto);
-      setStatus({ kind: "saved", text: decision === "approved" ? "Approved" : "Rejected" });
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  const approvalCell = (r: Row) => {
-    if (r.draft || r.cashOut <= 0) return <span className="muted small">-</span>;
-    return (
-      <span className="appr-cell">
-        <span className={`appr-pill ${r.approval}`} title={r.approvalNote || undefined}>{r.approval === "pending" ? "Pending" : r.approval === "approved" ? "Approved" : "Rejected"}</span>
-        {canApprove && r.approval !== "approved" && <button type="button" className="icon-btn" title="Approve this expense (locks it)" aria-label="Approve" onClick={() => void decide(r, "approved")}>✓</button>}
-        {canApprove && r.approval === "pending" && <button type="button" className="icon-btn" title="Reject: sends it back to be fixed" aria-label="Reject" onClick={() => void decide(r, "rejected")}>✗</button>}
-      </span>
-    );
-  };
-
   function addRow() {
     draftCounter += 1;
     const key = `draft-${draftCounter}`;
     setRows((rs) => [
       ...rs,
-      { key, id: key, draft: true, date: today, cashIn: 0, cashOut: 0, partyId: null, categoryId: null, methodId: null, comments: "", approval: "pending" },
+      { key, id: key, draft: true, date: today, cashIn: 0, cashOut: 0, partyId: null, categoryId: null, methodId: null, comments: "" },
     ]);
   }
 
@@ -285,7 +260,6 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
             <col style={{ width: 170 }} />
             <col style={{ width: 170 }} />
             <col />
-            <col style={{ width: 150 }} />
             {canEdit && <col style={{ width: 38 }} />}
           </colgroup>
           <thead>
@@ -297,20 +271,19 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
               <th>Category</th>
               <th>Method</th>
               <th>Comments</th>
-              <th>Approval</th>
               {canEdit && <th />}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="muted xl-empty">
+                <td colSpan={canEdit ? 8 : 7} className="muted xl-empty">
                   No entries for these filters.
                 </td>
               </tr>
             )}
             {rows.map((r) =>
-              canEdit && !(r.approval === "approved" && r.cashOut > 0) ? (
+              canEdit ? (
                 <tr key={r.key} className={r.draft ? "xl-draft" : ""}>
                   <td>
                     <input
@@ -338,7 +311,6 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
                       }}
                     />
                   </td>
-                  <td>{approvalCell(r)}</td>
                   <td className="c">
                     <button className="icon-btn" title="Delete row" aria-label="Delete row" onClick={() => remove(r)}>
                       ×
@@ -354,7 +326,6 @@ export function LedgerGrid({ initialRows, initialFilters, categories, methods, p
                   <td>{nameOf(categories, r.categoryId)}</td>
                   <td>{nameOf(methods, r.methodId)}</td>
                   <td>{r.comments}</td>
-                  <td>{approvalCell(r)}</td>
                   {canEdit && <td />}
                 </tr>
               ),

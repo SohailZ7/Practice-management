@@ -1,4 +1,3 @@
-import { approvalOf } from "./approval";
 import type { LedgerEntry, Prisma } from "@prisma/client";
 import { db } from "../db";
 import { todayISO } from "../dates";
@@ -16,8 +15,6 @@ export function toLedgerDTO(e: LedgerEntry): LedgerDTO {
     categoryId: e.categoryId,
     methodId: e.methodId,
     comments: e.comments,
-    approval: approvalOf(e.approvalStatus),
-    approvalNote: e.approvalNote,
   };
 }
 
