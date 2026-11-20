@@ -110,16 +110,26 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
   };
 
   // Every module is listed. One the person cannot open stays visible (dimmed) and shows "no access" when clicked.
-  const items: { id: string; href: string; label: string; icon: IconName; locked?: boolean }[] = [];
-  items.push({ id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar", locked: levels.schedule === "none" && levels.notes === "none" });
-  items.push({ id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks", locked: levels.tasks === "none" });
-  items.push({ id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" });
-  items.push({ id: "/billing", href: "/billing", label: "Billing", icon: "billing", locked: levels.billing === "none" });
-  items.push({ id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" });
-  // MANAGE group. Feedback is open to every signed-in user. Admin is visible to everyone; anyone but the Admin who opens
-  // it sees the "no access" page (AUTH-13).
+  // Groups (decided with Sohail 2026-11-19): CLINICAL, OPERATIONS, MANAGE. Access mapping: Patients = notes view,
+  // Schedule = schedule, Billing and Reports = billing (a report that shows names also needs notes view).
+  type NavItem = { id: string; href: string; label: string; icon: IconName; locked?: boolean };
+  const clinical: NavItem[] = [
+    { id: "/patients", href: "/patients", label: "Patients", icon: "person", locked: levels.notes === "none" },
+    { id: "/schedule", href: "/schedule", label: "Schedule", icon: "calendar", locked: levels.schedule === "none" && levels.notes === "none" },
+    { id: "/billing", href: "/billing", label: "Billing", icon: "billing", locked: levels.billing === "none" },
+    { id: "/reports", href: "/reports", label: "Reports", icon: "chart", locked: levels.billing === "none" },
+  ];
+  const operations: NavItem[] = [
+    { id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks", locked: levels.tasks === "none" },
+    { id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" },
+    { id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" },
+  ];
+  const items = [...clinical, ...operations];
+  // MANAGE group. Feedback and Settings are open to every signed-in user. Admin is visible to everyone; anyone but the
+  // Admin who opens it sees the "no access" page (AUTH-13).
   const manage: { href: string; label: string; icon: IconName }[] = [
     { href: "/feedback", label: "Feedback", icon: "flag" },
+    { href: "/settings", label: "Settings", icon: "settings" },
     { href: "/admin", label: "Administration", icon: "shield" },
   ];
 
@@ -127,6 +137,7 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
     { label: "Overview", href: "/" },
     ...items.filter((i) => !i.locked).map((i) => ({ label: i.label, href: i.href })),
     ...(levels.billing !== "none" ? [{ label: "Billing: new encounter", href: "/billing/new", hint: "New" }] : []),
+    ...(levels.notes !== "none" ? [{ label: "Patients: all patients", href: "/patients" }] : []),
     ...(levels.schedule !== "none" ? [{ label: "Schedule: week", href: "/schedule?view=week" }, { label: "Schedule: month", href: "/schedule?view=month" }] : []),
     { label: "Feedback", href: "/feedback" },
     ...(isAdmin ? [{ label: "Administration", href: "/admin" }] : []),
@@ -135,22 +146,44 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
 
   const [order, setOrder] = useState<string[]>([]);
   useEffect(() => setOrder(readOrder(ORDER_KEY)), []);
-  const orderedItems = applyOrder(items, order);
+  const orderedClinical = applyOrder(clinical, order);
+  const orderedOperations = applyOrder(operations, order);
   const navSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const onNavDragEnd = (e: DragEndEvent) => {
+  // Reordering stays inside a group; the saved order is one flat list of ids covering both groups.
+  const onNavDragEnd = (group: NavItem[], other: NavItem[], groupFirst: boolean) => (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const ids = orderedItems.map((i) => i.id);
+    const ids = group.map((i) => i.id);
     const from = ids.indexOf(String(active.id));
     const to = ids.indexOf(String(over.id));
     if (from < 0 || to < 0) return;
-    const next = arrayMove(ids, from, to);
+    const moved = arrayMove(ids, from, to);
+    const otherIds = other.map((i) => i.id);
+    const next = groupFirst ? [...moved, ...otherIds] : [...otherIds, ...moved];
     setOrder(next);
     writeOrder(ORDER_KEY, next);
   };
+  const group = (label: string, list: NavItem[], other: NavItem[], groupFirst: boolean) => (
+    <>
+      <div className="nav-label label">{label}</div>
+      {isAdmin ? (
+        <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd(list, other, groupFirst)}>
+          <SortableContext items={list.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            {list.map((i) => (
+              <SortableNavItem key={i.id} id={i.id} label={i.label}>
+                {link(i.href, i.label, i.icon, i.locked)}
+              </SortableNavItem>
+            ))}
+          </SortableContext>
+        </DndContext>
+      ) : (
+        list.map((i) => link(i.href, i.label, i.icon, i.locked))
+      )}
+    </>
+  );
 
   const link = (href: string, label: string, icon: IconName, locked = false) => (
     <Link key={href} href={href} title={locked ? `${label} (no access)` : label} className={`${path.startsWith(href) ? "active" : ""} ${locked ? "locked" : ""}`.trim()}>
@@ -187,24 +220,12 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
           </button>
         </div>
         <nav>
-          <div className="nav-label label">WORKSPACE</div>
           <Link href="/" title="Home" className={path === "/" ? "active" : ""}>
             <Icon name="home" />
             <span className="label">Overview</span>
           </Link>
-          {isAdmin ? (
-            <DndContext sensors={navSensors} collisionDetection={closestCenter} onDragEnd={onNavDragEnd}>
-              <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                {orderedItems.map((i) => (
-                  <SortableNavItem key={i.id} id={i.id} label={i.label}>
-                    {link(i.href, i.label, i.icon, i.locked)}
-                  </SortableNavItem>
-                ))}
-              </SortableContext>
-            </DndContext>
-          ) : (
-            orderedItems.map((i) => link(i.href, i.label, i.icon, i.locked))
-          )}
+          {group("CLINICAL", orderedClinical, orderedOperations, true)}
+          {group("OPERATIONS", orderedOperations, orderedClinical, false)}
           <div className="nav-label label">MANAGE</div>
           {manage.map((m) => link(m.href, m.label, m.icon))}
         </nav>
@@ -216,7 +237,6 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
           </span>
         </div>
         <div className="foot">
-          {link("/settings", "Settings", "settings")}
           <div className="user-card" title={email}>
             <span className="avatar" aria-hidden="true">{initialsOf(name)}</span>
             <span className="label user-text">
@@ -254,7 +274,7 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
 }
 
 const initialsOf = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
-const CRUMBS: [string, string][] = [["/schedule", "Schedule"], ["/tasks", "Tasks"], ["/employees", "Employees"], ["/billing", "Billing"], ["/ledger", "Ledger"], ["/feedback", "Feedback"], ["/admin", "Administration"], ["/settings", "Settings"]];
+const CRUMBS: [string, string][] = [["/patients", "Patients"], ["/reports", "Reports"], ["/schedule", "Schedule"], ["/tasks", "Tasks"], ["/employees", "Employees"], ["/billing", "Billing"], ["/ledger", "Ledger"], ["/feedback", "Feedback"], ["/admin", "Administration"], ["/settings", "Settings"]];
 const crumb = (path: string) => CRUMBS.find(([p]) => path.startsWith(p))?.[1] ?? "Overview";
 
 function SortableNavItem({ id, label, children }: { id: string; label: string; children: ReactNode }) {

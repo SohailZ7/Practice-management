@@ -49,3 +49,4 @@ Web 1.50 | Transcript viewer shows speaker turns with the speaker label and time
 Web 1.46 | Schedule day order now uses the shared exact-time-first rule (10 AM, 9-11, 9-12, 1 PM, 12-3), same as Notes; no schema | local, staging pending
 Web 1.46 | Schedule day order now uses the shared exact-time-first rule (10 AM, 9-11, 9-12, 1 PM, 12-3), same as Notes; no schema | 60ea486, staging 00153-vum, smoke 142/0
 Web 1.47 | Full names switch (Settings) now defaults ON for users an admin allowed (was off, so ticking the Admin box still showed initials); Privacy mode still wins; no schema | local, staging pending
+Web 1.48 | Navigation redesign: CLINICAL (Patients, Schedule, Billing, Reports), OPERATIONS (Tasks, Employees, Ledger), MANAGE (Feedback, Settings, Administration); Overview worklist counts; Reports landing page (reports not built yet); access mapping Patients=notes, Reports=billing; no schema | local, staging pending

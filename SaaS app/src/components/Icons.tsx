@@ -1,8 +1,19 @@
 import type { ReactNode } from "react";
 
-export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag" | "repeat" | "hourglass" | "note";
+export type IconName = "home" | "calendar" | "tasks" | "users" | "shield" | "settings" | "pin" | "logout" | "billing" | "link" | "close" | "sun" | "chevron" | "ledger" | "flag" | "repeat" | "hourglass" | "note" | "person" | "chart";
 
 const PATHS: Record<IconName, ReactNode> = {
+  person: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
+    </>
+  ),
   home: (
     <>
       <path d="M3 11l9-8 9 8" />
