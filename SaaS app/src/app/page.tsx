@@ -8,6 +8,7 @@ import { worklistCounts } from "@/lib/overview/worklist";
 import { visitsForDate, type VisitRow } from "@/lib/notes/queries";
 import { PatientName } from "@/components/PatientName";
 import { statusLabel, statusTone } from "@/lib/notes/visitStatus";
+import { isOrdersOnly } from "@/lib/notes/ordersOnly";
 
 const greeting = () => {
   const h = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: PRACTICE_TIMEZONE }).format(new Date())) % 24;
@@ -44,7 +45,8 @@ export default async function Home() {
     showBilling ? db.encounter.count({ where: { deletedAt: null, getixEntered: false } }) : Promise.resolve(0),
   ]);
 
-  const live = visits.filter((v) => v.status !== "cancelled");
+  const live = visits.filter((v) => v.status !== "cancelled" && !isOrdersOnly(v.appointmentType));
+  const ordersOnly = visits.filter((v) => v.status !== "cancelled" && isOrdersOnly(v.appointmentType)).length;
   const complete = live.filter((v) => v.status === "seen" || v.status === "note_signed").length;
   const remaining = live.filter((v) => v.status === "scheduled").length;
   const toReview = visits.filter((v) => v.documents.some((d) => d.draft)).length;
@@ -54,7 +56,7 @@ export default async function Home() {
 
   const stats = [
     ...(showVisits ? [
-      { label: "Visits today", value: live.length, note: `${complete} complete · ${remaining} remaining`, dot: "plum", href: "/schedule" },
+      { label: "Visits today", value: live.length, note: `${complete} complete · ${remaining} remaining${ordersOnly ? ` · ${ordersOnly} orders only` : ""}`, dot: "plum", href: "/schedule" },
       { label: "Documents to review", value: toReview, note: "Drafts waiting for a look", dot: "amber", href: "/schedule" },
     ] : []),
     ...(lv.tasks !== "none" ? [{ label: "Your open tasks", value: openCount, note: "Assigned to you", dot: "blue", href: "/tasks" }] : []),

@@ -4,6 +4,8 @@
 export type VisitIn = { patientId: string; date: string; status: string; provider: string; program: string; type: string };
 export type EntryIn = { patientId: string; date: string; completed: boolean; absent: boolean; canceled: boolean; missed: boolean; provider: string; program: string; type: string };
 
+import { isOrdersOnly } from "@/lib/notes/ordersOnly";
+
 export type Outcome = "seen" | "absent" | "missed" | "canceled" | "other" | "upcoming" | "unmarked";
 
 /** What happened to one appointment, by date. Cancelled beats no-show beats missed beats seen; past with no mark = unmarked. */
@@ -48,8 +50,9 @@ export function rollup(visits: VisitIn[], entries: EntryIn[], today: string): Ma
     }
     if (program && date >= (latest.get(patientId) ?? "")) { latest.set(patientId, date); r.currentProgram = program; }
   };
-  for (const v of visits) add(v.patientId, v.date, outcome(visitFlags(v.status), v.date, today), v.provider, v.program, v.type);
-  for (const e of entries) add(e.patientId, e.date, outcome(e, e.date, today), e.provider, e.program, e.type);
+  // Orders-only rows are a checklist item, not an appointment: left out of every count.
+  for (const v of visits.filter((x) => !isOrdersOnly(x.type))) add(v.patientId, v.date, outcome(visitFlags(v.status), v.date, today), v.provider, v.program, v.type);
+  for (const e of entries.filter((x) => !isOrdersOnly(x.type))) add(e.patientId, e.date, outcome(e, e.date, today), e.provider, e.program, e.type);
   for (const [id, r] of out) {
     r.providers = [...(provCount.get(id) ?? [])].map(([name, visits]) => ({ name, visits })).sort((a, b) => b.visits - a.visits || a.name.localeCompare(b.name));
     r.visitTypes = [...(types.get(id) ?? [])].sort();
