@@ -17,6 +17,7 @@ import { loadVisitOptions } from "@/lib/notes/options";
 import { assertBillableVisit, isTrackingOnlyName, TRACKING_ONLY_MESSAGE } from "@/lib/notes/trackingOnly";
 import { sanitizeLabels } from "@/lib/transcript/labels";
 import { canAccess } from "@/lib/access";
+import { providerChangeError, splitPatch } from "@/lib/notes/visitEdit";
 import { NOTE_KINDS, isNoteKind, canWriteKind, canResolve, cleanNoteBody, type VisitNoteDTO } from "@/lib/notes/visitNotes";
 import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
@@ -135,13 +136,52 @@ export async function setClockStyle(military: boolean) {
 
 export async function updateVisitAction(id: string, patch: VisitPatch) {
   const user = await requireAccess("notes", "edit");
-  // The provider column is for providers and admins; staff cannot reassign a visit.
-  if (patch.providerName !== undefined && user.role !== "ADMIN" && user.role !== "PROVIDER") {
-    return { ok: false as const, error: "Only a provider or admin can change the provider.", code: "forbidden" };
+  // Provider column: a provider may claim a visit for themselves, only an admin assigns someone else.
+  if (patch.providerName !== undefined) {
+    const current = await db.visit.findUnique({ where: { id }, select: { providerName: true } });
+    const own = user.role === "PROVIDER" ? (await db.provider.findFirst({ where: { employee: { email: user.email } }, select: { name: true } }))?.name ?? null : null;
+    const bad = providerChangeError(user.role, own, current?.providerName ?? "", patch.providerName);
+    if (bad) return { ok: false as const, error: bad, code: "forbidden" };
   }
-  const r = await guard(() => updateVisit(user, id, patch));
+  // Staff edits to time, program or type wait for an admin; status and the rest apply now.
+  const { now, needsApproval } = splitPatch(user.role, patch as Record<string, unknown>);
+  let pending = false;
+  if (Object.keys(needsApproval).length) {
+    if (!(await db.visit.findUnique({ where: { id }, select: { id: true } }))) return { ok: false as const, error: "Visit not found.", code: "not_found" };
+    const row = await db.visitChangeRequest.create({ data: { visitId: id, patch: needsApproval as Prisma.InputJsonValue, requestedBy: user.email } });
+    await audit(user.email, "notes.visit.changeRequest", `visit ${id} request ${row.id} fields=${Object.keys(needsApproval).join(",")}`);
+    pending = true;
+  }
+  if (Object.keys(now).length) {
+    const r = await guard(() => updateVisit(user, id, now as VisitPatch));
+    revalidatePath("/notes"); revalidatePath("/schedule");
+    if (!r.ok) return r;
+  }
+  revalidatePath("/notes");
+  return { ok: true as const, pending };
+}
+
+/** Change requests for one visit (everyone with Notes view); admins also see who asked. */
+export async function listChangeRequests(visitId: string) {
+  const user = await requireAccess("notes", "view");
+  const rows = await db.visitChangeRequest.findMany({ where: { visitId, status: "pending" }, orderBy: { createdAt: "asc" } });
+  return { isAdmin: user.role === "ADMIN", rows: rows.map((r) => ({ id: r.id, patch: r.patch as Record<string, string>, by: r.requestedBy, at: r.createdAt.getTime() })) };
+}
+
+/** Admin approves (applies the change) or rejects a staff edit. */
+export async function decideChangeRequest(id: string, approve: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireAccess("notes", "edit");
+  if (user.role !== "ADMIN") return { ok: false, error: "Only an admin can approve changes." };
+  const row = await db.visitChangeRequest.findUnique({ where: { id } });
+  if (!row || row.status !== "pending") return { ok: false, error: "That request is no longer pending." };
+  if (approve) {
+    const r = await guard(() => updateVisit(user, row.visitId, row.patch as VisitPatch));
+    if (!r.ok) return r;
+  }
+  await db.visitChangeRequest.update({ where: { id }, data: { status: approve ? "approved" : "rejected", decidedBy: user.email, decidedAt: new Date() } });
+  await audit(user.email, "notes.visit.changeDecision", `request ${id} visit ${row.visitId} ${approve ? "approved" : "rejected"}`);
   revalidatePath("/notes"); revalidatePath("/schedule");
-  return r.ok ? { ok: true as const } : r;
+  return { ok: true };
 }
 
 export async function deleteVisitAction(id: string) {

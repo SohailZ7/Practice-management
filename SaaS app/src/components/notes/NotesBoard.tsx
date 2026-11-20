@@ -267,7 +267,10 @@ function EditableTime({ visitId, value, military, onSaved, onError }: { visitId:
         const typed = normalizeTyped(v.trim());
         if (typed === value || v.trim() === formatTimeText(value, military)) return;
         const r = await updateVisitAction(visitId, { apptTime: typed });
-        if (r.ok) onSaved();
+        if (r.ok && "pending" in r && r.pending) {
+          onError("Sent to an admin for approval. The time changes once they approve.");
+          setV(formatTimeText(value, military));
+        } else if (r.ok) onSaved();
         else {
           onError(r.error);
           setV(formatTimeText(value, military));

@@ -69,7 +69,8 @@ describe("tracking-only visits", () => {
 describe("provider column and clock", () => {
   it("only providers and admins may change a visit's provider", () => {
     const a = readFileSync("src/app/notes/actions.ts", "utf8");
-    expect(a).toMatch(/patch\.providerName !== undefined && user\.role !== "ADMIN" && user\.role !== "PROVIDER"/);
+    expect(a).toMatch(/patch\.providerName !== undefined/);
+    expect(a).toContain("providerChangeError(user.role");
   });
   it("the Provider column and full names are shown to providers and admins only", () => {
     const p = readFileSync("src/app/schedule/page.tsx", "utf8");

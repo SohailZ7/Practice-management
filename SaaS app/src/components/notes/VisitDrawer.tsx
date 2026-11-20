@@ -8,7 +8,7 @@ import { typeIcon } from "@/lib/notes/docUi";
 import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
 import { PatientName } from "@/components/PatientName";
 import { NOTE_KINDS, noteKindLabel, MAX_NOTE, type VisitNoteDTO } from "@/lib/notes/visitNotes";
-import { listVisitNotes, addVisitNote, setVisitNoteResolved } from "@/app/notes/actions";
+import { listVisitNotes, addVisitNote, setVisitNoteResolved, listChangeRequests, decideChangeRequest } from "@/app/notes/actions";
 
 /** The Visit details side panel: everything about one visit on one screen. Presentational; actions are passed in. */
 export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onStatus, onOpenDoc, onGenerate, onTranscript }: {
@@ -69,6 +69,7 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
               </ul>
             )}
           </section>
+          <ChangeRequests visitId={visit.id} />
           <NotesSection visitId={visit.id} />
           <ConsentSection visitId={visit.id} />
           <section>
@@ -173,6 +174,43 @@ function NotesSection({ visitId }: { visitId: string }) {
         </div>
       )}
       {data && data.allowedKinds.length === 0 && err && <div className="error small" role="alert">{err}</div>}
+    </section>
+  );
+}
+
+const FIELD_LABEL: Record<string, string> = { apptTime: "Time", program: "Program", appointmentType: "Type" };
+
+/** Staff edits to time, program or type wait here for an admin. Hidden when nothing is pending. */
+function ChangeRequests({ visitId }: { visitId: string }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof listChangeRequests>> | null>(null);
+  const [err, setErr] = useState("");
+  const load = () => listChangeRequests(visitId).then(setData).catch(() => setData({ isAdmin: false, rows: [] }));
+  useEffect(() => { void load(); }, [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data || data.rows.length === 0) return null;
+  const decide = async (id: string, approve: boolean) => {
+    setErr("");
+    try { const r = await decideChangeRequest(id, approve); if (r.ok) await load(); else setErr(r.error); } catch { setErr("That could not be saved. Try again."); }
+  };
+  return (
+    <section>
+      <h3>Changes waiting for approval <span className="muted small">{data.rows.length}</span></h3>
+      <ul className="vd-docs">
+        {data.rows.map((r) => (
+          <li key={r.id}>
+            <span>
+              {Object.entries(r.patch).map(([k, v]) => `${FIELD_LABEL[k] ?? k}: ${v || "(blank)"}`).join(" · ")}
+              <small className="muted"> · asked by {r.by}</small>
+            </span>
+            {data.isAdmin && (
+              <span>
+                <button type="button" className="sm" onClick={() => void decide(r.id, true)}>Approve</button>{" "}
+                <button type="button" className="secondary sm" onClick={() => void decide(r.id, false)}>Reject</button>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {err && <div className="error small" role="alert">{err}</div>}
     </section>
   );
 }
