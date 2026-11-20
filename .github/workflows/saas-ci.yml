@@ -1,0 +1,84 @@
+# CI for the SaaS app: runs on every push and pull request. Checks only: no deploy, no secrets, no real data.
+# The database below is a throwaway container with made-up credentials and no patient data.
+name: SaaS app CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: "SaaS app"
+
+jobs:
+  checks:
+    name: typecheck, tests, build, database safeguards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-throwaway
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgresql://ci:ci-throwaway@localhost:5432/ci
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: "SaaS app/package-lock.json"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx next build
+      # Same safeguards the staging gate checks, against the throwaway database.
+      - name: Create schema and audit triggers
+        run: |
+          npx prisma db push --skip-generate
+          npm run db:harden
+      - name: verify:audit (audit tables are append-only)
+        run: npm run verify:audit
+      - name: verify:phi (field encryption round trip)
+        # The key is random per run and never stored; it encrypts made-up rows in the throwaway database only.
+        run: |
+          export PHI_ENCRYPTION_KEY="$(npm run -s phi:generate-key)"
+          npm run verify:phi -- --database ci
+
+  audit:
+    name: npm audit (high and critical, production dependencies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Reports only until Next.js is upgraded (feedback F1/F2: today it reports critical Next.js advisories).
+    # When F1 and F2 are done, delete the next line so a high or critical finding fails the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (not pushed anywhere)
+        run: docker build -t practice-mgmt-ci .
