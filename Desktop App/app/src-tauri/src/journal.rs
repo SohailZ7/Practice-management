@@ -199,6 +199,37 @@ mod tests {
             segments: vec![Segment { id: "s".into(), text: "made-up words".into(), timestamp: "[00:01]".into(), channel: "mic".into(), speaker: String::new(), audio_start_time: Some(1.0), audio_end_time: Some(2.0), sequence_id: 0 }] }
     }
 
+    /// Real-model check (run by hand: needs the downloaded model and /tmp/ckpt/*.wav). Feeds audio in real time like the
+    /// microphone, never stops the recording (a kill -9), and reads the journal back: is the EARLY speech kept?
+    #[test]
+    #[ignore]
+    fn early_speech_survives_a_kill_after_a_long_recording() {
+        let model = PathBuf::from(std::env::var("CKPT_MODEL").expect("CKPT_MODEL"));
+        let secs: usize = std::env::var("CKPT_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(150);
+        let read = |p: &str| -> Vec<i16> { hound::WavReader::open(p).unwrap().samples::<i16>().map(|s| s.unwrap()).collect() };
+        let (marker, filler) = (read("/tmp/ckpt/marker.wav"), read("/tmp/ckpt/filler.wav"));
+        let sr = SAMPLE_RATE as usize;
+        let mut audio = vec![0i16; 3 * sr];
+        audio.extend(&marker);
+        while audio.len() < secs * sr { audio.extend(vec![0i16; 4 * sr]); audio.extend(&filler); }
+        let d = tmp("real"); let key = [5u8; 32];
+        let id = new_uuid();
+        let shared = Arc::new(Mutex::new(Channels { mic: Vec::new(), system: Vec::new() }));
+        let live = Arc::new(Live { journal: Mutex::new(Journal { recording_id: id.clone(), visit_id: "v1".into(), environment: "staging".into(),
+            created_at: "2026-11-19T00:00:00Z".into(), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0 }),
+            stop: AtomicBool::new(false) });
+        let _h = start(model, d.clone(), key, Arc::clone(&shared), Arc::clone(&live));
+        for sec in 0..secs {
+            { let mut c = shared.lock().unwrap(); c.mic.extend(&audio[sec * sr..((sec + 1) * sr).min(audio.len())]); }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        // "kill -9": do not stop; read only what is on disk
+        let j = Journal::load(&d, &key, &id).unwrap();
+        let first = j.segments.first().map(|s| s.timestamp.clone()).unwrap_or_default();
+        println!("RESULT segments={} first={} done_mic_secs={} text_start={:?}", j.segments.len(), first, j.done_mic / sr, j.text().chars().take(160).collect::<String>());
+        assert!(j.text().to_lowercase().contains("heron"), "the early marker was lost: {}", j.text());
+    }
+
     #[test]
     fn uuid_is_v4_and_unique() {
         let a = new_uuid(); let b = new_uuid();
