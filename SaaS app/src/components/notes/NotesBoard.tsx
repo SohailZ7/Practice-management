@@ -1,5 +1,6 @@
 "use client";
 
+import { hasSpeakers, parseTurns, speakerRole } from "@/lib/transcript/turns";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { VisitRow } from "@/lib/notes/queries";
@@ -360,7 +361,16 @@ function TranscriptView({ visitId, onClose }: { visitId: string; onClose: () => 
     >
       {state && "text" in state && <p className="small muted" style={{ margin: 0 }}>Uploaded to the cloud · {new Date(state.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. Read-only.</p>}
       {!state && <p className="muted">Loading…</p>}
-      {state && "text" in state && <pre style={{ whiteSpace: "pre-wrap", userSelect: "text", margin: 0 }}>{state.text || "No transcript stored for this visit."}</pre>}
+      {state && "text" in state && (hasSpeakers(parseTurns(state.text))
+        ? <div style={{ userSelect: "text", display: "grid", gap: 10 }}>
+            {parseTurns(state.text).map((t, i) => (
+              <div key={i} data-role={speakerRole(t.speaker)}>
+                {t.speaker && <div className="small" style={{ fontWeight: 600 }}>{t.speaker}{t.time && <span className="muted" style={{ fontWeight: 400 }}> · {t.time}</span>}</div>}
+                <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{t.text}</div>
+              </div>
+            ))}
+          </div>
+        : <pre style={{ whiteSpace: "pre-wrap", userSelect: "text", margin: 0 }}>{state.text || "No transcript stored for this visit."}</pre>)}
     </Modal>
   );
 }
