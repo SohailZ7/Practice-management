@@ -11,6 +11,7 @@ import { workflowActor } from "@/lib/feedback/actor";
 
 export const dynamic = "force-dynamic";
 
+const STAGE_ORDER: readonly FeedbackStatus[] = ["new", "triaged", "building", "on_staging", "tested", "released", "rejected"];
 const when = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
 
 export default async function Page({ searchParams }: { searchParams: { error?: string; notice?: string; status?: string } }) {
@@ -18,7 +19,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
   const actor = workflowActor(user);
   const all = await listFeedback(user.id);
   const filter = isStatusWord(searchParams.status) ? normalizeState({ status: searchParams.status }).status : "";
-  const items = filter ? all.filter((i) => i.status === filter) : all;
+  /** Pipeline order (New first, Released then Rejected at the bottom), newest first inside each stage. */
+  const stageRank = (st: FeedbackStatus) => STAGE_ORDER.indexOf(st);
+  const items = (filter ? all.filter((i) => i.status === filter) : [...all]).sort((a, b) => stageRank(a.status) - stageRank(b.status) || b.createdAt.localeCompare(a.createdAt));
   const moves = (i: { status: FeedbackStatus; triage: TriageOutcome | null }) => nextMoves(actor, i.status, i.triage);
   /** The main flow with the current step highlighted. Triage and New are set with the Triage buttons, not here. */
   const flowOptions = (i: { status: FeedbackStatus; triage: TriageOutcome | null }) => {
@@ -61,13 +64,13 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
       </form>
       {items.length === 0 && <p className="muted">Nothing here yet.</p>}
       {items.map((i) => (
-        <div key={i.id} className="card">
-          <div className="row">
-            <strong className="grow">{i.title}</strong>
+        <details key={i.id} className="card fb-item">
+          <summary className="fb-line">
+            <span className="fb-title">{i.title}</span>
+            <span className="muted small fb-by">{i.authorName} · {when(i.createdAt)}</span>
             <span className={`fb-status fb-${i.status}`}>{STATUS_LABEL[i.status]}{i.status === "triaged" && i.triage ? ` · ${TRIAGE_LABEL[i.triage]}` : ""}</span>
-            <span className="muted small">{KIND_LABEL[i.kind]}</span>
-          </div>
-          <div className="muted small">{i.authorName} · {when(i.createdAt)}</div>
+          </summary>
+          <div className="muted small" style={{ marginTop: ".5rem" }}>{KIND_LABEL[i.kind]} · {i.authorName} · {when(i.createdAt)}</div>
           {i.description && <p style={{ whiteSpace: "pre-wrap" }}>{i.description}</p>}
           {(i.scope || i.status === "tested" || i.release) && (
             <p className="muted small">
@@ -151,7 +154,7 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
               </form>
             </details>
           )}
-        </div>
+        </details>
       ))}
     </>
   );

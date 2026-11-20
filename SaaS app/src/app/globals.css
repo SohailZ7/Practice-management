@@ -467,6 +467,15 @@ span.status-pill { cursor: default; }
 .status-buttons .status-btn:disabled:not(.active) { opacity: .45; }
 .fb-actions .status-group { display: flex; flex-direction: column; gap: .25rem; margin-top: .5rem; }
 .fb-actions .status-group .small { margin: 0; }
+.fb-item { padding: .6rem .9rem; margin-bottom: .5rem; }
+.fb-item[open] { padding: 1rem; }
+.fb-line { display: flex; align-items: center; gap: .6rem; cursor: pointer; list-style: none; }
+.fb-line::-webkit-details-marker { display: none; }
+.fb-line::before { content: "\25B8"; color: var(--muted); }
+.fb-item[open] > .fb-line::before { content: "\25BE"; }
+.fb-title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-by { white-space: nowrap; }
+@media (max-width: 640px) { .fb-by { display: none; } }
 .fb-filter { margin: .75rem 0; }
 .fb-notes, .fb-thread { border-left: 3px solid var(--line); padding-left: .75rem; margin: .5rem 0; }
 .fb-actions textarea { width: 100%; margin: .5rem 0; }
