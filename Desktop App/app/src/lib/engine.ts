@@ -72,6 +72,7 @@ export interface Engine {
   recordingCheckpoint(): Promise<Checkpoint | null>;
   /** Is the microphone still delivering audio? `lost` = the stream reported an error; `silent` = nothing new for 10 s. */
   recordingHealth(): Promise<MicHealth>;
+  setRecordingPaused(paused: boolean): Promise<void>;
   /** Shreds confirmed safety copies older than 24 h. */
   queueSweep(): Promise<number>;
   /** Turns recordings left by a crash into queue items. Returns how many. */
@@ -129,6 +130,7 @@ async function nativeEngine(): Promise<Engine> {
       invoke<{ warning: string | null; recording_id?: string | null }>("start_recording", { withSystemAudio, visitId: ctx?.visitId ?? null, environment: ctx?.environment ?? null, append: ctx?.append ?? false, earlierText: ctx?.earlierText ?? null, separator: ctx?.separator ?? null }),
     recordingCheckpoint: () => invoke<Checkpoint | null>("recording_checkpoint"),
     recordingHealth: () => invoke<MicHealth>("recording_health"),
+    setRecordingPaused: (paused) => invoke<void>("set_recording_paused", { paused }),
     queueSweep: () => invoke<number>("queue_sweep"),
     recoverRecordings: () => invoke<number>("recover_recordings"),
     stopRecording: (visitId, environment, previous, separator) =>
@@ -187,6 +189,7 @@ function fakeEngine(): Engine {
     startRecording: async () => ({ warning: "Fake engines: nothing is being recorded.", recording_id: "00000000-0000-4000-8000-000000000000" }),
     recordingCheckpoint: async () => null,
     recordingHealth: async () => ({ lost: false, silent: false }),
+    setRecordingPaused: async () => {},
     queueSweep: async () => 0,
     recoverRecordings: async () => 0,
     stopRecording: async (visitId, env, previous, separator) => {

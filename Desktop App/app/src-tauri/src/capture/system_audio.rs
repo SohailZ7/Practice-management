@@ -42,7 +42,7 @@ define_class!(
             // Nothing may unwind into ScreenCaptureKit's queue: a panic there aborts the whole app.
             let samples = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pcm_from_sample_buffer(buffer)))
                 .unwrap_or(None);
-            if let Some(samples) = samples {
+            if let Some(samples) = samples.filter(|_| !super::paused()) {
                 if let Ok(mut c) = self.ivars().channels.lock() {
                     c.system.extend_from_slice(&samples);
                 }

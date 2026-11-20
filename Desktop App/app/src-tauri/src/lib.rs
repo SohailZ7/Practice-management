@@ -478,8 +478,18 @@ static MIC_WATCH: std::sync::Mutex<Option<(usize, std::time::Instant)>> = std::s
 #[derive(serde::Serialize)]
 pub struct MicHealth { lost: bool, silent: bool }
 
+/// Pause or resume the recording in progress. Paused audio is dropped; the recording and transcript stay one.
+#[tauri::command]
+async fn set_recording_paused(paused: bool) -> Result<(), String> {
+    if !recording_running() { return Err("no recording is running".into()); }
+    capture::PAUSED.store(paused, std::sync::atomic::Ordering::SeqCst);
+    if let Ok(mut w) = MIC_WATCH.lock() { *w = None; }
+    Ok(())
+}
+
 #[tauri::command]
 async fn recording_health() -> MicHealth {
+    if capture::paused() { return MicHealth { lost: false, silent: false }; }
     let lost = capture::MIC_LOST.load(std::sync::atomic::Ordering::SeqCst);
     let len = LIVE_SHARED.lock().ok().and_then(|g| g.as_ref().and_then(|c| c.lock().ok().map(|c| c.mic.len())));
     let mut silent = false;
@@ -1001,7 +1011,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, recording_checkpoint, recording_health, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
+            engine_status_cmd, recording_checkpoint, recording_health, set_recording_paused, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, consent_record, consent_for, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context

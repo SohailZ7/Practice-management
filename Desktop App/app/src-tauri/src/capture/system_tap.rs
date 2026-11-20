@@ -131,7 +131,7 @@ unsafe extern "C-unwind" fn io_proc(
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let ctx = &*(client as *const Ctx);
         let samples = convert(input.as_ref(), ctx.rate);
-        if !samples.is_empty() {
+        if !samples.is_empty() && !super::paused() {
             if let Ok(mut c) = ctx.channels.lock() {
                 c.system.extend_from_slice(&samples);
             }

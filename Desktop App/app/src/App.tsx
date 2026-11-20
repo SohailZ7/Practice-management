@@ -321,6 +321,8 @@ export function App() {
         <UpdateBanner session={session} busy={busy} />
         {message && <div className="banner" role="status">{message} <button className="link" onClick={() => setMessage("")}>Dismiss</button></div>}
 
+        {signedIn && tab === "visits" && <SafeToClose queue={queue} failures={failures} recording={recording} busy={busy} signedIn={signedIn} />}
+
         {engine && queue.length > 0 && (
           <SavedTranscripts engine={engine} queue={queue} failures={failures} retrying={retrying}
             onRetry={() => void retryQueue()} onSignIn={(e) => void signInTo(e)} onChanged={() => void loadQueue()} />
@@ -642,9 +644,25 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   useEffect(() => { if (gen?.phase === "done") onSent(); }, [gen?.phase]);
   const since = state.phase === "recording" ? state.since : 0;
 
+  // Pause: audio is dropped natively while paused, so the one recording and its transcript skip the pause. The clock
+  // shows recorded time only (pause time is taken off).
+  const [paused, setPaused] = useState(false);
+  const pausedMs = useRef(0);
+  const pausedAt = useRef<number | null>(null);
+  useEffect(() => { setPaused(false); pausedMs.current = 0; pausedAt.current = null; }, [since]);
+  const togglePause = async () => {
+    const next = !paused;
+    try { await engine.setRecordingPaused(next); } catch { return; }
+    if (next) pausedAt.current = Date.now();
+    else { pausedMs.current += Date.now() - (pausedAt.current ?? Date.now()); pausedAt.current = null; }
+    setPaused(next);
+  };
   useEffect(() => {
     if (!since) return;
-    const t = setInterval(() => setSecs(Math.round((Date.now() - since) / 1000)), 500);
+    const t = setInterval(() => {
+      const now = pausedAt.current ?? Date.now();
+      setSecs(Math.max(0, Math.round((now - since - pausedMs.current) / 1000)));
+    }, 500);
     return () => clearInterval(t);
   }, [since]);
 
@@ -825,7 +843,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
             <span className="rec"><span className="dot" />{mmss}</span>
             {slot ? createPortal(
               <section className="stage" aria-label="Recorder" data-testid="stage">
-                <div className="stage-top"><span className="rdot" /><span className="stage-label">RECORDING</span><span className="grow" /><span className="stage-soft">Saved on this Mac every 30 seconds</span></div>
+                <div className="stage-top"><span className="rdot" /><span className="stage-label" data-testid="stage-label">{paused ? "PAUSED" : "RECORDING"}</span><span className="grow" /><span className="stage-soft">{paused ? "Paused: nothing is being recorded. Press Resume to continue the same recording." : "Saved on this Mac every 30 seconds"}</span></div>
                 <div className="stage-row">
                   <div className="grow"><div className="stage-who">{visit.initials}</div><div className="stage-soft">{[visit.appointmentType, visit.apptTime, visit.program].filter(Boolean).join(" · ")}</div></div>
                   <div className="stage-time" role="timer" aria-live="off">{mmss}</div>
@@ -837,10 +855,12 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
                     earlier.current = null;
                     onState(visit.id, { phase: "idle" });
                   }}>Discard</button>
+                  <button className="secondary" data-testid="pause-resume" disabled={busy} onClick={() => void togglePause()}>{paused ? "Resume" : "Pause"}</button>
                   <button className="finish" onClick={stop} disabled={busy}>Stop and save</button>
                 </div>
               </section>, slot) : (
               <>
+                <button className="secondary" disabled={busy} onClick={() => void togglePause()}>{paused ? "Resume" : "Pause"}</button>
                 <button onClick={stop} disabled={busy}>Stop</button>
                 <button className="secondary" disabled={busy} onClick={async () => {
                   await engine.cancelRecording();
@@ -1103,4 +1123,21 @@ function Setup({ engine, status, env, signedIn, session, locked, onEnvironment, 
       )}
     </div>
   );
+}
+
+/** The one plain line a provider needs: can I close the app? Derived only from the recording state and the queue. */
+export function safeToCloseLine(o: { recording: boolean; busy: boolean; waiting: number; signedIn: boolean }): { text: string; tone: "ok" | "warn" | "bad" } {
+  if (o.recording) return { text: "Recording in progress. Do not close the app until you press Stop and save.", tone: "warn" };
+  if (o.busy) return { text: "Saving your recording on this Mac. Wait a moment before closing.", tone: "warn" };
+  if (o.waiting > 0) {
+    const n = o.waiting;
+    return { text: `${n} recording${n === 1 ? "" : "s"} waiting to upload, safe on this Mac. ${o.signedIn ? "It sends by itself." : "Sign in to send."} You can close the app; it sends next time you open it.`, tone: "warn" };
+  }
+  return { text: "All recordings safely uploaded. Safe to close.", tone: "ok" };
+}
+
+function SafeToClose({ queue, failures, recording, busy, signedIn }: { queue: QueueItem[]; failures: Record<string, UploadFailure>; recording: boolean; busy: boolean; signedIn: boolean }) {
+  void failures;
+  const l = safeToCloseLine({ recording, busy, waiting: queue.filter((q) => q.status !== "uploaded").length, signedIn });
+  return <div className={`safe-line ${l.tone}`} role="status" data-testid="safe-to-close"><span className={`pill ${l.tone}`}>{l.tone === "ok" ? "Safe" : "Not yet"}</span> {l.text}</div>;
 }

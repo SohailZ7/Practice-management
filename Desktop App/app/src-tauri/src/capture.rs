@@ -79,6 +79,11 @@ pub fn to_mono_16k(input: &[f32], channels: u16, rate: u32) -> Vec<i16> {
 }
 
 /// Set by the microphone stream's error callback (device unplugged, permission revoked, stream stopped).
+/// Set while the provider has paused the recording: both sides drop audio, so a pause adds nothing to the one
+/// recording and one transcript, and the journal's sample counts stay in step.
+pub static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn paused() -> bool { PAUSED.load(std::sync::atomic::Ordering::SeqCst) }
+
 pub static MIC_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// True when the microphone has produced no new audio for at least `threshold_secs`. Pure, so it is tested.
@@ -118,6 +123,7 @@ impl Recorder {
     pub fn start(with_system_audio: bool) -> Result<(Self, Option<String>), String> {
         let channels = Arc::new(Mutex::new(Channels::default()));
         MIC_LOST.store(false, std::sync::atomic::Ordering::SeqCst);
+        PAUSED.store(false, std::sync::atomic::Ordering::SeqCst);
 
         let host = cpal::default_host();
         let device = host.default_input_device().ok_or("no microphone is available")?;
@@ -129,6 +135,7 @@ impl Recorder {
             .build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    if paused() { return; }
                     let converted = to_mono_16k(data, chans, rate);
                     if let Ok(mut c) = sink.lock() {
                         c.mic.extend_from_slice(&converted);
