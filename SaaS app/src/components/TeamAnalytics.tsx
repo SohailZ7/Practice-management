@@ -77,9 +77,7 @@ export function TeamAnalytics({ team: a, byCategory, categories }: Props) {
                       <g key={day}>
                         {segments.map((s) => (
                           <rect key={s.p.id} x={x} y={s.y} width={barW} height={Math.max(s.h, 1)} fill={s.p.color} rx={1}>
-                            <title>
-                              {shortDate(day)} · {s.p.name}: {s.count}
-                            </title>
+                            <title>{`${shortDate(day)} · ${s.p.name}: ${s.count}`}</title>
                           </rect>
                         ))}
                         {showLabel && (

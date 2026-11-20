@@ -28,7 +28,9 @@ async function measure(page: Page) {
       return { index: i, rows: rows.length, heights, median: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0, max: sorted.length ? sorted[sorted.length - 1] : 0, min: sorted.length ? sorted[0] : 0, inlineFields, blank };
     });
     const fields = [...document.querySelectorAll("input:not([type=hidden]):not([type=checkbox]), textarea")].map((e) => (e as HTMLInputElement).value).join(" | ") + " | " + [...document.querySelectorAll("select")].map((e) => (e as HTMLSelectElement).selectedOptions[0]?.text ?? "").join(" | ");
-    return { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, bodyText: document.body.innerText + " " + fields, tables };
+    const cw = document.documentElement.clientWidth;
+    const wide = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.getBoundingClientRect().right > cw + 1).slice(0, 6).map((e) => `${e.tagName.toLowerCase()}${e.className && typeof e.className === "string" ? "." + e.className.trim().split(/\s+/).join(".") : ""}(${Math.round(e.getBoundingClientRect().right)})`);
+    return { wide, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, bodyText: document.body.innerText + " " + fields, tables };
   });
 }
 
@@ -55,8 +57,8 @@ test.describe("every screen renders cleanly", () => {
             else expect(m.bodyText, `expected text ${want}`).toMatch(want);
           }
           expect(m.bodyText, "error page text").not.toMatch(/Application error|Internal Server Error|This page could not be found/i);
-          const allowed = vp.width < 600 ? (s.phoneOverflowMax ?? 40) : 0;
-          expect(m.scrollWidth, `horizontal overflow (${m.scrollWidth}px content in ${m.clientWidth}px, allowed +${allowed})`).toBeLessThanOrEqual(m.clientWidth + 1 + allowed);
+          const allowed = vp.width < 600 ? (s.phoneOverflowMax ?? 0) : 0;
+          expect(m.scrollWidth, `horizontal overflow (${m.scrollWidth}px content in ${m.clientWidth}px, allowed +${allowed}; widest: ${m.wide.join(" ")})`).toBeLessThanOrEqual(m.clientWidth + 1 + allowed);
           for (const t of m.tables) {
             if (!s.inlineFieldsOk) expect(t.inlineFields, `table ${t.index}: rows showing inline edit fields by default`).toBe(0);
             expect(t.blank, `table ${t.index}: blank rows`).toBe(0);

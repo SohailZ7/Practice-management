@@ -6,8 +6,11 @@ import type { CategoryDTO, TaskDTO } from "@/lib/taskTypes";
 
 const PERIOD_DAYS = 30;
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-11-05" -> "Nov 5". Pure string math: no Date, no locale, so the server and the browser always print the same text (a locale-dependent version caused React hydration error #418 on /tasks/analytics). */
 export function shortDate(key: string): string {
-  return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const [, m, d] = key.split("-").map(Number);
+  return `${MONTHS[(m || 1) - 1] ?? ""} ${d || ""}`.trim();
 }
 
 export function TaskAnalytics({ tasks, categories }: { tasks: TaskDTO[]; categories: CategoryDTO[] }) {
@@ -68,9 +71,7 @@ export function CategoryAnalyticsView({ a, categories, periodDays }: { a: Analyt
               <g key={day}>
                 {segments.map((s) => (
                   <rect key={s.id} x={x} y={s.y} width={barW} height={Math.max(s.h, 1)} fill={color(s.id)} rx={1}>
-                    <title>
-                      {shortDate(day)} · {nameOf(s.id)}: {s.count}
-                    </title>
+                    <title>{`${shortDate(day)} · ${nameOf(s.id)}: ${s.count}`}</title>
                   </rect>
                 ))}
                 {showLabel && (

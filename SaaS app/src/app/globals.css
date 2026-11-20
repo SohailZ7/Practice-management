@@ -788,3 +788,14 @@ table.visits tr.row-green td { background: #e0f4e6; }
   table.visits tr.row-blue td { background: #1b2c44; }
   table.visits tr.row-green td { background: #16341f; }
 }
+
+/* phone overflow guard (Web 1.74): nothing may push the page wider than the viewport */
+.hero-main { min-width: min(280px, 100%); }
+.todo-toolbar { flex-wrap: wrap; gap: .5rem; }
+.tab-switcher { max-width: 100%; overflow-x: auto; }
+input[type=file] { max-width: 100%; }
+@media (max-width: 700px) {
+  .hero { padding: 18px 16px; gap: 16px; }
+  .hero h2 { font-size: 2rem; }
+  .content table:not(.visits):not(.xl) { display: block; max-width: 100%; overflow-x: auto; }
+}

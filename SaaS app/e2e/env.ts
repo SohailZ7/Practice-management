@@ -2,7 +2,7 @@
 // The suite only ever talks to a throwaway LOCAL database (practice_regress) that it creates and fills itself.
 export const E2E_PORT = Number(process.env.E2E_PORT ?? 3100);
 export const E2E_BASE = `http://localhost:${E2E_PORT}`;
-export const E2E_DB_NAME = "practice_regress";
+export const E2E_DB_NAME = process.env.E2E_DB_NAME ?? "practice_regress";
 export const E2E_ADMIN_URL = process.env.E2E_ADMIN_DATABASE_URL ?? "postgresql://practice:practice@localhost:5432/postgres";
 export const E2E_DATABASE_URL = process.env.E2E_DATABASE_URL ?? `postgresql://practice:practice@localhost:5432/${E2E_DB_NAME}`;
 export const E2E_SECRET = "e2e-only-secret-not-used-anywhere-else-0123456789";

@@ -22,8 +22,8 @@ export type Screen = {
 
 export const SCREENS: Screen[] = [
   { name: "Overview", path: "/", expect: [/overview|today/i] },
-  { name: "Patients", path: "/patients", expect: ["Dr Test One"], phoneOverflowMax: 520 },
-  { name: "Patient chart", path: "/patients/:patientId", expect: ["E2E-100"], inlineFieldsOk: true, phoneOverflowMax: 140 },
+  { name: "Patients", path: "/patients", expect: ["Dr Test One"] },
+  { name: "Patient chart", path: "/patients/:patientId", expect: ["E2E-100"], inlineFieldsOk: true },
   { name: "Schedule (list)", path: "/schedule", expect: [/schedule/i, "Dr Test One"], inlineFieldsOk: true },
   { name: "Schedule providers", path: "/schedule/providers", expect: ["Dr Test One"] },
   { name: "Schedule settings", path: "/schedule/settings", expect: [/track|visit type/i] },
@@ -38,7 +38,7 @@ export const SCREENS: Screen[] = [
   { name: "Billing: programs", path: "/billing/programs", expect: [/program/i] },
   { name: "Reports", path: "/reports", expect: [/report/i] },
   { name: "Tasks", path: "/tasks", expect: [/task/i] },
-  { name: "Tasks: analytics", path: "/tasks/analytics", expect: [/task|analytics/i], skipConsole: true /* KNOWN BUG: React hydration error #418 in production build */ },
+  { name: "Tasks: analytics", path: "/tasks/analytics", expect: [/task|analytics/i] },
   { name: "Tasks: recurring", path: "/tasks/recurring", expect: ["Weekly synthetic check"], inlineFieldsOk: true },
   { name: "Employees", path: "/employees", expect: ["Alex Tester"], inlineFieldsOk: true },
   { name: "Ledger", path: "/ledger", expect: [/ledger/i, "Synthetic supplies"], inlineFieldsOk: true },
