@@ -487,6 +487,23 @@ async fn set_recording_paused(paused: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Loudness of the last half second of microphone audio, 0 to 100 (for the level meter at the start of a recording).
+#[tauri::command]
+async fn recording_level() -> u8 {
+    let peak = LIVE_SHARED.lock().ok().and_then(|g| g.as_ref().and_then(|c| c.lock().ok().map(|c| {
+        let n = c.mic.len();
+        c.mic[n.saturating_sub(8000)..].iter().map(|s| s.unsigned_abs() as u32).max().unwrap_or(0)
+    }))).unwrap_or(0);
+    level_percent(peak)
+}
+
+/// Peak sample (0..32768) to a 0..100 meter value on a rough log scale, so ordinary speech fills most of the bar.
+pub fn level_percent(peak: u32) -> u8 {
+    if peak < 30 { return 0; }
+    let db = 20.0 * (peak.min(32768) as f64 / 32768.0).log10(); // about -60 .. 0
+    (((db + 60.0) / 60.0) * 100.0).clamp(0.0, 100.0) as u8
+}
+
 #[tauri::command]
 async fn recording_health() -> MicHealth {
     if capture::paused() { return MicHealth { lost: false, silent: false }; }
@@ -1011,7 +1028,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            engine_status_cmd, recording_checkpoint, recording_health, set_recording_paused, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
+            engine_status_cmd, recording_checkpoint, recording_health, recording_level, set_recording_paused, queue_sweep, recover_recordings, model_download, model_download_status, get_settings, set_environment, sign_in_with_google, mfa_step, mfa_finish, mfa_cancel, sign_out, get_access_token,
             refresh_access_token, api_request, start_recording, stop_recording, stop_dictation, cancel_recording,
             queue_list, queue_text, queue_set_text, queue_relabel, queue_complete, consent_record, consent_for, queue_discard, choose_transcript_dir, set_transcript_copy_dir, save_transcript_copy, export_queued_transcript, download_document_pdf,
             updater::check_update, updater::install_update, diag_context
@@ -1051,6 +1068,14 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         drop(guard);
         out
+    }
+
+    #[test]
+    fn level_meter_is_quiet_for_silence_and_high_for_speech() {
+        assert_eq!(level_percent(0), 0);
+        assert_eq!(level_percent(10), 0);
+        assert!(level_percent(3000) > 60);
+        assert_eq!(level_percent(40000), 100);
     }
 
     #[test]

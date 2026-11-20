@@ -357,6 +357,9 @@ export function App() {
         {signedIn && tab === "visits" && (
           <>
             <div id="rec-stage" />
+            {date === practiceToday() && !recording && ready && !!session && (
+              <QuickStart visits={(visits ?? []).filter((v) => (v.status ?? "scheduled") === "scheduled" && !v.hasTranscript && v.documentCount === 0)} disabled={busy} />
+            )}
             <div className="datebar">
               <button className="secondary" aria-label="Previous day" onClick={() => setDate(shift(date, -1))}>&lt;</button>
               <strong>{longDate(date)}</strong>
@@ -632,6 +635,8 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   const askSpeaker = (speakers: { label: string; sample: string }[]) => new Promise<string | null>((resolve) => setAsk({ speakers, resolve }));
   const [chooser, setChooser] = useState(false);
   const [askAppend, setAskAppend] = useState(false);
+  // The "Start recording" strip starts this row's own recording (same path as its Record button).
+  useEffect(() => { quickStarters.set(visit.id, () => (hasExisting ? setAskAppend(true) : void start())); return () => { quickStarters.delete(visit.id); }; });
   const [askConsent, setAskConsent] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const consentRef = useRef<ConsentEvent | null>(null);
@@ -650,6 +655,19 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   const pausedMs = useRef(0);
   const pausedAt = useRef<number | null>(null);
   useEffect(() => { setPaused(false); pausedMs.current = 0; pausedAt.current = null; }, [since]);
+  // Mic level meter: tells the provider within a second or two whether the microphone is hearing them.
+  const [level, setLevel] = useState(0);
+  const [heard, setHeard] = useState(false);
+  useEffect(() => {
+    setLevel(0); setHeard(false);
+    if (!since) return;
+    const t = setInterval(async () => {
+      const l = await engine.recordingLevel().catch(() => 0);
+      setLevel(l);
+      if (l > 25) setHeard(true);
+    }, 400);
+    return () => clearInterval(t);
+  }, [since]);
   const togglePause = async () => {
     const next = !paused;
     try { await engine.setRecordingPaused(next); } catch { return; }
@@ -848,6 +866,12 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
                   <div className="grow"><div className="stage-who">{visit.initials}</div><div className="stage-soft">{[visit.appointmentType, visit.apptTime, visit.program].filter(Boolean).join(" · ")}</div></div>
                   <div className="stage-time" role="timer" aria-live="off">{mmss}</div>
                 </div>
+                {!paused && (
+                  <div className="mic-check" data-testid="mic-check">
+                    <div className="mic-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}><i style={{ width: `${level}%` }} /></div>
+                    <span className="stage-soft">{heard ? "Microphone is picking up your voice." : secs >= 5 ? "No sound yet. Check your microphone, then speak." : "Say a few words: the bar should move."}</span>
+                  </div>
+                )}
                 <div className="wave" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 12) * 0.09}s` }} />)}</div>
                 <div className="stage-actions">
                   <button className="ghost" disabled={busy} onClick={async () => {
@@ -1140,4 +1164,23 @@ function SafeToClose({ queue, failures, recording, busy, signedIn }: { queue: Qu
   void failures;
   const l = safeToCloseLine({ recording, busy, waiting: queue.filter((q) => q.status !== "uploaded").length, signedIn });
   return <div className={`safe-line ${l.tone}`} role="status" data-testid="safe-to-close"><span className={`pill ${l.tone}`}>{l.tone === "ok" ? "Safe" : "Not yet"}</span> {l.text}</div>;
+}
+
+/** Row start functions, by visit id, so the strip above the list can start the same recording a row's button would. */
+const quickStarters = new Map<string, () => void>();
+
+/** Today's visits still to record: one tap starts a recording already tied to that visit. */
+export function quickStartLabel(v: Pick<Visit, "initials" | "fullName" | "apptTime">): string {
+  return [v.apptTime, v.fullName ?? v.initials].filter(Boolean).join(" ");
+}
+function QuickStart({ visits, disabled }: { visits: Visit[]; disabled: boolean }) {
+  if (visits.length === 0) return null;
+  return (
+    <div className="quick-start" data-testid="quick-start" aria-label="Start recording">
+      <span className="small">Start recording:</span>
+      {visits.map((v) => (
+        <button key={v.id} className="secondary" disabled={disabled} title="Starts a recording on this visit" onClick={() => quickStarters.get(v.id)?.()}>{quickStartLabel(v)}</button>
+      ))}
+    </div>
+  );
 }
