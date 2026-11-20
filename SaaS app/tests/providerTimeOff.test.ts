@@ -20,3 +20,11 @@ describe("provider time off", () => {
     expect(formatRange({ startDate: "2026-12-01", endDate: "2026-12-03" })).toBe("2026-12-01 to 2026-12-03");
   });
 });
+
+import { withoutHidden } from "@/lib/notes/options";
+describe("soft-hide pick-list values", () => {
+  it("drops hidden values case-insensitively and keeps the rest", () => {
+    expect(withoutHidden(["Dr A", "Dr B", "Follow-up"], ["dr a "])).toEqual(["Dr B", "Follow-up"]);
+    expect(withoutHidden(["x"], [])).toEqual(["x"]);
+  });
+});

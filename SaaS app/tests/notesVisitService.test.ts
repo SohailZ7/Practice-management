@@ -5,6 +5,7 @@ const db = {
   visit: { findMany: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   provider: { findMany: vi.fn(), findFirst: vi.fn() },
   trackDef: { findMany: vi.fn() },
+  hiddenOption: { findMany: vi.fn().mockResolvedValue([]) },
   entryType: { findMany: vi.fn() },
   patient: { findFirst: vi.fn(), create: vi.fn() },
 };

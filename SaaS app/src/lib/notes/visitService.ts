@@ -59,7 +59,7 @@ async function cleanFields(input: VisitPatch): Promise<VisitPatch & { status?: V
     if (!isVisitStatus(input.status)) throw new VisitError("bad_status", "Choose a status from the list.");
     out.status = input.status;
   }
-  const strict = async () => (input.appointmentType?.trim() || input.providerName?.trim() ? loadVisitOptions() : null);
+  const strict = async () => (input.appointmentType?.trim() || input.providerName?.trim() ? loadVisitOptions({ includeHidden: true }) : null);
   const opts = await strict();
   if (input.apptTime !== undefined) out.apptTime = cleanApptTime(input.apptTime);
   if (input.program !== undefined) out.program = text(input.program, 120);

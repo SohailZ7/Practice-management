@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
 import { flash, str } from "@/lib/flash";
+import { HIDEABLE_KINDS } from "@/lib/notes/options";
 
 const BACK = "/schedule/settings";
 
@@ -49,4 +50,29 @@ export async function deleteEntryType(form: FormData) {
   await audit(user.email, "entrytype.delete", id);
   revalidatePath(BACK);
   flash(BACK, "notice", "Type removed. Existing entries keep their text.");
+}
+
+export async function hideOption(form: FormData) {
+  const user = await requireAccess("schedule", "edit");
+  const kind = str(form, "kind");
+  const value = str(form, "value");
+  if (!HIDEABLE_KINDS.some((k) => k === kind) || !value) flash(BACK, "error", "Nothing to hide.");
+  await db.hiddenOption.upsert({
+    where: { kind_value: { kind, value } },
+    create: { kind, value, hiddenByEmail: user.email },
+    update: {},
+  });
+  await audit(user.email, "option.hide", `${kind}: ${value}`);
+  revalidatePath(BACK);
+  flash(BACK, "notice", `Hidden from new visits: ${value}. Past visits keep it.`);
+}
+
+export async function restoreOption(form: FormData) {
+  const user = await requireAccess("schedule", "edit");
+  const kind = str(form, "kind");
+  const value = str(form, "value");
+  await db.hiddenOption.deleteMany({ where: { kind, value } });
+  await audit(user.email, "option.restore", `${kind}: ${value}`);
+  revalidatePath(BACK);
+  flash(BACK, "notice", `Restored: ${value}.`);
 }

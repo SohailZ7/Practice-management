@@ -2,7 +2,8 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { Banner } from "@/components/Banner";
-import { addEntryType, addTrack, deleteEntryType, deleteTrack } from "./actions";
+import { addEntryType, addTrack, deleteEntryType, deleteTrack, hideOption, restoreOption } from "./actions";
+import { loadVisitOptions } from "@/lib/notes/options";
 
 export default async function SettingsPage({
   searchParams,
@@ -10,10 +11,18 @@ export default async function SettingsPage({
   searchParams: { error?: string; notice?: string };
 }) {
   await requireAccess("schedule", "edit");
-  const [tracks, types] = await Promise.all([
+  const [tracks, types, all, hiddenRows] = await Promise.all([
     db.trackDef.findMany({ orderBy: { sortOrder: "asc" } }),
     db.entryType.findMany({ orderBy: { name: "asc" } }),
+    loadVisitOptions({ includeHidden: true }),
+    db.hiddenOption.findMany({ select: { kind: true, value: true } }),
   ]);
+  const isHidden = (kind: string, value: string) => hiddenRows.some((h) => h.kind === kind && h.value.toLowerCase() === value.toLowerCase());
+  const groups = [
+    { kind: "provider", title: "Providers", values: all.providers },
+    { kind: "program", title: "Programs", values: all.programs },
+    { kind: "appointment_type", title: "Appointment types", values: all.appointmentTypes },
+  ];
 
   return (
     <>
@@ -84,6 +93,42 @@ export default async function SettingsPage({
         <input name="name" placeholder="Type name" required className="grow" />
         <button type="submit">Add type</button>
       </form>
+
+      <h2>Pick lists: hide a value</h2>
+      <p className="muted small">
+        Hiding removes a provider, program or appointment type from the pick lists for new visits. Nothing is deleted: past
+        visits keep it, still bill and edit normally, and you can restore it here at any time.
+      </p>
+      {groups.map((g) => (
+        <div key={g.kind} className="card">
+          <strong>{g.title}</strong>
+          <div className="table-wrap">
+            <table>
+              <tbody>
+                {g.values.map((v) => {
+                  const hidden = isHidden(g.kind, v);
+                  return (
+                    <tr key={v}>
+                      <td>
+                        {v} {hidden && <span className="pill">hidden</span>}
+                      </td>
+                      <td style={{ width: 120 }}>
+                        <form action={hidden ? restoreOption : hideOption}>
+                          <input type="hidden" name="kind" value={g.kind} />
+                          <input type="hidden" name="value" value={v} />
+                          <button type="submit" aria-label={`${hidden ? "Restore" : "Hide"} ${v}`}>
+                            {hidden ? "Restore" : "Hide"}
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </>
   );
 }

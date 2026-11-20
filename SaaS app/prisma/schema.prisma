@@ -727,3 +727,15 @@ model UnmatchedAppointment {
   @@index([date])
   @@index([dedupeKey])
 }
+
+// Soft-hide for pick-list values (program | appointment_type | provider). Additive. Hiding only removes the value from the
+// pick lists for NEW visits; past visits keep their stored text and still edit and bill normally. Never deleted, restorable.
+model HiddenOption {
+  id            String   @id @default(cuid())
+  kind          String
+  value         String
+  hiddenByEmail String
+  hiddenAt      DateTime @default(now())
+
+  @@unique([kind, value])
+}
