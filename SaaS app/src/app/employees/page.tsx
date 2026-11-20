@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { PageHead } from "@/components/PageHead";
 import { db } from "@/lib/db";
 import { requireAccess } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 import { Banner } from "@/components/Banner";
 import { addEmployee, giveLogin, updateEmployee } from "./actions";
+import { PeopleSection } from "@/components/admin/PeopleSection";
 
 export default async function EmployeesPage({
   searchParams,
@@ -16,7 +16,7 @@ export default async function EmployeesPage({
   const isAdmin = user.role === "ADMIN";
   const [employees, users] = await Promise.all([
     db.employee.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),
-    db.user.findMany({ select: { email: true } }),
+    db.user.findMany({ orderBy: { createdAt: "asc" }, include: { access: true } }),
   ]);
   const loginEmails = new Set(users.map((u) => u.email));
 
@@ -24,12 +24,12 @@ export default async function EmployeesPage({
     <>
       <PageHead eyebrow="The people behind the practice" title="Better together.">
         {canEdit && <a className="btn" href="#add-employee">Invite team member</a>}
-        {isAdmin && <Link className="btn secondary" href="/admin">Manage roles and permissions</Link>}
+        {isAdmin && <a className="btn secondary" href="#logins">Logins and access</a>}
       </PageHead>
       <Banner error={searchParams.error} notice={searchParams.notice} />
       <p className="muted small">
         Staff records used on schedules, task tabs and timesheets. Not everyone here can sign in.
-        {isAdmin ? <> Logins, roles and module access are managed under <Link href="/admin">Admin &gt; People</Link>.</> : null}
+        {isAdmin ? <> Logins, roles and module access are managed further down, under <a href="#logins">Logins and access</a>.</> : null}
       </p>
 
       <div className="table-wrap">
@@ -98,10 +98,12 @@ export default async function EmployeesPage({
           </form>
           <p className="muted small">
             Deactivating an employee keeps their history on schedules and tasks. Giving someone a login
-            is done with &quot;Give login&quot; above or under Admin &gt; People.
+            is done with &quot;Give login&quot; above or under Logins and access below.
           </p>
         </>
       )}
+
+      {isAdmin && <PeopleSection users={users} meId={user.id} />}
     </>
   );
 }

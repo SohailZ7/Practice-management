@@ -52,7 +52,7 @@ export default async function AccessReviewPage({ searchParams }: { searchParams:
   return (
     <>
       <p>
-        <Link href="/admin">← Access</Link>
+        <Link href="/employees#logins">← Logins and access</Link>
       </p>
       <h2>Access review</h2>
       <p className="muted">

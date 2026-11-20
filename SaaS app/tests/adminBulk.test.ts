@@ -51,18 +51,18 @@ describe("saveAllAction", () => {
 });
 
 describe("Admin navigation", () => {
-  it("has one People tab and one Task tabs tab", () => {
+  it("has one Task tabs tab and no People tab (people moved to Employees)", () => {
     const labels = ADMIN_PAGES.map((p) => p.label);
-    expect(labels).toContain("People");
+    expect(labels).not.toContain("People");
     expect(labels).toContain("Task tabs");
     for (const gone of ["Users", "Module access", "Task tab access"]) expect(labels).not.toContain(gone);
   });
   it("old addresses redirect", () => {
-    expect(readFileSync("src/app/admin/access/page.tsx", "utf8")).toContain('redirect("/admin")');
+    expect(readFileSync("src/app/admin/access/page.tsx", "utf8")).toContain('redirect("/employees#logins")');
     expect(readFileSync("src/app/admin/task-access/page.tsx", "utf8")).toContain('redirect("/admin/task-tabs")');
   });
   it("every Admin tab with row saves uses the shared bar", () => {
-    for (const f of ["src/app/admin/page.tsx", "src/app/admin/task-tabs/page.tsx", "src/app/admin/timesheets/page.tsx"]) {
+    for (const f of ["src/components/admin/PeopleSection.tsx", "src/app/admin/task-tabs/page.tsx", "src/app/admin/timesheets/page.tsx"]) {
       const t = readFileSync(f, "utf8");
       expect(t).toContain("<BulkSave>");
       expect(t).toContain("data-bulk=");

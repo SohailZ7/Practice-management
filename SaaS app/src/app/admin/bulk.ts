@@ -52,5 +52,6 @@ export async function saveAllAction(rows: BulkRow[]): Promise<BulkOutcome> {
   // Counts only: each saved row already wrote its own audit entry.
   await audit(admin.email, "admin.bulk_save", `rows=${list.length} saved=${out.saved} failed=${out.failed.length}`);
   revalidatePath("/admin", "layout");
+  revalidatePath("/employees");
   return out;
 }

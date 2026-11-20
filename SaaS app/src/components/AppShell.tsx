@@ -121,13 +121,13 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
   ];
   const operations: NavItem[] = [
     { id: "/tasks", href: "/tasks", label: "Tasks", icon: "tasks", locked: levels.tasks === "none" },
-    { id: "/employees", href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" },
     { id: "/ledger", href: "/ledger", label: "Ledger", icon: "ledger", locked: levels.ledger === "none" },
   ];
   const items = [...clinical, ...operations];
   // MANAGE group. Feedback and Settings are open to every signed-in user. Admin is visible to everyone; anyone but the
   // Admin who opens it sees the "no access" page (AUTH-13).
-  const manage: { href: string; label: string; icon: IconName }[] = [
+  const manage: { href: string; label: string; icon: IconName; locked?: boolean }[] = [
+    { href: "/employees", label: "Employees", icon: "users", locked: levels.employees === "none" },
     { href: "/feedback", label: "Feedback", icon: "flag" },
     { href: "/settings", label: "Settings", icon: "settings" },
     { href: "/admin", label: "Administration", icon: "shield" },
@@ -227,7 +227,7 @@ export function AppShell({ name, email, levels, isAdmin, staging, roleLabel, tim
           {group("CLINICAL", orderedClinical, orderedOperations, true)}
           {group("OPERATIONS", orderedOperations, orderedClinical, false)}
           <div className="nav-label label">MANAGE</div>
-          {manage.map((m) => link(m.href, m.label, m.icon))}
+          {manage.map((m) => link(m.href, m.label, m.icon, m.locked))}
         </nav>
         <div className={`env-badge ${staging ? "staging" : ""}`} role="status">
           <span className="dot" aria-hidden="true" />

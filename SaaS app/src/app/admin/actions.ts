@@ -17,7 +17,7 @@ import {
   wouldRemoveLastAdmin,
 } from "@/lib/access";
 
-const BACK = "/admin";
+const BACK = "/employees"; // people live on the Employees page
 
 async function activeAdminIds(): Promise<string[]> {
   const admins = await db.user.findMany({ where: { role: "ADMIN", active: true }, select: { id: true } });

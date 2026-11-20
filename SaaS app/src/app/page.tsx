@@ -71,7 +71,7 @@ export default async function Home() {
     lv.employees !== "none" && { href: "/employees", title: "Employees", note: "Directory" },
     showBilling && { href: "/billing", title: "Billing", note: "Encounters and GetIX" },
     lv.ledger !== "none" && { href: "/ledger", title: "Ledger", note: "Business cash in and out" },
-    canOpenAdmin(user) && { href: "/admin", title: "Access", note: "Users and module access" },
+    canOpenAdmin(user) && { href: "/employees#logins", title: "Access", note: "Users and module access" },
   ].filter(Boolean) as { href: string; title: string; note: string }[];
   const shown = visits.slice(0, 6);
 

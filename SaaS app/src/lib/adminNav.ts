@@ -1,6 +1,5 @@
 /** The Admin console's sub-pages, shown as tabs in the console and as links under Admin in the left navigation. */
 export const ADMIN_PAGES = [
-  { href: "/admin", label: "People" },
   { href: "/admin/task-tabs", label: "Task tabs" },
   { href: "/admin/lists", label: "Lists" },
   { href: "/admin/timesheets", label: "Timesheets" },
@@ -12,5 +11,5 @@ export const ADMIN_PAGES = [
 ] as const;
 
 export function adminPageActive(path: string, href: string): boolean {
-  return href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`);
+  return path === href || path.startsWith(`${href}/`);
 }

@@ -1,12 +1,6 @@
-import Link from "next/link";
-import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { Banner } from "@/components/Banner";
-import { BulkSave } from "@/components/BulkSave";
-import { ROLES, LEVELS, MODULES } from "@/lib/access";
-import { ConfirmButton } from "@/components/ConfirmButton";
-import { addUser, deleteUser, revokeDesktopSessions, updatePerson } from "./actions";
+import { redirect } from "next/navigation";
 
+<<<<<<< HEAD
 /** Admin > People: every login in one place. Role, active, flags and module access are one row per person; Save all saves every changed row. */
 export default async function Page({ searchParams }: { searchParams: { error?: string; notice?: string } }) {
   const me = await requireAdmin();
@@ -100,4 +94,9 @@ export default async function Page({ searchParams }: { searchParams: { error?: s
       </form>
     </>
   );
+=======
+// People moved to the Employees page (one tab for staff records and logins). Old links and bookmarks land on the first Admin tab.
+export default function Page() {
+  redirect("/admin/task-tabs");
+>>>>>>> 9c6e4ec (Web 1.71: Employees and People merged into one Employees tab under Manage)
 }
