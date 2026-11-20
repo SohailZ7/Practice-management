@@ -122,6 +122,7 @@ model Task {
   category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   assignee       Employee?      @relation(fields: [assigneeId], references: [id])
   links          TaskLink[]
+  updates        TaskUpdate[]
   recurringId    String?
   occurrenceDate String?
   // Set when the task is mirrored from another app (the Sohail Todo App): source name and that app's id.
@@ -709,4 +710,19 @@ model UnmatchedAppointment {
 
   @@index([date])
   @@index([dedupeKey])
+}
+
+// A dated update posted on a task (separate from its notes). The assignee sees an "Update" badge until they open it (seenAt).
+// Text is checked for patient information before it is stored and is never written to the audit log.
+model TaskUpdate {
+  id          String    @id @default(cuid())
+  taskId      String
+  authorEmail String
+  authorName  String
+  body        String
+  createdAt   DateTime  @default(now())
+  seenAt      DateTime?
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }

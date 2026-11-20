@@ -758,3 +758,8 @@ html[data-density="compact"] .stage-card, html[data-density="compact"] .ov-stat 
 .vd-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
 .vd-docs li { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem; align-items: center; }
 .vd-foot { display: flex; gap: .5rem; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+
+.upd-btn { font-size: .75rem; padding: .08rem .55rem; border-radius: 999px; background: transparent; color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.upd-btn.unseen { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
+.upd-list { list-style: none; margin: 0 0 .75rem; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.upd-list li { border-bottom: 1px solid var(--line); padding-bottom: .4rem; white-space: pre-wrap; }

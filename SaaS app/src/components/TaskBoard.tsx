@@ -24,6 +24,7 @@ import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { TaskColumns, TaskInsights, type Workload } from "./TaskInsights";
 import { TaskNotesDialog } from "./TaskNotesDialog";
+import { TaskUpdates } from "./TaskUpdates";
 import { PhiConfirm } from "./PhiConfirm";
 import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
 import { TodoSyncButton } from "./TodoSyncButton";
@@ -679,6 +680,7 @@ function TaskItem({
           aria-label="Expiration date"
           onChange={(e) => onPatch(task.id, { expiresAt: e.target.value || null })}
         />
+        <TaskUpdates taskId={task.id} title={task.title} initial={task.updates ?? []} isAssignee={!!task.assigneeId && task.assigneeId === access.meId} canPost={canAssign} />
         {(canEdit || task.notes) && (
           <button
             className={`icon-btn notes ${task.notes ? "active" : ""}`}

@@ -33,7 +33,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
     ? []
     : await db.task.findMany({
         where: { assigneeId: selected },
-        include: { links: true },
+        include: { links: true, updates: { orderBy: { createdAt: "asc" } } },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       });
   const grouped = noProfile

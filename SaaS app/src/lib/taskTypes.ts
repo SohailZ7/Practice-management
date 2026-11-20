@@ -42,6 +42,8 @@ export type TaskDTO = {
   /** Created by a recurring task. */
   recurring: boolean;
   links: LinkDTO[];
+  /** Dated updates (newest last). Optional so older callers keep working. */
+  updates?: TaskUpdateDTO[];
 };
 
 export type TaskPatch = Partial<
@@ -60,11 +62,14 @@ export function autoCompare(a: { priority: TaskPriority; dueDate: string | null;
   return PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || (a.dueDate ?? "9999") .localeCompare(b.dueDate ?? "9999") || a.sortOrder - b.sortOrder;
 }
 
+export type TaskUpdateDTO = { id: string; author: string; body: string; at: number; seen: boolean };
+export const MAX_UPDATE = 2000;
+
 export const MAX_NOTES = 20000;
 
 export type CategoryDTO = { id: string; name: string };
 
-export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
+export function toTaskDTO(t: Task & { links: TaskLink[]; updates?: { id: string; authorName: string; body: string; createdAt: Date; seenAt: Date | null }[] }): TaskDTO {
   return {
     id: t.id,
     title: t.title,
@@ -81,6 +86,7 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     sortOrder: t.sortOrder,
     recurring: t.recurringId !== null,
     links: t.links.map((l) => ({ id: l.id, url: l.url, label: l.label, type: l.type })),
+    updates: (t.updates ?? []).map((u) => ({ id: u.id, author: u.authorName, body: u.body, at: u.createdAt.getTime(), seen: u.seenAt !== null })),
   };
 }
 

@@ -10,7 +10,7 @@ import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
 import { blockedPatchKeys, canAssignTo, taskLevel, type MoveKind } from "@/lib/taskAccess";
 import { loadTaskScope } from "@/lib/taskScope";
-import { isTaskPriority, isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { MAX_UPDATE, type TaskUpdateDTO, isTaskPriority, isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
 // Visibility rule (TSK-6, TSK-59): a non-admin may only change tasks assigned to them or to an employee whose tab
 // the Admin granted them edit access to. Every action below checks it on the server.
@@ -206,9 +206,41 @@ export async function reorderTasks(orderedIds: string[]): Promise<void> {
   revalidatePath("/tasks");
 }
 
+/** Links, like titles and notes, need the Admin (or an edit grant on that person's tab). */
+async function requireFullRights(user: CurrentUser, taskId: string) {
+  const { level } = await loadTaskWithLevel(user, taskId);
+  if (level !== "full") {
+    await auditDenied(user.email, `task ${taskId}`);
+    throw new Error("That change needs the administrator.");
+  }
+}
+
+/** Anyone with Tasks access can post a dated update on any task they can see; the assignee gets an "Update" badge. */
+export async function addTaskUpdate(taskId: string, rawBody: string, confirmNoPhi = false): Promise<TaskUpdateDTO | PhiBlock> {
+  const user = await requireAccess("tasks", "edit");
+  const body = rawBody.trim().slice(0, MAX_UPDATE);
+  if (!body) throw new Error("Write the update first");
+  if (!(await db.task.findUnique({ where: { id: taskId }, select: { id: true } }))) throw new Error("Task not found");
+  const blocked = await phiCheck(user, taskId, [body], confirmNoPhi === true);
+  if (blocked) return blocked;
+  const row = await db.taskUpdate.create({ data: { taskId, authorEmail: user.email, authorName: user.name, body } });
+  await audit(user.email, "task.update.add", `task ${taskId}`);
+  revalidatePath("/tasks");
+  return { id: row.id, author: row.authorName, body: row.body, at: row.createdAt.getTime(), seen: false };
+}
+
+/** The assignee opened the updates: clears the badge. Others' opening changes nothing. */
+export async function markTaskUpdatesSeen(taskId: string): Promise<void> {
+  const user = await requireAccess("tasks", "view");
+  const task = await db.task.findUnique({ where: { id: taskId }, include: { assignee: true } });
+  if (!task || task.assignee?.email !== user.email) return;
+  await db.taskUpdate.updateMany({ where: { taskId, seenAt: null, authorEmail: { not: user.email } }, data: { seenAt: new Date() } });
+  revalidatePath("/tasks");
+}
+
 export async function addTaskLink(taskId: string, rawUrl: string): Promise<LinkDTO> {
   const user = await requireAccess("tasks", "edit");
-  await loadAccessibleTask(user, taskId);
+  await requireFullRights(user, taskId);
   const url = normalizeUrl(rawUrl);
   if (!url) throw new Error("Enter a valid http(s) link");
   const type = detectLinkType(url);
@@ -223,7 +255,7 @@ export async function removeTaskLink(linkId: string): Promise<void> {
   const user = await requireAccess("tasks", "edit");
   const link = await db.taskLink.findUnique({ where: { id: linkId } });
   if (!link) return;
-  await loadAccessibleTask(user, link.taskId);
+  await requireFullRights(user, link.taskId);
   await db.taskLink.delete({ where: { id: linkId } });
   revalidatePath("/tasks");
 }
