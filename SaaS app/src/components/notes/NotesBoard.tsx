@@ -1,5 +1,6 @@
 "use client";
 
+import { statusLabel } from "@/lib/notes/visitStatus";
 import { hasSpeakers, parseTurns, speakerRole } from "@/lib/transcript/turns";
 import { applyLabels, type SpeakerLabels } from "@/lib/transcript/labels";
 import { useState, useTransition } from "react";
@@ -9,7 +10,7 @@ import { useEffect } from "react";
 import { TRANSCRIPT_LOAD_ERROR, withTimeout } from "@/lib/loadGuard";
 import { searchPatients, createPatient, type PatientOption } from "@/app/schedule/patient-actions";
 import type { VisitOptions } from "@/lib/notes/options";
-import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, priorVisits, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
@@ -293,6 +294,13 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
     const t = setTimeout(() => { void searchPatients(q).then(setResults).catch(() => setResults([])); }, 200);
     return () => clearTimeout(t);
   }, [q, picked]);
+  const [prior, setPrior] = useState<{ date: string; type: string; status: string }[]>([]);
+  useEffect(() => {
+    if (!picked) { setPrior([]); return; }
+    let alive = true;
+    void priorVisits(picked.id).then((r) => alive && setPrior(r)).catch(() => alive && setPrior([]));
+    return () => { alive = false; };
+  }, [picked]);
   const [opts, setOpts] = useState<VisitOptions | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -310,6 +318,9 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
             <p style={{ margin: 0 }}>
               <strong>Patient:</strong> {picked.name}{picked.mrn ? ` (${picked.mrn})` : ""}{" "}
               <button type="button" onClick={() => { setPicked(null); setQ(""); }}>Change</button>
+              <span className="small muted" style={{ display: "block" }}>
+                {prior.length === 0 ? "No earlier visits." : `Earlier visits: ${prior.map((p) => `${p.date} ${p.type || "Visit"} (${statusLabel(p.status)})`).join("; ")}`}
+              </span>
             </p>
           ) : (
             <>

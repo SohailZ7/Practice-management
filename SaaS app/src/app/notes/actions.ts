@@ -17,6 +17,8 @@ import { loadVisitOptions } from "@/lib/notes/options";
 import { assertBillableVisit, isTrackingOnlyName, TRACKING_ONLY_MESSAGE } from "@/lib/notes/trackingOnly";
 import { sanitizeLabels } from "@/lib/transcript/labels";
 import { canAccess } from "@/lib/access";
+import { applyToggle, cleanLabel, isChecklistKind } from "@/lib/notes/checklist";
+import { LIVE_VISITS } from "@/lib/unify/visible";
 import { providerChangeError, splitPatch } from "@/lib/notes/visitEdit";
 import { NOTE_KINDS, isNoteKind, canWriteKind, canResolve, cleanNoteBody, type VisitNoteDTO } from "@/lib/notes/visitNotes";
 import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
@@ -286,4 +288,68 @@ export async function setVisitNoteResolved(noteId: string, resolved: boolean): P
 
 function noteDto(r: { id: string; kind: string; body: string; authorName: string; createdAt: Date; resolvedAt: Date | null; resolvedByEmail: string | null }): VisitNoteDTO {
   return { id: r.id, kind: r.kind, body: r.body, author: r.authorName, at: r.createdAt.getTime(), resolved: r.resolvedAt !== null, resolvedBy: r.resolvedByEmail };
+}
+
+// Per-visit checklist and discharge flag. Audit entries hold ids and labels from the fixed lists, never patient text.
+export type ChecklistDTO = { id: string; kind: string; label: string; done: boolean; sentToFfx: boolean };
+
+export async function listChecklist(visitId: string): Promise<{ items: ChecklistDTO[]; discharged: boolean | null }> {
+  await requireAccess("notes", "view");
+  const [items, v] = await Promise.all([
+    db.visitChecklistItem.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } }),
+    db.visit.findUnique({ where: { id: visitId }, select: { discharged: true } }),
+  ]);
+  return { items: items.map((i) => ({ id: i.id, kind: i.kind, label: i.label, done: i.done, sentToFfx: i.sentToFfx })), discharged: v?.discharged ?? null };
+}
+
+export async function addChecklistItem(visitId: string, kind: string, label: string): Promise<{ ok: true; item: ChecklistDTO } | { ok: false; error: string }> {
+  const user = await requireAccess("notes", "edit");
+  if (!isChecklistKind(kind)) return { ok: false, error: "Choose Documentation or Orders." };
+  const clean = cleanLabel(kind, label);
+  if (!clean) return { ok: false, error: "Choose an item from the list." };
+  if (!(await db.visit.findUnique({ where: { id: visitId }, select: { id: true } }))) return { ok: false, error: "Visit not found." };
+  const dup = await db.visitChecklistItem.findFirst({ where: { visitId, kind, label: clean } });
+  if (dup) return { ok: false, error: "That item is already on the list." };
+  const i = await db.visitChecklistItem.create({ data: { visitId, kind, label: clean, updatedBy: user.email } });
+  await audit(user.email, "notes.visit.checklist.add", `visit ${visitId} ${kind}: ${clean}`);
+  return { ok: true, item: { id: i.id, kind: i.kind, label: i.label, done: i.done, sentToFfx: i.sentToFfx } };
+}
+
+export async function toggleChecklistItem(id: string, field: "done" | "sentToFfx", value: boolean): Promise<{ ok: true; item: ChecklistDTO } | { ok: false; error: string }> {
+  const user = await requireAccess("notes", "edit");
+  if (field !== "done" && field !== "sentToFfx") return { ok: false, error: "Not a valid field." };
+  const cur = await db.visitChecklistItem.findUnique({ where: { id } });
+  if (!cur) return { ok: false, error: "Item not found." };
+  if (field === "sentToFfx" && value && !cur.done) return { ok: false, error: "Mark it completed before marking it sent to FFX." };
+  const next = applyToggle(cur, field, !!value);
+  const i = await db.visitChecklistItem.update({ where: { id }, data: { ...next, updatedBy: user.email } });
+  await audit(user.email, "notes.visit.checklist.set", `item ${id} visit ${cur.visitId} done=${next.done} sent=${next.sentToFfx}`);
+  return { ok: true, item: { id: i.id, kind: i.kind, label: i.label, done: i.done, sentToFfx: i.sentToFfx } };
+}
+
+export async function removeChecklistItem(id: string): Promise<{ ok: boolean }> {
+  const user = await requireAccess("notes", "edit");
+  const cur = await db.visitChecklistItem.findUnique({ where: { id } });
+  if (!cur) return { ok: true };
+  await db.visitChecklistItem.delete({ where: { id } });
+  await audit(user.email, "notes.visit.checklist.remove", `item ${id} visit ${cur.visitId}`);
+  return { ok: true };
+}
+
+/** Discharge appointment: was the patient discharged? true / false / null (not answered). */
+export async function setVisitDischarged(visitId: string, value: boolean | null): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireAccess("notes", "edit");
+  if (value !== null && typeof value !== "boolean") return { ok: false, error: "Choose yes or no." };
+  if (!(await db.visit.findUnique({ where: { id: visitId }, select: { id: true } }))) return { ok: false, error: "Visit not found." };
+  await db.visit.update({ where: { id: visitId }, data: { discharged: value } });
+  await audit(user.email, "notes.visit.discharged", `visit ${visitId} discharged=${value}`);
+  revalidatePath("/notes");
+  return { ok: true };
+}
+
+/** The patient's last few visits, shown when scheduling a new one (dates, types and statuses only). */
+export async function priorVisits(patientId: string): Promise<{ date: string; type: string; status: string }[]> {
+  await requireAccess("notes", "view");
+  const rows = await db.visit.findMany({ where: { patientId, ...LIVE_VISITS }, orderBy: { visitDate: "desc" }, take: 5, select: { visitDate: true, appointmentType: true, status: true } });
+  return rows.map((r) => ({ date: r.visitDate, type: r.appointmentType, status: r.status }));
 }

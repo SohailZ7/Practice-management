@@ -1,5 +1,6 @@
 "use client";
 
+import { groupVisits } from "@/lib/notes/groups";
 import { useState, type ReactNode } from "react";
 import { VisitDrawer } from "./VisitDrawer";
 import type { VisitRow } from "@/lib/notes/queries";
@@ -77,10 +78,19 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
           </tr>
         </thead>
         <tbody>
-          {visits.map((v) => {
+          {groupVisits(visits).flatMap((g) => [
+            ...(g.key ? [(
+              <tr key={`g-${g.key}`} className="grp-head" style={{ background: `${g.color}1a`, borderLeft: `4px solid ${g.color}` }}>
+                <td colSpan={showProvider ? 7 : 6}>
+                  <b style={{ color: g.color }}>{g.program}</b> <span className="muted small">{formatTimeText(g.time, military)} · {g.rows.length} patients:</span>{" "}
+                  <span className="small">{g.rows.map((r) => r.fullName ?? r.initials).join(", ")}</span>
+                </td>
+              </tr>
+            )] : []),
+            ...g.rows.map((v) => ({ v, color: g.key ? g.color : "" })).map(({ v, color }) => {
             const docs = docsOf(v);
             return (
-              <tr key={v.id} className={v.trackingOnly ? "tracking-row" : undefined} title={v.trackingOnly ? "Not B&B: tracking only. Counted for volume and revenue, never billed." : undefined}>
+              <tr key={v.id} className={v.trackingOnly ? "tracking-row" : undefined} style={color ? { borderLeft: `4px solid ${color}`, background: `${color}0d` } : undefined} title={v.trackingOnly ? "Not B&B: tracking only. Counted for volume and revenue, never billed." : undefined}>
                 <td className="v-pat" title={v.fullName ? "Full name when See full names is on (Settings)" : "Shown as initials"}>
                   <span className="v-pat-wrap">
                     {canEdit && <input type="checkbox" aria-label="Select visit" checked={selected.includes(v.id)} onChange={(e) => onSelect(v.id, e.target.checked)} />}
@@ -153,7 +163,8 @@ export function VisitsTable({ visits, docsOf, canEdit, selected, pending, onSele
                 </td>
               </tr>
             );
-          })}
+          }),
+          ])}
         </tbody>
       </table>
       {shown && (

@@ -290,6 +290,7 @@ model Visit {
   documents             VisitDocument[]
   notes                 VisitNote[]
   changeRequests        VisitChangeRequest[]
+  checklist             VisitChecklistItem[]
   provider              Provider?       @relation(fields: [providerId], references: [id], onDelete: SetNull)
   encounter             Encounter?      @relation(fields: [encounterId], references: [id], onDelete: SetNull)
 
@@ -843,4 +844,20 @@ model VisitChangeRequest {
 
   @@index([visitId])
   @@index([status])
+}
+
+// Per-visit Documentation / Orders checklist: each item is completed and, once completed, can be marked sent to FFX. Additive.
+model VisitChecklistItem {
+  id         String   @id @default(cuid())
+  visitId    String
+  kind       String // documentation | order
+  label      String
+  done       Boolean  @default(false)
+  sentToFfx  Boolean  @default(false)
+  updatedBy  String
+  createdAt  DateTime @default(now())
+  visit      Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, kind, label])
+  @@index([visitId])
 }

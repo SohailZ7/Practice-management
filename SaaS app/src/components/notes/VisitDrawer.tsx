@@ -7,8 +7,9 @@ import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
 import { PatientName } from "@/components/PatientName";
+import { CHECKLIST_KINDS, isDischargeType } from "@/lib/notes/checklist";
 import { NOTE_KINDS, noteKindLabel, MAX_NOTE, type VisitNoteDTO } from "@/lib/notes/visitNotes";
-import { listVisitNotes, addVisitNote, setVisitNoteResolved, listChangeRequests, decideChangeRequest } from "@/app/notes/actions";
+import { listVisitNotes, addVisitNote, setVisitNoteResolved, listChangeRequests, decideChangeRequest, listChecklist, addChecklistItem, toggleChecklistItem, removeChecklistItem, setVisitDischarged, type ChecklistDTO } from "@/app/notes/actions";
 
 /** The Visit details side panel: everything about one visit on one screen. Presentational; actions are passed in. */
 export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onStatus, onOpenDoc, onGenerate, onTranscript }: {
@@ -70,6 +71,7 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
             )}
           </section>
           <ChangeRequests visitId={visit.id} />
+          <ChecklistSection visitId={visit.id} canEdit={canEdit} discharge={isDischargeType(visit.appointmentType)} />
           <NotesSection visitId={visit.id} />
           <ConsentSection visitId={visit.id} />
           <section>
@@ -210,6 +212,81 @@ function ChangeRequests({ visitId }: { visitId: string }) {
           </li>
         ))}
       </ul>
+      {err && <div className="error small" role="alert">{err}</div>}
+    </section>
+  );
+}
+
+/** Documentation and Orders for this visit: completed, then sent to FFX. On a discharge visit, also Discharged yes / no. */
+function ChecklistSection({ visitId, canEdit, discharge }: { visitId: string; canEdit: boolean; discharge: boolean }) {
+  const [data, setData] = useState<{ items: ChecklistDTO[]; discharged: boolean | null } | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    listChecklist(visitId).then((d) => alive && setData(d)).catch(() => alive && setData({ items: [], discharged: null }));
+    return () => { alive = false; };
+  }, [visitId]);
+  const run = async (fn: () => Promise<void>) => { setErr(""); try { await fn(); } catch { setErr("That could not be saved. Try again."); } };
+  const replace = (i: ChecklistDTO) => setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === i.id ? i : x)) } : d));
+  const toggle = (it: ChecklistDTO, field: "done" | "sentToFfx") => run(async () => {
+    const r = await toggleChecklistItem(it.id, field, !it[field]);
+    if (r.ok) replace(r.item); else setErr(r.error);
+  });
+  const add = (kind: string, label: string) => run(async () => {
+    const r = await addChecklistItem(visitId, kind, label);
+    if (r.ok) setData((d) => (d ? { ...d, items: [...d.items, r.item] } : d)); else setErr(r.error);
+  });
+  const remove = (id: string) => run(async () => {
+    await removeChecklistItem(id);
+    setData((d) => (d ? { ...d, items: d.items.filter((x) => x.id !== id) } : d));
+  });
+  const setDis = (value: boolean | null) => run(async () => {
+    const r = await setVisitDischarged(visitId, value);
+    if (r.ok) setData((d) => (d ? { ...d, discharged: value } : d)); else setErr(r.error ?? "Could not save.");
+  });
+  if (!data) return null;
+  return (
+    <section>
+      <h3>Documentation and orders</h3>
+      {discharge && (
+        <p className="small" style={{ margin: "0 0 .5rem" }}>
+          <b>Discharged?</b>{" "}
+          {([[true, "Yes"], [false, "No"]] as const).map(([v, l]) => (
+            <label key={l} style={{ marginRight: ".75rem" }}>
+              <input type="radio" name={`dis-${visitId}`} checked={data.discharged === v} disabled={!canEdit} onChange={() => void setDis(v)} /> {l}
+            </label>
+          ))}
+          {canEdit && data.discharged !== null && <button type="button" className="secondary sm" onClick={() => void setDis(null)}>Clear</button>}
+        </p>
+      )}
+      {CHECKLIST_KINDS.map((k) => {
+        const rows = data.items.filter((i) => i.kind === k.value);
+        const left = k.options.filter((o) => !rows.some((r) => r.label === o));
+        return (
+          <div key={k.value} style={{ marginBottom: ".5rem" }}>
+            <div className="small muted">{k.label}</div>
+            {rows.length === 0 && <p className="small muted" style={{ margin: 0 }}>None listed.</p>}
+            <ul className="vd-docs">
+              {rows.map((i) => (
+                <li key={i.id}>
+                  <span>{i.label}</span>
+                  <span className="small">
+                    <label><input type="checkbox" checked={i.done} disabled={!canEdit} onChange={() => void toggle(i, "done")} /> Completed</label>{" "}
+                    <label><input type="checkbox" checked={i.sentToFfx} disabled={!canEdit || !i.done} onChange={() => void toggle(i, "sentToFfx")} /> Sent to FFX</label>{" "}
+                    {canEdit && <button type="button" className="secondary sm" onClick={() => void remove(i.id)} aria-label={`Remove ${i.label}`}>Remove</button>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {canEdit && left.length > 0 && (
+              <select value="" onChange={(e) => e.target.value && void add(k.value, e.target.value)} aria-label={`Add ${k.label.toLowerCase()} item`}>
+                <option value="">Add {k.label.toLowerCase()}…</option>
+                {left.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            )}
+          </div>
+        );
+      })}
       {err && <div className="error small" role="alert">{err}</div>}
     </section>
   );
