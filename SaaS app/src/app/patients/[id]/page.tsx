@@ -10,6 +10,7 @@ import { LIVE_VISITS } from "@/lib/unify/visible";
 import { statusLabel } from "@/lib/notes/visitStatus";
 import { PatientName } from "@/components/PatientName";
 import { Banner } from "@/components/Banner";
+import { docStateLabel } from "@/lib/patients/docState";
 import { saveBasics, admitPatient, dischargePatient } from "./actions";
 
 // The chart: everything for one patient. Visits, documents and (for people with billing access) encounters.
@@ -28,7 +29,7 @@ export default async function PatientChart({ params, searchParams }: { params: {
     db.visit.findMany({
       where: { ...LIVE_VISITS, patientId: patient.id },
       orderBy: [{ visitDate: "desc" }, { createdAt: "desc" }],
-      select: { id: true, legacyScheduleEntryId: true, visitDate: true, providerName: true, status: true, appointmentType: true, program: true, documents: { select: { id: true, kind: true, label: true, draft: true, updatedAt: true }, orderBy: { createdAt: "asc" } } },
+      select: { id: true, legacyScheduleEntryId: true, visitDate: true, providerName: true, status: true, appointmentType: true, program: true, documents: { select: { id: true, kind: true, label: true, draft: true, finalizedAt: true, updatedAt: true }, orderBy: { createdAt: "asc" } } },
     }),
     Promise.resolve([] as { id: string; date: string; providerName: string; trackName: string; typeName: string; completed: boolean; absent: boolean; canceled: boolean; missed: boolean }[]),
     billing ? db.encounter.findMany({ where: { patientId: patient.id, deletedAt: null }, orderBy: { encounterDate: "desc" }, select: { id: true, encounterDate: true, chargeCode: true, getixEntered: true, program: { select: { name: true } } } }) : Promise.resolve([]),
@@ -47,15 +48,17 @@ export default async function PatientChart({ params, searchParams }: { params: {
       {canEdit ? (
         <form action={saveBasics} className="card row" style={{ flexWrap: "wrap" }}>
           <input type="hidden" name="id" value={patient.id} />
-          {billing && <label>MRN <input name="mrn" defaultValue={patient.mrn ?? ""} /></label>}
+          {billing && <label>B&amp;B MRN <input name="mrn" defaultValue={patient.mrn ?? ""} /></label>}
           {billing && <label>FFX MRN <input name="ffxMrn" defaultValue={patient.ffxMrn ?? ""} /></label>}
           <label>Date of birth <input type="date" name="dob" defaultValue={patient.dob ?? ""} /></label>
           <label>Sex <input name="sex" defaultValue={patient.sex ?? ""} style={{ width: "6rem" }} /></label>
           <label>Insurance <input name="insurance" defaultValue={patient.insurance ?? ""} /></label>
+          <label>Account no <input name="accountNo" defaultValue={patient.accountNo ?? ""} /></label>
+          <label style={{ flexBasis: "100%" }}>Allergies <input name="allergies" defaultValue={patient.allergies ?? ""} placeholder="None known, or list them" style={{ width: "100%" }} /></label>
           <button type="submit">Save</button>
         </form>
       ) : (
-        <p className="muted small">DOB {patient.dob ?? "not recorded"}; insurance {patient.insurance ?? "not recorded"}.</p>
+        <p className="muted small">DOB {patient.dob ?? "not recorded"}; insurance {patient.insurance ?? "not recorded"}; account no {patient.accountNo ?? "not recorded"}; allergies {patient.allergies ?? "not recorded"}.</p>
       )}
       <h3>Admissions</h3>
       {stays.length === 0 ? <p className="muted">No admission recorded.</p> : (
@@ -97,7 +100,7 @@ export default async function PatientChart({ params, searchParams }: { params: {
           {visits.map((v) => (
             <tr key={v.id}>
               <td>{v.visitDate}</td><td>{v.providerName}</td><td>{statusLabel(v.status)}</td><td>{v.appointmentType}</td><td>{v.program}</td>
-              <td>{v.documents.map((d) => <Link key={d.id} href={`/schedule?view=day&date=${v.visitDate}`} className="pill">{d.label || d.kind}{d.draft ? " (draft)" : ""}</Link>)}</td>
+              <td>{v.documents.map((d) => <Link key={d.id} href={`/schedule?view=day&date=${v.visitDate}`} className="pill">{d.label || d.kind}{docStateLabel(d)}</Link>)}</td>
             </tr>
           ))}
           {entries.map((e) => (

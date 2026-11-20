@@ -242,6 +242,9 @@ model Patient {
   dob             String? // YYYY-MM-DD
   sex             String?
   insurance       String?
+  // Web 1.84: hospital/billing account number and allergies (free text). Nullable and additive.
+  accountNo       String?
+  allergies       String?
   admissions      PatientAdmission[]
   encounters      Encounter[]
   consents        PatientConsent[]

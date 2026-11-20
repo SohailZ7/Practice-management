@@ -1,6 +1,8 @@
 // Core actions on the main screens, against the throwaway database. Synthetic data only.
 import { test, expect } from "@playwright/test";
 import { signIn } from "./auth";
+import { PrismaClient } from "@prisma/client";
+import { E2E_DATABASE_URL } from "./env";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -76,4 +78,28 @@ test("PDF preview can be framed by our own pages only: frame headers on the PDF 
   expect(pg.headers()["x-frame-options"]).toBe("DENY");
   expect(pg.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(pg.headers()["content-security-policy"]).toContain("frame-src 'self'");
+});
+
+test("Billing: the ICD-10 picker adds a common code to the codes box, once", async ({ page, context }) => {
+  await signIn(context);
+  await page.goto("/billing/new", { waitUntil: "networkidle" });
+  await page.getByText("Pick from common psychiatric codes").click();
+  await page.getByLabel("Search common ICD-10 codes").fill("anxiety");
+  await page.getByRole("button", { name: /^F41\.1/ }).click();
+  await expect(page.getByPlaceholder("F32.A, E11.9")).toHaveValue("F41.1");
+  await expect(page.getByRole("button", { name: /^F41\.1/ })).toBeDisabled();
+});
+
+test("Patient chart: account number and allergies save and show", async ({ page, context }) => {
+  await signIn(context);
+  const prisma = new PrismaClient({ datasources: { db: { url: E2E_DATABASE_URL } } });
+  const p = await prisma.patient.findFirstOrThrow({ where: { lastName: "TestAlpha" } }).finally(() => prisma.$disconnect());
+  await page.goto(`/patients/${p.id}`, { waitUntil: "networkidle" });
+  await page.getByLabel("Account no").fill("ac 777");
+  await page.getByLabel("Allergies").fill("Penicillin");
+  await page.getByRole("button", { name: "Save" }).first().click();
+  await expect(page.getByText("Chart basics saved.")).toBeVisible();
+  await page.goto(`/patients/${p.id}`, { waitUntil: "networkidle" });
+  await expect(page.getByLabel("Account no")).toHaveValue("AC777");
+  await expect(page.getByLabel("Allergies")).toHaveValue("Penicillin");
 });

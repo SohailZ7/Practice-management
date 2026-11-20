@@ -4,7 +4,7 @@ import { cleanBasics, checkAdmit, checkDischarge } from "@/lib/patients/chart";
 describe("chart basics", () => {
   it("normalises MRNs and rejects bad or future dob", () => {
     const r = cleanBasics({ mrn: " ab 12 ", ffxMrn: "f9", dob: "1980-02-03", insurance: " Aetna " }, "2026-11-19");
-    expect(r).toEqual({ ok: true, value: { mrn: "AB12", ffxMrn: "F9", dob: "1980-02-03", sex: null, insurance: "Aetna" } });
+    expect(r).toEqual({ ok: true, value: { mrn: "AB12", ffxMrn: "F9", dob: "1980-02-03", sex: null, insurance: "Aetna", accountNo: null, allergies: null } });
     expect(cleanBasics({ dob: "1980-13-01" }, "2026-11-19").ok).toBe(false);
     expect(cleanBasics({ dob: "2027-01-01" }, "2026-11-19").ok).toBe(false);
     expect(cleanBasics({}, "2026-11-19")).toMatchObject({ ok: true });

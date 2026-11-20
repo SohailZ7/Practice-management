@@ -8,8 +8,8 @@ export function isDate(s: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
 
-export function cleanBasics(input: { ffxMrn?: string; mrn?: string; dob?: string; sex?: string; insurance?: string }, today: string):
-  | { ok: true; value: { ffxMrn: string | null; mrn: string | null; dob: string | null; sex: string | null; insurance: string | null } }
+export function cleanBasics(input: { ffxMrn?: string; mrn?: string; dob?: string; sex?: string; insurance?: string; accountNo?: string; allergies?: string }, today: string):
+  | { ok: true; value: { ffxMrn: string | null; mrn: string | null; dob: string | null; sex: string | null; insurance: string | null; accountNo: string | null; allergies: string | null } }
   | { ok: false; error: string } {
   const t = (v?: string, max = 120) => (v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
   const mrn = t(input.mrn, 40).toUpperCase().replace(/\s+/g, "");
@@ -17,7 +17,9 @@ export function cleanBasics(input: { ffxMrn?: string; mrn?: string; dob?: string
   const dob = t(input.dob, 10);
   if (dob && (!isDate(dob) || dob > today)) return { ok: false, error: "Enter a valid date of birth." };
   const sex = t(input.sex, 20);
-  return { ok: true, value: { ffxMrn: ffx || null, mrn: mrn || null, dob: dob || null, sex: sex || null, insurance: t(input.insurance, 200) || null } };
+  const accountNo = t(input.accountNo, 40).toUpperCase().replace(/\s+/g, "");
+  const allergies = t(input.allergies, 500);
+  return { ok: true, value: { ffxMrn: ffx || null, mrn: mrn || null, dob: dob || null, sex: sex || null, insurance: t(input.insurance, 200) || null, accountNo: accountNo || null, allergies: allergies || null } };
 }
 
 /** Error text, or null when this admit date can start a new stay given the existing ones. */

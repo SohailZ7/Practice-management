@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveEncounter, searchPatients } from "@/app/billing/actions";
 import { parseIcd10List } from "@/lib/billing/icd10";
+import { addIcd10, searchCommonIcd10 } from "@/lib/billing/icd10Common";
 import type { PatientHit, SaveResult } from "@/lib/billing/types";
 
 type Opt = { id: string; name: string };
@@ -40,6 +41,7 @@ export function EncounterForm({ programs, today, edit, preset }: Props) {
   const timer = useRef<ReturnType<typeof setTimeout>>();
 
   const parsed = parseIcd10List(icd10Input);
+  const [pick, setPick] = useState("");
 
   useEffect(() => {
     clearTimeout(timer.current);
@@ -231,6 +233,18 @@ export function EncounterForm({ programs, today, edit, preset }: Props) {
           ICD-10 codes <span className="muted small">(the first is the primary code; separate with commas or spaces)</span>
           <input value={icd10Input} onChange={(e) => setIcd(e.target.value)} placeholder="F32.A, E11.9" autoComplete="off" style={{ width: "100%" }} />
         </label>
+        <details className="icd-picker" style={{ marginTop: ".4rem" }}>
+          <summary className="small">Pick from common psychiatric codes</summary>
+          <input value={pick} onChange={(e) => setPick(e.target.value)} placeholder="Search by code or name (anxiety, F41…)" aria-label="Search common ICD-10 codes" autoComplete="off" style={{ width: "100%", marginTop: ".3rem" }} />
+          <div className="chips" style={{ marginTop: ".3rem" }}>
+            {searchCommonIcd10(pick).map((e) => (
+              <button type="button" key={e.code} className="pill" title={e.label} onClick={() => setIcd(addIcd10(icd10Input, e.code))} disabled={parsed.codes.includes(e.code)}>
+                {e.code} <span className="muted small">{e.label}</span>
+              </button>
+            ))}
+            {searchCommonIcd10(pick).length === 0 && <span className="muted small">No match. Type the code in the box above.</span>}
+          </div>
+        </details>
         <div className="chips" aria-live="polite">
           {parsed.codes.map((c, i) => (
             <span key={c} className={`pill ${i === 0 ? "ok" : ""}`}>

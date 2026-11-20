@@ -19,7 +19,7 @@ export async function saveBasics(form: FormData) {
   if (!patient) flash("/patients", "error", "Patient not found.");
   const mrnAllowed = canAccess(user, "billing", "view");
   const r = cleanBasics(
-    { dob: str(form, "dob"), sex: str(form, "sex"), insurance: str(form, "insurance"), mrn: mrnAllowed ? str(form, "mrn") : "", ffxMrn: mrnAllowed ? str(form, "ffxMrn") : "" },
+    { dob: str(form, "dob"), sex: str(form, "sex"), insurance: str(form, "insurance"), accountNo: str(form, "accountNo"), allergies: str(form, "allergies"), mrn: mrnAllowed ? str(form, "mrn") : "", ffxMrn: mrnAllowed ? str(form, "ffxMrn") : "" },
     today(),
   );
   if (!r.ok) flash(back(id), "error", r.error);
@@ -30,9 +30,9 @@ export async function saveBasics(form: FormData) {
     }
     await db.patient.update({
       where: { id },
-      data: { dob: v.dob, sex: v.sex, insurance: v.insurance, ...(mrnAllowed ? { mrn: v.mrn, ffxMrn: v.ffxMrn } : {}) },
+      data: { dob: v.dob, sex: v.sex, insurance: v.insurance, accountNo: v.accountNo, allergies: v.allergies, ...(mrnAllowed ? { mrn: v.mrn, ffxMrn: v.ffxMrn } : {}) },
     });
-    await audit(user.email, "patient.basics.update", `patient ${id} fields=dob,sex,insurance${mrnAllowed ? ",mrn,ffxMrn" : ""}`);
+    await audit(user.email, "patient.basics.update", `patient ${id} fields=dob,sex,insurance,accountNo,allergies${mrnAllowed ? ",mrn,ffxMrn" : ""}`);
     revalidatePath(back(id));
     flash(back(id), "notice", "Chart basics saved.");
   }
