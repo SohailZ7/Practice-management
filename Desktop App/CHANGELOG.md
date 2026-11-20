@@ -41,3 +41,4 @@ v1.0.38 | 2026-11-20 | built on da60ff0 | P1 Start recording strip: today's sche
 v1.0.39 | 2026-11-20 | built on bdf5f0c | P9 one-tap consent: single 'Patient agrees, start' button replaces the checkbox; consent still saved on this Mac before capture and sent with the transcript (wording version 2026-11-20-draft-3)
 v1.0.40 | 2026-11-20 | built on fc79f92 | Pause/Resume button readable on the dark recording panel (contrast test for every panel button); real-speech test: speech before a pause survives kill during pause; mic-check wording test
 v1.0.41 | 2026-11-20 | built on 47ec366 | P10 pause saves everything said so far at once (flush), so a kill during a pause loses nothing from before it; real-speech test; self-update-only-when-idle test
+v1.0.42 | 2026-11-20 | built on 39a5741 | Start-recording strip shows only the signed-in provider's visits (mine=1, server Web 1.91)
