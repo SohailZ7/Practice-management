@@ -4,7 +4,8 @@ import { requireAccess } from "@/lib/session";
 import { audit } from "@/lib/audit";
 import { canAccess } from "@/lib/access";
 import { Banner } from "@/components/Banner";
-import { addProvider, saveProvider } from "./actions";
+import { addProvider, saveProvider, addTimeOff, removeTimeOff } from "./actions";
+import { TIME_OFF_KINDS, kindLabel, formatRange } from "@/lib/schedule/timeOff";
 
 export default async function ProvidersPage({
   searchParams,
@@ -15,9 +16,11 @@ export default async function ProvidersPage({
   const canEdit = canAccess(user, "schedule", "edit");
   await audit(user.email, "providers.view", canEdit ? "with NPI and Zoom details" : "directory only");
   const [providers, employees] = await Promise.all([
-    db.provider.findMany({ orderBy: { name: "asc" }, include: { employee: true } }),
+    db.provider.findMany({ orderBy: { name: "asc" }, include: { employee: true, timeOff: { orderBy: { startDate: "asc" } } } }),
     db.employee.findMany({ where: { active: true, provider: null }, orderBy: { name: "asc" } }),
   ]);
+
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
@@ -76,6 +79,66 @@ export default async function ProvidersPage({
           </table>
         </div>
       )}
+
+      <h2>Days unavailable</h2>
+      <p className="muted small">
+        Vacation, sick days, training or limitations. Informational: it does not block or change any visit already on the schedule.
+      </p>
+      {providers.map((p) => {
+        const upcoming = p.timeOff.filter((t) => t.endDate >= today);
+        return (
+          <div key={p.id} className="card">
+            <strong>{p.name}</strong>
+            {upcoming.length === 0 ? (
+              <p className="muted small">No upcoming unavailable days.</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Dates</th>
+                      <th>Type</th>
+                      <th>Note</th>
+                      {canEdit && <th aria-label="Actions" />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upcoming.map((t) => (
+                      <tr key={t.id}>
+                        <td>{formatRange(t)}</td>
+                        <td>{kindLabel(t.kind)}</td>
+                        <td>{t.note}</td>
+                        {canEdit && (
+                          <td>
+                            <form action={removeTimeOff}>
+                              <input type="hidden" name="id" value={t.id} />
+                              <button type="submit" aria-label={`Remove ${formatRange(t)} for ${p.name}`}>Remove</button>
+                            </form>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {canEdit && (
+              <form action={addTimeOff} className="row" style={{ marginTop: ".5rem" }}>
+                <input type="hidden" name="providerId" value={p.id} />
+                <input type="date" name="startDate" required aria-label={`Start date for ${p.name}`} />
+                <input type="date" name="endDate" aria-label={`End date for ${p.name} (optional)`} />
+                <select name="kind" defaultValue="time_off" aria-label="Type">
+                  {TIME_OFF_KINDS.map((k) => (
+                    <option key={k.value} value={k.value}>{k.label}</option>
+                  ))}
+                </select>
+                <input name="note" placeholder="Note" className="grow" aria-label="Note" />
+                <button type="submit">Add</button>
+              </form>
+            )}
+          </div>
+        );
+      })}
 
       {canEdit && (
         <>

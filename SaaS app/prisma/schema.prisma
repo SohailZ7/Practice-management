@@ -75,6 +75,23 @@ model Provider {
   trackingOnly Boolean         @default(false)
   unmatched    UnmatchedAppointment[]
   visits       Visit[]
+  timeOff      ProviderTimeOff[]
+}
+
+// Days a provider is unavailable (vacation, sick, conference, limitation). Additive; dates are YYYY-MM-DD text like Visit.visitDate.
+// Informational: it warns when scheduling, it never blocks or edits existing visits.
+model ProviderTimeOff {
+  id             String   @id @default(cuid())
+  providerId     String
+  provider       Provider @relation(fields: [providerId], references: [id])
+  startDate      String
+  endDate        String // inclusive; equals startDate for a single day
+  kind           String   @default("time_off") // time_off | sick | conference | limitation
+  note           String   @default("")
+  createdByEmail String
+  createdAt      DateTime @default(now())
+
+  @@index([providerId, startDate])
 }
 
 model TrackDef {
