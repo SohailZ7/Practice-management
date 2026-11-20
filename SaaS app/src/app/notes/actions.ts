@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireAccess } from "@/lib/session";
@@ -14,6 +15,7 @@ import { isDraft } from "@/lib/notes/markdown";
 import { priorDocument } from "@/lib/notes/queries";
 import { loadVisitOptions } from "@/lib/notes/options";
 import { assertBillableVisit, isTrackingOnlyName, TRACKING_ONLY_MESSAGE } from "@/lib/notes/trackingOnly";
+import { sanitizeLabels } from "@/lib/transcript/labels";
 import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
 // Audit entries hold ids and counts only, never patient names or note text.
@@ -160,10 +162,21 @@ export async function visitOptions() {
 /** The stored transcript for the read-only pop-up. Returned, not thrown, so a missing visit reads as a message. */
 export async function getVisitTranscript(visitId: string) {
   const user = await requireAccess("notes", "view");
-  const v = await db.visit.findUnique({ where: { id: visitId }, select: { transcript: true, transcriptAt: true, createdAt: true } });
+  const v = await db.visit.findUnique({ where: { id: visitId }, select: { transcript: true, transcriptAt: true, createdAt: true, speakerLabels: true } });
   if (!v) return { ok: false as const, error: "Visit not found." };
   await audit(user.email, "notes.transcript.read", `visit ${visitId} chars=${v.transcript.length}`);
-  return { ok: true as const, transcript: v.transcript, updatedAt: (v.transcriptAt ?? v.createdAt).toISOString() };
+  return { ok: true as const, transcript: v.transcript, updatedAt: (v.transcriptAt ?? v.createdAt).toISOString(), labels: sanitizeLabels(v.speakerLabels) };
+}
+
+/** Saves who each speaker in the transcript is (display only; the transcript text is not touched). Needs Notes edit. */
+export async function saveSpeakerLabels(visitId: string, labels: unknown) {
+  const user = await requireAccess("notes", "edit");
+  const clean = sanitizeLabels(labels);
+  const v = await db.visit.findUnique({ where: { id: visitId }, select: { id: true } });
+  if (!v) return { ok: false as const, error: "Visit not found." };
+  await db.visit.update({ where: { id: visitId }, data: { speakerLabels: Object.keys(clean).length ? clean : Prisma.DbNull } });
+  await audit(user.email, "notes.transcript.speakers", `visit ${visitId} labels=${Object.keys(clean).length}`);
+  return { ok: true as const, labels: clean };
 }
 
 /**
