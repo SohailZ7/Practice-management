@@ -8,7 +8,7 @@ import { isISODate } from "@/lib/dates";
 import { type PhiBlock } from "@/lib/phiGuard";
 import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
-import { canAssignTo, type MoveKind } from "@/lib/taskAccess";
+import { blockedPatchKeys, canAssignTo, taskLevel, type MoveKind } from "@/lib/taskAccess";
 import { loadTaskScope } from "@/lib/taskScope";
 import { isTaskPriority, isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
@@ -16,6 +16,15 @@ import { isTaskPriority, isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, 
 // the Admin granted them edit access to. Every action below checks it on the server.
 
 const isAdmin = (user: CurrentUser) => user.role === "ADMIN";
+
+/** Loads a task for an update or an assign. Who may change what is decided by taskLevel / blockedPatchKeys. */
+async function loadTaskWithLevel(user: CurrentUser, id: string) {
+  const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
+  if (!task) throw new Error("Task not found");
+  const scope = await loadTaskScope(user);
+  const level = taskLevel({ isAdmin: isAdmin(user), moduleEdit: true, meId: scope.meId, editIds: scope.editIds, assigneeId: task.assigneeId });
+  return { task, level };
+}
 
 async function loadAccessibleTask(user: CurrentUser, id: string) {
   const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
@@ -98,7 +107,12 @@ export async function createTask(input: {
 
 export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = false): Promise<TaskDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
-  const existing = await loadAccessibleTask(user, id);
+  const { task: existing, level } = await loadTaskWithLevel(user, id);
+  const blockedKeys = blockedPatchKeys(level, patch as Record<string, unknown>);
+  if (blockedKeys.length) {
+    await auditDenied(user.email, `task ${id}`);
+    throw new Error(level === "assign" ? "You can only assign this task to someone. Other changes need the administrator." : "That change needs the administrator.");
+  }
   const changedText = [
     patch.title !== undefined && patch.title.trim() !== existing.title ? patch.title.trim().slice(0, 300) : "",
     typeof patch.notes === "string" && patch.notes !== existing.notes ? patch.notes : "",

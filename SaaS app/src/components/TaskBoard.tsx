@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { dueLabel, formatShort } from "@/lib/dates";
+import { taskLevel } from "@/lib/taskAccess";
 import { Icon } from "./Icons";
 import { TaskAnalytics } from "./TaskAnalytics";
 import { TaskColumns, TaskInsights, type Workload } from "./TaskInsights";
@@ -48,6 +49,8 @@ export const isRecurringCategory = (name: string) => /^recurring( tasks?)?$/i.te
 type Opt = { id: string; name: string };
 
 type Props = {
+  /** Per-task rights (see taskLevel): full / own (status, Today, assign) / assign only / none. */
+  access: { isAdmin: boolean; moduleEdit: boolean; meId: string | null; editIds: string[] };
   initialTasks: TaskDTO[];
   categories: CategoryDTO[];
   employees: Opt[];
@@ -73,7 +76,7 @@ const BACKLOG = "backlog";
 const DONE = "completed";
 const EXPIRED = "expired";
 
-export function TaskBoard({ initialTasks, categories: initialCategories, employees, canEdit, canUnassign = true, boardAssigneeId, today, canReorder, sync, workload = [], tz }: Props) {
+export function TaskBoard({ access, initialTasks, categories: initialCategories, employees, canEdit, canUnassign = true, boardAssigneeId, today, canReorder, sync, workload = [], tz }: Props) {
   const [tasks, setTasks] = useState<TaskDTO[]>(initialTasks);
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [error, setError] = useState("");
@@ -180,6 +183,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     });
 
   const itemProps = {
+    access,
     categories,
     employees,
     canUnassign,
@@ -314,6 +318,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
 }
 
 type ItemProps = {
+  access: Props["access"];
   categories: CategoryDTO[];
   employees: Opt[];
   canUnassign: boolean;
@@ -464,7 +469,7 @@ function InlineAdd({
 
 function TaskItem({
   task,
-  canEdit,
+  canEdit: _boardCanEdit,
   categories,
   employees,
   canUnassign,
@@ -475,7 +480,13 @@ function TaskItem({
   onRemoveLink,
   sortable,
   urgent,
+  access,
 }: ItemProps & { task: TaskDTO; canEdit: boolean; sortable: boolean; urgent: boolean }) {
+  // Per-task rights: the Admin (or an edit grant) changes everything; on your own task you change status and Today; anyone may assign.
+  const level = taskLevel({ ...access, assigneeId: task.assigneeId });
+  const canEdit = level === "full";
+  const canStatus = level === "full" || level === "own";
+  const canAssign = level !== "none";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: !canEdit || !sortable,
@@ -574,7 +585,7 @@ function TaskItem({
         <StatusButtons
           label="Task status"
           current={task.status}
-          disabled={!canEdit}
+          disabled={!canStatus}
           onSelect={(v) => onPatch(task.id, { status: v as TaskStatus })}
           options={TASK_STATUSES.map((v) => ({ value: v, label: TASK_STATUS_LABEL[v] }))}
         />
@@ -617,7 +628,7 @@ function TaskItem({
         <select
           className="pick"
           value={task.assigneeId ?? ""}
-          disabled={!canEdit}
+          disabled={!canAssign}
           aria-label="Assigned to"
           onChange={(e) => onPatch(task.id, { assigneeId: e.target.value || null })}
         >
@@ -683,7 +694,7 @@ function TaskItem({
           title="Show in Today"
           aria-label="Show in Today"
           aria-pressed={task.inToday}
-          disabled={!canEdit}
+          disabled={!canStatus}
           onClick={() => onPatch(task.id, { inToday: !task.inToday })}
         >
           <Icon name="sun" filled={task.inToday} />

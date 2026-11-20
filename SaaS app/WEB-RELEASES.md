@@ -47,3 +47,4 @@ Web 1.44 | Unification Release B2b: ScheduleEntry model removed (table dropped o
 Web 1.45 | Unlink on a copied unmatched row now clears its patient link (found in the staging browser check); no schema | e2140b3 pushed | staging 00151-naj, smoke 142/0, unlink re-checked in browser
 Web 1.50 | Transcript viewer shows speaker turns with the speaker label and time on each (read from the stored text, nothing stored or rewritten); design note for speaker correction and segments | pending
 Web 1.51 | Tasks: priority (High / Normal / Low, new nullable-default column), Auto sort by priority then due date with a Manual order toggle | PENDING
+Web 1.52 | Tasks: everyone sees every employee's tasks; non-admins change status/Today on their own tasks and can assign any task to anyone with a tab; title, dates, notes, priority and links need the admin | PENDING
