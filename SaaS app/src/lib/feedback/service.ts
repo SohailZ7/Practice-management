@@ -74,6 +74,17 @@ export async function updateFeedback(user: { id: string; email: string }, id: st
   return toFeedbackOut(row, user.id);
 }
 
+/** Agent rename (practice-production MCP): title only, any item, never description/status/submitter. Same PHI guard and length rule as every other title; the new title is not written to the audit log. */
+export async function renameFeedbackAsAgent(user: { id: string; email: string }, id: string, title: unknown): Promise<FeedbackOut> {
+  const existing = await db.feedbackItem.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) throw new FeedbackError(404, "not_found");
+  const c = checkFeedback({ title }, "update");
+  if (!c.ok) throw new FeedbackError(c.phi ? 422 : 400, c.phi ? "possible_phi" : c.error, c.phi);
+  const row = await db.feedbackItem.update({ where: { id }, data: { title: c.value.title! }, include: withAuthor });
+  await audit(user.email, "feedback.edit", `${id} ${row.kind} title via mcp`);
+  return toFeedbackOut(row, user.id);
+}
+
 // ---- Workflow: status changes, test notes, comments --------------------------------------------------------------
 import { checkMove, isScope, isStatusWord, isTriage, LEGACY_MAP, MAX_COMMENT, MAX_TEST_NOTES, normalizeState, storedWordsFor, triageStatus, type Actor, type FeedbackStatus, type TriageOutcome } from "./workflow";
 

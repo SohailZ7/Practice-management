@@ -1,5 +1,5 @@
 import { ApiError, authenticateApi, handle, json, readJson } from "@/lib/mcpApi/http";
-import { FeedbackError, getFeedback, listComments, setFeedbackWorkflow } from "@/lib/feedback/service";
+import { FeedbackError, getFeedback, listComments, renameFeedbackAsAgent, setFeedbackWorkflow } from "@/lib/feedback/service";
 import { agentActor, feedbackShape } from "@/lib/mcpApi/feedbackApi";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +12,15 @@ export const GET = handle(async (req, { params }) => {
   return json({ item: feedbackShape(item), comments: comments.map((c) => ({ author: c.authorKind === "agent" ? "agent" : c.authorName, kind: c.authorKind, body: c.body, at: c.createdAt })) });
 });
 
-/** Body: { status?, testNotes?, comment?, release? } (release: 16 or "Web 1.16"; defaults to the running release when moving to On staging). The agent may only make the moves feedback/workflow.ts allows it. */
+/** Body: { title } alone renames any item (title only, 1-200 chars, PHI-checked), or { status?, testNotes?, comment?, release? } (release: 16 or "Web 1.16"; defaults to the running release when moving to On staging). The agent may only make the moves feedback/workflow.ts allows it. */
 export const PATCH = handle(async (req, { params }) => {
   const { user } = await authenticateApi(req, { scope: "feedback", level: "edit" });
   const body = await readJson(req);
   try {
+    if (body.title !== undefined) {
+      if (["status", "testNotes", "comment", "release", "description"].some((k) => body[k] !== undefined)) throw new ApiError(400, "title_only");
+      return json({ item: feedbackShape(await renameFeedbackAsAgent(user, params.id, body.title)) });
+    }
     const item = await setFeedbackWorkflow(agentActor(user), params.id, { status: body.status, testNotes: body.testNotes, comment: body.comment, release: body.release });
     return json({ item: feedbackShape(item) });
   } catch (e) {
