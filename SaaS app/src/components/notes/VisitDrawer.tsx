@@ -7,6 +7,8 @@ import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { VISIT_STATUSES, statusTone } from "@/lib/notes/visitStatus";
 import { PatientName } from "@/components/PatientName";
+import { NOTE_KINDS, noteKindLabel, MAX_NOTE, type VisitNoteDTO } from "@/lib/notes/visitNotes";
+import { listVisitNotes, addVisitNote, setVisitNoteResolved } from "@/app/notes/actions";
 
 /** The Visit details side panel: everything about one visit on one screen. Presentational; actions are passed in. */
 export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onStatus, onOpenDoc, onGenerate, onTranscript }: {
@@ -67,6 +69,7 @@ export function VisitDrawer({ visit, docs, time, canEdit, pending, onClose, onSt
               </ul>
             )}
           </section>
+          <NotesSection visitId={visit.id} />
           <ConsentSection visitId={visit.id} />
           <section>
             <h3>Transcript</h3>
@@ -113,6 +116,63 @@ function ConsentSection({ visitId }: { visitId: string }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Comment-style notes on this visit: author and time on each, provider and admin notes, optional resolved flag. */
+function NotesSection({ visitId }: { visitId: string }) {
+  const [data, setData] = useState<{ notes: VisitNoteDTO[]; allowedKinds: string[]; me: string } | null>(null);
+  const [kind, setKind] = useState("general");
+  const [draft, setDraft] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    listVisitNotes(visitId).then((d) => alive && setData(d)).catch(() => alive && setData({ notes: [], allowedKinds: [], me: "" }));
+    return () => { alive = false; };
+  }, [visitId]);
+  const add = async () => {
+    setBusy(true); setErr("");
+    try {
+      const r = await addVisitNote(visitId, kind, draft);
+      if (r.ok) { setData((d) => (d ? { ...d, notes: [...d.notes, r.note] } : d)); setDraft(""); } else setErr(r.error);
+    } catch { setErr("The note could not be saved. Try again."); } finally { setBusy(false); }
+  };
+  const toggle = async (n: VisitNoteDTO) => {
+    setErr("");
+    try {
+      const r = await setVisitNoteResolved(n.id, !n.resolved);
+      if (r.ok) setData((d) => (d ? { ...d, notes: d.notes.map((x) => (x.id === n.id ? { ...x, resolved: !n.resolved } : x)) } : d)); else setErr(r.error);
+    } catch { setErr("That could not be saved. Try again."); }
+  };
+  return (
+    <section>
+      <h3>Notes {data && <span className="muted small">{data.notes.length}</span>}</h3>
+      {data === null ? <p className="muted small">Loading…</p> : data.notes.length === 0 ? <p className="muted small">No notes yet.</p> : (
+        <ul className="vd-docs">
+          {data.notes.map((n) => (
+            <li key={n.id} style={n.resolved ? { opacity: 0.6 } : undefined}>
+              <span>
+                <b>{n.author}</b> <small className="muted">{noteKindLabel(n.kind)} · {new Date(n.at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}{n.resolved ? " · resolved" : ""}</small>
+                <div style={{ whiteSpace: "pre-wrap" }}>{n.body}</div>
+              </span>
+              {data.allowedKinds.length > 0 && <button type="button" className="secondary sm" onClick={() => void toggle(n)}>{n.resolved ? "Reopen" : "Resolve"}</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {data && data.allowedKinds.length > 0 && (
+        <div>
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Note type">
+            {NOTE_KINDS.filter((k) => data.allowedKinds.includes(k.value)).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+          <textarea className="notes-textarea" style={{ minHeight: 60 }} maxLength={MAX_NOTE} placeholder="Add a note, for example: patient discharged, not discharged, unplanned" value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="New note" />
+          {err && <div className="error small" role="alert">{err}</div>}
+          <button type="button" className="secondary sm" disabled={!draft.trim() || busy} onClick={() => void add()}>{busy ? "Saving…" : "Add note"}</button>
+        </div>
+      )}
+      {data && data.allowedKinds.length === 0 && err && <div className="error small" role="alert">{err}</div>}
     </section>
   );
 }

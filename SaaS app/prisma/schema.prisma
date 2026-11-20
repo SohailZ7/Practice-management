@@ -288,6 +288,7 @@ model Visit {
   overdueBasis          String?
   patient               Patient         @relation(fields: [patientId], references: [id])
   documents             VisitDocument[]
+  notes                 VisitNote[]
   provider              Provider?       @relation(fields: [providerId], references: [id], onDelete: SetNull)
   encounter             Encounter?      @relation(fields: [encounterId], references: [id], onDelete: SetNull)
 
@@ -784,4 +785,21 @@ model PatientAdmission {
   createdAt      DateTime @default(now())
 
   @@index([patientId, admitDate])
+}
+
+// Comment-style notes on a visit: many per visit, author and time on each, optional resolved flag. kind: general | provider | admin.
+// Additive. Note text is never written to the audit log.
+model VisitNote {
+  id              String    @id @default(cuid())
+  visitId         String
+  visit           Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  kind            String    @default("general")
+  body            String
+  authorEmail     String
+  authorName      String
+  createdAt       DateTime  @default(now())
+  resolvedAt      DateTime?
+  resolvedByEmail String?
+
+  @@index([visitId, createdAt])
 }

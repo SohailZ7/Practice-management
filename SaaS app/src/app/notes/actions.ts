@@ -16,6 +16,8 @@ import { priorDocument } from "@/lib/notes/queries";
 import { loadVisitOptions } from "@/lib/notes/options";
 import { assertBillableVisit, isTrackingOnlyName, TRACKING_ONLY_MESSAGE } from "@/lib/notes/trackingOnly";
 import { sanitizeLabels } from "@/lib/transcript/labels";
+import { canAccess } from "@/lib/access";
+import { NOTE_KINDS, isNoteKind, canWriteKind, canResolve, cleanNoteBody, type VisitNoteDTO } from "@/lib/notes/visitNotes";
 import { addVisit, deleteVisit, deleteVisits, updateVisit, VisitError, type VisitPatch } from "@/lib/notes/visitService";
 
 // Audit entries hold ids and counts only, never patient names or note text.
@@ -210,4 +212,38 @@ export async function recordPromote(visitId: string, outcome: "promoted" | "alre
   const user = await requireAccess("notes", "edit");
   if (user.role !== "ADMIN") return;
   await audit(user.email, "notes.promote", `visit ${visitId} ${outcome}`);
+}
+
+// Visit notes (comment-style). Audit entries hold ids only, never the note text.
+export async function listVisitNotes(visitId: string): Promise<{ notes: VisitNoteDTO[]; allowedKinds: string[]; me: string }> {
+  const user = await requireAccess("notes", "view");
+  const rows = await db.visitNote.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } });
+  const canEdit = canAccess(user, "notes", "edit");
+  return { notes: rows.map(noteDto), allowedKinds: canEdit ? NOTE_KINDS.filter((k) => canWriteKind(user.role, k.value)).map((k) => k.value) : [], me: user.email };
+}
+
+export async function addVisitNote(visitId: string, kind: string, body: string): Promise<{ ok: true; note: VisitNoteDTO } | { ok: false; error: string }> {
+  const user = await requireAccess("notes", "edit");
+  if (!isNoteKind(kind)) return { ok: false, error: "Choose a note type." };
+  if (!canWriteKind(user.role, kind)) return { ok: false, error: kind === "admin" ? "Only an admin can write an admin note." : "Only a provider or admin can write a provider note." };
+  const text = cleanNoteBody(body);
+  if (!text) return { ok: false, error: "Write the note first." };
+  if (!(await db.visit.findUnique({ where: { id: visitId }, select: { id: true } }))) return { ok: false, error: "Visit not found." };
+  const row = await db.visitNote.create({ data: { visitId, kind, body: text, authorEmail: user.email, authorName: user.name } });
+  await audit(user.email, "notes.visit.note.add", `visit ${visitId} note ${row.id} kind=${kind}`);
+  return { ok: true, note: noteDto(row) };
+}
+
+export async function setVisitNoteResolved(noteId: string, resolved: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireAccess("notes", "edit");
+  const note = await db.visitNote.findUnique({ where: { id: noteId } });
+  if (!note) return { ok: false, error: "Note not found." };
+  if (!canResolve(user.role, note.authorEmail, user.email)) return { ok: false, error: "Only the author or an admin can change this." };
+  await db.visitNote.update({ where: { id: noteId }, data: resolved ? { resolvedAt: new Date(), resolvedByEmail: user.email } : { resolvedAt: null, resolvedByEmail: null } });
+  await audit(user.email, "notes.visit.note.resolve", `note ${noteId} resolved=${resolved}`);
+  return { ok: true };
+}
+
+function noteDto(r: { id: string; kind: string; body: string; authorName: string; createdAt: Date; resolvedAt: Date | null; resolvedByEmail: string | null }): VisitNoteDTO {
+  return { id: r.id, kind: r.kind, body: r.body, author: r.authorName, at: r.createdAt.getTime(), resolved: r.resolvedAt !== null, resolvedBy: r.resolvedByEmail };
 }
