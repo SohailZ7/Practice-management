@@ -104,7 +104,9 @@ export async function transport(
 
 /** Remembers a refusal (status plus the server's short code, never the body) for the diagnostics report. */
 function noteRefusal(reply: ApiReply, path: string): void {
-  if (reply.status < 400 || path.endsWith("/diagnostics")) return;
+  // A 401 is normal when the hour-long access token has just expired; the call renews it and goes on. It is recorded only
+  // if the sign-in really is gone (see call()).
+  if (reply.status < 400 || reply.status === 401 || path.endsWith("/diagnostics")) return;
   let code: string | null = null;
   try { const b = JSON.parse(reply.body) as { error?: unknown }; code = typeof b.error === "string" ? b.error : null; } catch { /* no code */ }
   record({ kind: "api", code: `${reply.status}${safeCode(code) ? ":" + safeCode(code) : ""}`, route: routeTemplate(path) });
@@ -144,11 +146,11 @@ async function call<T>(session: Session, path: string, init: RequestInit = {}): 
   let res = await send(session, path, init);
   if (res.status === 401 && session.refresh) {
     const next = await session.refresh(session.accessToken);
-    if (!next) throw new SignedOutError();
+    if (!next) { record({ kind: "api", code: "401", route: routeTemplate(`/api/desktop/v1${path}`) }); throw new SignedOutError(); }
     session.accessToken = next;
     res = await send(session, path, init);
   }
-  if (res.status === 401) throw new SignedOutError(reasonOf(res));
+  if (res.status === 401) { record({ kind: "api", code: "401", route: routeTemplate(`/api/desktop/v1${path}`) }); throw new SignedOutError(reasonOf(res)); }
   if (res.status === 403) { const r = reasonOf(res); throw new ApiFailure(403, r ?? errorCode(res), "This account does not have access to Notes."); }
   if (res.status < 200 || res.status > 299) throw new ApiFailure(res.status, errorCode(res));
   try { return JSON.parse(res.body) as T; } catch { throw new Error("The practice app gave an unreadable reply."); }

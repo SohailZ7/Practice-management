@@ -26,7 +26,7 @@ import { patientChoice } from "./lib/transcriptView";
 import { installGlobalHandlers, setSender } from "./lib/diagnostics";
 import { scopeToken, tokenFor, type ScopedToken } from "./lib/tokenScope";
 import { THEMES, loadTheme, saveTheme, type Theme } from "./lib/theme";
-import { endedEnvironments, isOtherEnvironment, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
+import { endedEnvironments, isOtherEnvironment, parkedIds, retryAll, sessionFor, setCopyLabel, uploadQueued, type UploadFailure, type UploadResult } from "./lib/queue";
 import logo from "./assets/logo.png";
 import { SavedTranscripts } from "./SavedTranscripts";
 import { Health } from "./Health";
@@ -83,7 +83,10 @@ export function App() {
   const noteResults = useCallback((results: UploadResult[]) => {
     setFailures((prev) => {
       const next = { ...prev };
-      for (const r of results) { if (r.failure) next[r.visitId] = r.failure; else delete next[r.visitId]; }
+      for (const r of results) {
+        if (r.failure) next[r.visitId] = { ...r.failure, tries: (prev[r.visitId]?.tries ?? 0) + 1, lastTriedAt: Date.now() };
+        else delete next[r.visitId];
+      }
       return next;
     });
     // The server ended the session for good: make every screen agree that this environment is signed out.
@@ -197,7 +200,7 @@ export function App() {
     if (!engine) return;
     setRetrying(true);
     try {
-      const parked = auto ? new Set(Object.entries(failuresRef.current).filter(([, f]) => f.kind === "not_found").map(([id]) => id)) : undefined;
+      const parked = auto ? parkedIds(failuresRef.current, Date.now()) : undefined;
       noteResults(await retryAll(engine, parked));
       await loadQueue();
       await refreshStatus();
@@ -219,7 +222,7 @@ export function App() {
   const attempt = useRef(0);
   useEffect(() => {
     if (!engine) return;
-    const live = queue.filter((q) => failures[q.visit_id]?.kind !== "not_found");
+    const live = queue.filter((q) => failures[q.visit_id]?.kind !== "not_found");  // "not ready" ones stay in: the timer wakes, parkedIds skips them until 30 min passed
     if (live.length === 0) { attempt.current = 0; return; }
     if (retrying) return;
     const t = setTimeout(() => { attempt.current += 1; void retryQueue(true); }, nextDelay(attempt.current));
@@ -244,7 +247,12 @@ export function App() {
     };
     void tick();
     const t = setInterval(tick, 60_000);
-    return () => clearInterval(t);
+    // A sleeping Mac pauses the timer, so the token can expire before the next tick: renew the moment the window wakes.
+    const wake = () => { if (document.visibilityState !== "hidden") void tick(); };
+    window.addEventListener("focus", wake);
+    window.addEventListener("online", wake);
+    document.addEventListener("visibilitychange", wake);
+    return () => { clearInterval(t); window.removeEventListener("focus", wake); window.removeEventListener("online", wake); document.removeEventListener("visibilitychange", wake); };
   }, [engine, status ? JSON.stringify(status.signed_in) : ""]);
 
   // Retry at launch, and again whenever a sign-in becomes available (a different environment or a fresh sign-in).

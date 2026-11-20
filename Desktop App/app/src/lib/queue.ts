@@ -5,11 +5,12 @@ import { ApiFailure, FINAL_SEQ, linkInbox, pushTranscript, putInbox, sha256Hex, 
 import { isEnvironment, labelFor, urlFor } from "./environments";
 import type { Engine, QueueItem } from "./engine";
 
-export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "app" | "server" | "refused" | "local";
+export type FailureKind = "checksum" | "other_env" | "signed_out" | "no_access" | "not_found" | "unreachable" | "app" | "server" | "refused" | "local" | "inbox_pending";
 
 /** Why an upload failed, in plain words. Built only from the error kind, status and short code: never from the
  *  transcript, a patient name or the server's free text, so it is safe to show and to log. */
-export type UploadFailure = { kind: FailureKind; message: string; environment: QueueItem["environment"]; /** The server ended this session for good (revoked, expired, user inactive). */ serverEnded?: boolean };
+export type UploadFailure = { kind: FailureKind; message: string; environment: QueueItem["environment"]; /** The server ended this session for good (revoked, expired, user inactive). */ serverEnded?: boolean;
+  /** Set by the app: how many times this recording has been tried and when it was last tried (memory only). */ tries?: number; lastTriedAt?: number };
 
 export type UploadResult = { visitId: string; ok: boolean; reason?: string; failure?: UploadFailure };
 
@@ -37,7 +38,7 @@ export function describeUploadFailure(e: unknown, env: QueueItem["environment"])
     if (e.status === 401) return f("signed_out", `Signed out: sign in again to ${where}.`);
     if (e.status === 403) return f("no_access", "This account does not have Notes edit access.");
     if (e.status === 422 && e.code === "checksum_mismatch") return f("checksum", "The server received damaged text, so it will be sent again.");
-    if (e.status === 404 && e.code === "inbox_pending") return f("server", "The practice app has not been updated to receive this yet.");
+    if (e.status === 404 && e.code === "inbox_pending") return f("inbox_pending", "The practice app is not ready to receive recordings yet. The recording is safe on this Mac and will be sent as soon as it is ready.");
     if (e.status === 404) return f("not_found", `This visit is not in the ${where} app. Add it on the ${where} website.`);
     if (e.status >= 500) return f("server", `The practice app had a problem (HTTP ${e.status}).`);
     return f("refused", `The practice app refused the transcript (HTTP ${e.status}${/^[a-z_]{1,40}$/.test(e.code ?? "") ? " " + e.code : ""}).`);
@@ -117,7 +118,12 @@ export async function sendConfirmed(s: Session, item: QueueItem, text: string, c
   try {
     reply = await putInbox(s, id, { seq: FINAL_SEQ, final: true, text, durationSeconds: item.duration_seconds, recordedAt: item.created_at, visitId: item.link_visit ?? null, consent: consent ?? null });
   } catch (e) {
-    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) { await pushTranscript(s, item.link_visit, text, consent); return { via: "visit", linked: true }; }
+    if (e instanceof ApiFailure && e.status === 404 && item.link_visit) {
+      // Old server without the inbox: fall back to the visit upload once. If that is a 404 too, say "not ready" (not a
+      // missing visit) and stop; the retry timer then waits PARK_RETRY_MS instead of asking again every few minutes.
+      try { await pushTranscript(s, item.link_visit, text, consent); } catch (e2) { if (e2 instanceof ApiFailure && e2.status === 404) throw new ApiFailure(404, "inbox_pending"); throw e2; }
+      return { via: "visit", linked: true };
+    }
     if (e instanceof ApiFailure && e.status === 404) throw new ApiFailure(404, "inbox_pending");
     throw e;
   }
@@ -177,6 +183,20 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
   })();
   inFlight.set(item.visit_id, p);
   return p;
+}
+
+/** Automatic retries leave a recording alone this long when the server answered "not ready" (404). */
+export const PARK_RETRY_MS = 30 * 60_000;
+
+/** Recordings the automatic retry skips right now: a visit the server does not know (waits for "Retry now" or the visit),
+ *  and "server not ready" for PARK_RETRY_MS after the last try. Nothing is deleted; they are only asked less often. */
+export function parkedIds(failures: Record<string, UploadFailure>, now: number): Set<string> {
+  const out = new Set<string>();
+  for (const [id, f] of Object.entries(failures)) {
+    if (f.kind === "not_found") out.add(id);
+    else if (f.kind === "inbox_pending" && now - (f.lastTriedAt ?? 0) < PARK_RETRY_MS) out.add(id);
+  }
+  return out;
 }
 
 /** Retries everything in the queue, each against its own environment. */

@@ -40,6 +40,7 @@ export function Health({ status, env, session, queue, failures, retrying, onRetr
             <li key={q.visit_id} className="saved-row">
               <strong>Recorded {ago(q.created_at)}</strong>{" "}
               <span className="small err">{failures[q.visit_id]?.message ?? "Waiting for its turn to send."}</span>
+              {failures[q.visit_id]?.tries ? <span className="small"> Tried {failures[q.visit_id].tries} time{failures[q.visit_id].tries === 1 ? "" : "s"}, last {ago(new Date(failures[q.visit_id].lastTriedAt ?? Date.now()).toISOString())}. Kept safe on this Mac until the server confirms it.</span> : <span className="small"> Kept safe on this Mac until the server confirms it.</span>}
             </li>
           ))}
         </ul>

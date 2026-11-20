@@ -17,8 +17,9 @@ describe("diagnostics carry no patient data", () => {
     expect(safeCode(null)).toBeUndefined();
   });
   it("keeps at most 50 events and scrubs detail on record", () => {
-    for (let i = 0; i < 60; i++) record({ kind: "js", code: "Error", detail: `bad 12345 a@b.co` }, false);
+    for (let i = 0; i < 60; i++) record({ kind: "js", code: `Error${i}`, detail: `bad 12345 a@b.co` }, false);
     expect(recentEvents().length).toBe(50);
     expect(recentEvents()[0].detail).toBe("bad # [email]");
+    expect(recentEvents()[0].code).toBe("Error10");
   });
 });

@@ -32,14 +32,38 @@ export function safeCode(code: string | null | undefined): string | undefined {
   return code && /^[a-z0-9_]{2,40}$/.test(code) ? code : undefined;
 }
 
+const sig = (e: Pick<DiagEvent, "kind" | "code" | "route">) => `${e.kind}|${e.code ?? ""}|${e.route ?? ""}`;
+const repeats = new Map<string, number>();
+let reportedSigs = new Set<string>();
+let lastReportAt = 0;
+
+/** An identical event (same kind, code and route) is not added again: the earlier one says "repeated N times". A retry
+ *  loop therefore cannot fill the list or trigger a report of its own. */
 export function record(e: Omit<DiagEvent, "ts">, auto = true): void {
+  const key = sig(e);
+  let same: DiagEvent | undefined;
+  for (let i = events.length - 1; i >= 0 && !same; i--) if (sig(events[i]) === key) same = events[i];
+  if (same) {
+    const n = (repeats.get(key) ?? 1) + 1;
+    repeats.set(key, n);
+    same.detail = `repeated ${n} times`;
+    return;
+  }
+  repeats.set(key, 1);
   events.push({ ts: new Date().toISOString(), ...e, ...(e.detail ? { detail: scrub(e.detail) } : {}) });
-  if (events.length > MAX_EVENTS) events.shift();
+  if (events.length > MAX_EVENTS) { const gone = events.shift(); if (gone) repeats.delete(sig(gone)); }
   if (auto) scheduleAuto();
 }
 
+/** True when an automatic report is worthwhile: an event kind not yet reported, or 6 hours since the last report. */
+export function shouldAutoReport(now: number): boolean {
+  if (events.length === 0) return false;
+  return events.some((e) => !reportedSigs.has(sig(e))) || now - lastReportAt >= 6 * 3_600_000;
+}
+export function markReported(now: number): void { reportedSigs = new Set(events.map(sig)); lastReportAt = now; }
+
 export const recentEvents = (): DiagEvent[] => events.slice();
-export const clearEvents = (): void => { events.length = 0; };
+export const clearEvents = (): void => { events.length = 0; repeats.clear(); reportedSigs = new Set(); lastReportAt = 0; };
 
 /** The app registers how to send; errors then trigger one report, at most one every 5 minutes. */
 export function setSender(fn: (() => void) | null): void { sender = fn; }
@@ -47,7 +71,7 @@ export function setSender(fn: (() => void) | null): void { sender = fn; }
 function scheduleAuto(): void {
   if (!sender || autoTimer) return;
   const wait = Math.max(15_000, lastAuto + 5 * 60_000 - Date.now());
-  autoTimer = setTimeout(() => { autoTimer = null; lastAuto = Date.now(); sender?.(); }, wait);
+  autoTimer = setTimeout(() => { autoTimer = null; lastAuto = Date.now(); if (shouldAutoReport(lastAuto)) { markReported(lastAuto); sender?.(); } }, wait);
 }
 
 /** Uncaught errors in the page. Installed once. */
