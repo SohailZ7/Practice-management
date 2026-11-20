@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { encode, getToken } from "next-auth/jwt";
 import { checkSession, sessionPolicy, shouldRefresh } from "@/lib/sessionExpiry";
 import { SESSION_COOKIE_NAMES, sessionCookieName, useSecureCookies } from "@/lib/sessionCookie";
-import { buildCsp, makeNonce } from "@/lib/security/csp";
+import { buildCsp, isPdfPreviewPath, makeNonce } from "@/lib/security/csp";
 import { corsHeadersFor, promoteCspExtras } from "@/lib/promote/webConfig";
 import { clientIp, createLimiter, ruleFor, type Rule } from "@/lib/security/rateLimit";
 
@@ -24,7 +24,10 @@ function limiterFor(rule: Rule) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const dev = process.env.NODE_ENV !== "production";
-  const csp = buildCsp(makeNonce(), dev, promoteCspExtras(process.env));
+  // Pages may frame their own origin (the PDF preview in the Document dialog); the PDF response may be framed by our own pages only.
+  const promoteExtras = promoteCspExtras(process.env);
+  const pdfPreview = isPdfPreviewPath(pathname);
+  const csp = buildCsp(makeNonce(), dev, { connect: promoteExtras?.connect, frame: ["'self'", ...(promoteExtras?.frame ?? [])], ancestorsSelf: pdfPreview });
   // Production only, and only for the exact origins in PROMOTE_WEB_ORIGINS (empty = none): the Desktop API for the staging web page.
   const cors = pathname.startsWith("/api/desktop/v1/") || pathname === "/api/desktop/v1" ? corsHeadersFor(req.headers.get("origin"), process.env) : null;
 
@@ -38,6 +41,7 @@ export async function middleware(req: NextRequest) {
     res.headers.set("Content-Security-Policy", csp);
     res.headers.set("Cache-Control", "no-store, max-age=0");
     res.headers.set("Pragma", "no-cache");
+    if (pdfPreview) res.headers.set("X-Frame-Options", "SAMEORIGIN");
     if (cors) for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
     return res;
   };

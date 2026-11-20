@@ -65,3 +65,15 @@ test("Tasks: dragging a task works, switches Auto sort to Manual order, and the 
   await expect(page.getByRole("button", { name: "Manual order" })).toBeVisible();
   await expect.poll(async () => (await section.locator(".todo-item").nth(1).locator(".todo-row").innerText()).includes(first.trim())).toBe(true);
 });
+
+test("PDF preview can be framed by our own pages only: frame headers on the PDF route and on a page", async ({ page, context }) => {
+  await signIn(context);
+  // The document does not exist (404), but the framing headers are set before the handler runs.
+  const pdf = await page.request.get("/api/notes/visits/none/documents/none/pdf");
+  expect(pdf.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+  expect(pdf.headers()["content-security-policy"]).toContain("frame-ancestors 'self'");
+  const pg = await page.request.get("/schedule");
+  expect(pg.headers()["x-frame-options"]).toBe("DENY");
+  expect(pg.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(pg.headers()["content-security-policy"]).toContain("frame-src 'self'");
+});

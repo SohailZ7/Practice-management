@@ -8,7 +8,7 @@
 // style-src-attr allows them; <style> elements and stylesheets stay limited to our own files. An inline style cannot
 // run code. No third-party origins are allowed anywhere (fonts, images and scripts are all served by the app).
 
-export function buildCsp(nonce: string, dev = false, extra?: { connect?: string[]; frame?: string[] }): string {
+export function buildCsp(nonce: string, dev = false, extra?: { connect?: string[]; frame?: string[]; ancestorsSelf?: boolean }): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])],
@@ -21,7 +21,7 @@ export function buildCsp(nonce: string, dev = false, extra?: { connect?: string[
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
-    "frame-ancestors": ["'none'"],
+    "frame-ancestors": extra?.ancestorsSelf ? ["'self'"] : ["'none'"],
     "frame-src": extra?.frame?.length ? extra.frame : ["'none'"],
     "manifest-src": ["'self'"],
     "worker-src": ["'self'", "blob:"],
@@ -37,4 +37,12 @@ export function makeNonce(): string {
   let bin = "";
   bytes.forEach((b) => (bin += String.fromCharCode(b)));
   return btoa(bin);
+}
+
+/**
+ * The one response the app shows inside its own page: the document PDF in the Document dialog's preview pane.
+ * Everything else stays unframeable. Same origin only, never a third party.
+ */
+export function isPdfPreviewPath(pathname: string): boolean {
+  return /^\/api\/notes\/visits\/[^/]+\/documents\/[^/]+\/pdf\/?$/.test(pathname);
 }
