@@ -37,7 +37,7 @@ export default async function PatientChart({ params, searchParams }: { params: {
   await audit(user.email, "patients.chart.view", `patient ${patient.id}`);
   const name = `${patient.lastName}, ${patient.firstName}`;
   const full = canSeeFullNames(user);
-  const flag = (e: (typeof allEntries)[number]) => (e.canceled ? "Cancelled" : e.absent ? "No-show" : e.missed ? "Missed" : e.completed ? "Seen" : "Scheduled");
+  const flag = (e: (typeof allEntries)[number]) => (e.canceled ? "Cancelled" : e.absent ? "Not Seen" : e.missed ? "Missed" : e.completed ? "Seen" : "Scheduled");
   return (
     <>
       <p><Link href="/patients">← Patients</Link></p>

@@ -7,7 +7,7 @@ describe("visit statuses", () => {
     expect(VISIT_STATUSES.map((s) => s.value)).toEqual(["scheduled", "seen", "note_signed", "no_show", "cancelled", "missed", "other"]);
     expect(isVisitStatus("seen")).toBe(true);
     expect(isVisitStatus("done")).toBe(false);
-    expect(statusLabel("no_show")).toBe("No-show");
+    expect(statusLabel("no_show")).toBe("Not Seen");
   });
   it("derives the old schedule flags", () => {
     expect(flagsForStatus("seen").completed).toBe(true);

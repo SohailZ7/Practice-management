@@ -5,7 +5,7 @@ export const VISIT_STATUSES = [
   { value: "scheduled", label: "Scheduled", tone: "neutral" },
   { value: "seen", label: "Seen", tone: "ok" },
   { value: "note_signed", label: "Note signed", tone: "done" },
-  { value: "no_show", label: "No-show", tone: "bad" },
+  { value: "no_show", label: "Not Seen", tone: "bad" },
   { value: "cancelled", label: "Cancelled", tone: "warn" },
   // Added in Web 1.40 (tracker statuses). `missed` already existed as a schedule checkbox; `other` is a not-seen reason outside the rest.
   { value: "missed", label: "Missed", tone: "bad" },

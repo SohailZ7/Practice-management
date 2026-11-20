@@ -65,7 +65,7 @@ export default async function Home() {
   const attn = [
     ...(toReview ? [{ title: `${toReview} document${toReview === 1 ? "" : "s"} need a review`, note: "Complete the record. Keep care moving.", tone: "amber" }] : []),
     ...(notStarted ? [{ title: `${notStarted} seen visit${notStarted === 1 ? "" : "s"} with no document yet`, note: "Start the note from the Schedule.", tone: "rose" }] : []),
-    ...(noShows ? [{ title: `${noShows} no-show${noShows === 1 ? "" : "s"} today`, note: "Check follow-up is arranged.", tone: "blue" }] : []),
+    ...(noShows ? [{ title: `${noShows} not seen today`, note: "Check follow-up is arranged.", tone: "blue" }] : []),
   ];
   const modules = [
     lv.employees !== "none" && { href: "/employees", title: "Employees", note: "Directory" },
