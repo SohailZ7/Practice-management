@@ -63,3 +63,28 @@ export function canAssignTo(o: { isAdmin: boolean; targetId: string | null; tabI
 }
 
 export type MoveKind = "assigned" | "created-for" | "tab-removed";
+
+/**
+ * Sohail's rule (2026-11-19): everyone sees everyone's tasks. Admin (and anyone the Admin granted "edit" on that person's
+ * tab) changes everything. On their OWN tasks others change status and Today; on any task they may hand it to another
+ * person with a tab (assign). Titles, dates, notes, priority, links and deleting need the Admin.
+ */
+export type TaskLevel = "full" | "own" | "assign" | "none";
+export function taskLevel(o: { isAdmin: boolean; moduleEdit: boolean; meId: string | null; editIds: string[]; assigneeId: string | null }): TaskLevel {
+  if (!o.moduleEdit) return "none";
+  if (o.isAdmin) return "full";
+  if (o.assigneeId && o.editIds.includes(o.assigneeId)) return "full";
+  if (o.assigneeId && o.assigneeId === o.meId) return "own";
+  return "assign";
+}
+const PATCH_KEYS: Record<TaskLevel, readonly string[] | "all"> = {
+  full: "all",
+  own: ["status", "completed", "inToday", "assigneeId"],
+  assign: ["assigneeId"],
+  none: [],
+};
+/** Keys of a patch this level may not change (empty = fine). */
+export function blockedPatchKeys(level: TaskLevel, patch: Record<string, unknown>): string[] {
+  const ok = PATCH_KEYS[level];
+  return ok === "all" ? [] : Object.keys(patch).filter((k) => patch[k] !== undefined && !ok.includes(k));
+}

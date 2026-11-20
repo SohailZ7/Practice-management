@@ -8,14 +8,23 @@ import { isISODate } from "@/lib/dates";
 import { type PhiBlock } from "@/lib/phiGuard";
 import { phiCheck } from "@/lib/phiCheck";
 import { detectLinkType, linkTypeMeta, normalizeUrl } from "@/lib/links";
-import { canAssignTo, type MoveKind } from "@/lib/taskAccess";
+import { blockedPatchKeys, canAssignTo, taskLevel, type MoveKind } from "@/lib/taskAccess";
 import { loadTaskScope } from "@/lib/taskScope";
-import { isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
+import { MAX_UPDATE, type TaskUpdateDTO, isTaskPriority, isTaskStatus, MAX_NOTES, taskStatus, taskStatusFields, toTaskDTO, type TaskStatus, type CategoryDTO, type LinkDTO, type TaskDTO, type TaskPatch } from "@/lib/taskTypes";
 
 // Visibility rule (TSK-6, TSK-59): a non-admin may only change tasks assigned to them or to an employee whose tab
 // the Admin granted them edit access to. Every action below checks it on the server.
 
 const isAdmin = (user: CurrentUser) => user.role === "ADMIN";
+
+/** Loads a task for an update or an assign. Who may change what is decided by taskLevel / blockedPatchKeys. */
+async function loadTaskWithLevel(user: CurrentUser, id: string) {
+  const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
+  if (!task) throw new Error("Task not found");
+  const scope = await loadTaskScope(user);
+  const level = taskLevel({ isAdmin: isAdmin(user), moduleEdit: true, meId: scope.meId, editIds: scope.editIds, assigneeId: task.assigneeId });
+  return { task, level };
+}
 
 async function loadAccessibleTask(user: CurrentUser, id: string) {
   const task = await db.task.findUnique({ where: { id }, include: { assignee: true, links: true } });
@@ -98,7 +107,12 @@ export async function createTask(input: {
 
 export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = false): Promise<TaskDTO | PhiBlock> {
   const user = await requireAccess("tasks", "edit");
-  const existing = await loadAccessibleTask(user, id);
+  const { task: existing, level } = await loadTaskWithLevel(user, id);
+  const blockedKeys = blockedPatchKeys(level, patch as Record<string, unknown>);
+  if (blockedKeys.length) {
+    await auditDenied(user.email, `task ${id}`);
+    throw new Error(level === "assign" ? "You can only assign this task to someone. Other changes need the administrator." : "That change needs the administrator.");
+  }
   const changedText = [
     patch.title !== undefined && patch.title.trim() !== existing.title ? patch.title.trim().slice(0, 300) : "",
     typeof patch.notes === "string" && patch.notes !== existing.notes ? patch.notes : "",
@@ -137,6 +151,10 @@ export async function updateTask(id: string, patch: TaskPatch, confirmNoPhi = fa
     if (patch.status !== undefined && !isTaskStatus(patch.status)) throw new Error("Invalid status");
     const to: TaskStatus = patch.status ?? (patch.completed === true ? "done" : existing.completed ? "not_started" : taskStatus(existing));
     Object.assign(data, taskStatusFields(to, existing));
+  }
+  if (patch.priority !== undefined) {
+    if (!isTaskPriority(patch.priority)) throw new Error("Invalid priority");
+    data.priority = patch.priority;
   }
   if (patch.inToday !== undefined) data.inToday = patch.inToday === true;
 
@@ -188,9 +206,41 @@ export async function reorderTasks(orderedIds: string[]): Promise<void> {
   revalidatePath("/tasks");
 }
 
+/** Links, like titles and notes, need the Admin (or an edit grant on that person's tab). */
+async function requireFullRights(user: CurrentUser, taskId: string) {
+  const { level } = await loadTaskWithLevel(user, taskId);
+  if (level !== "full") {
+    await auditDenied(user.email, `task ${taskId}`);
+    throw new Error("That change needs the administrator.");
+  }
+}
+
+/** Anyone with Tasks access can post a dated update on any task they can see; the assignee gets an "Update" badge. */
+export async function addTaskUpdate(taskId: string, rawBody: string, confirmNoPhi = false): Promise<TaskUpdateDTO | PhiBlock> {
+  const user = await requireAccess("tasks", "edit");
+  const body = rawBody.trim().slice(0, MAX_UPDATE);
+  if (!body) throw new Error("Write the update first");
+  if (!(await db.task.findUnique({ where: { id: taskId }, select: { id: true } }))) throw new Error("Task not found");
+  const blocked = await phiCheck(user, taskId, [body], confirmNoPhi === true);
+  if (blocked) return blocked;
+  const row = await db.taskUpdate.create({ data: { taskId, authorEmail: user.email, authorName: user.name, body } });
+  await audit(user.email, "task.update.add", `task ${taskId}`);
+  revalidatePath("/tasks");
+  return { id: row.id, author: row.authorName, body: row.body, at: row.createdAt.getTime(), seen: false };
+}
+
+/** The assignee opened the updates: clears the badge. Others' opening changes nothing. */
+export async function markTaskUpdatesSeen(taskId: string): Promise<void> {
+  const user = await requireAccess("tasks", "view");
+  const task = await db.task.findUnique({ where: { id: taskId }, include: { assignee: true } });
+  if (!task || task.assignee?.email !== user.email) return;
+  await db.taskUpdate.updateMany({ where: { taskId, seenAt: null, authorEmail: { not: user.email } }, data: { seenAt: new Date() } });
+  revalidatePath("/tasks");
+}
+
 export async function addTaskLink(taskId: string, rawUrl: string): Promise<LinkDTO> {
   const user = await requireAccess("tasks", "edit");
-  await loadAccessibleTask(user, taskId);
+  await requireFullRights(user, taskId);
   const url = normalizeUrl(rawUrl);
   if (!url) throw new Error("Enter a valid http(s) link");
   const type = detectLinkType(url);
@@ -205,7 +255,7 @@ export async function removeTaskLink(linkId: string): Promise<void> {
   const user = await requireAccess("tasks", "edit");
   const link = await db.taskLink.findUnique({ where: { id: linkId } });
   if (!link) return;
-  await loadAccessibleTask(user, link.taskId);
+  await requireFullRights(user, link.taskId);
   await db.taskLink.delete({ where: { id: linkId } });
   revalidatePath("/tasks");
 }

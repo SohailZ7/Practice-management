@@ -1,3 +1,4 @@
+import { approvalOf, isLocked, statusForSave } from "../ledger/approval";
 // Ledger operations for the MCP API. Reuses the web Ledger's validation (ledger/validate.ts), its linked-entry rule and its
 // audit trail. The ledger holds money, categories and short memos, not patient data; free text that looks like patient
 // information is still refused on the way in and withheld on the way out. Audit entries hold ids, dates and amounts only.
@@ -33,6 +34,7 @@ export function toLedgerOut(e: Row, linked = false) {
     memo: looksLikePhi(e.comments) ? WITHHELD : e.comments,
     memoWithheld: looksLikePhi(e.comments),
     linkedToTimesheetPayment: linked,
+    approval: approvalOf(e.approvalStatus),
   };
 }
 
@@ -142,7 +144,7 @@ export async function createLedger(user: CurrentUser, tokenId: string, body: Bod
     const dup = await db.ledgerEntry.findFirst({ where: { date: entry.date, cashIn: entry.cashIn, cashOut: entry.cashOut, partyId, categoryId, comments: entry.comments }, select: { id: true } });
     if (dup) throw new ApiError(409, "duplicate", { message: "An identical entry (same date, amount, party, category and memo) already exists. Pass force=true only if this is a genuine second one.", existingId: dup.id });
   }
-  const row = await db.ledgerEntry.create({ data: { ...entry, partyId, categoryId, methodId, createdById: user.id }, include });
+  const row = await db.ledgerEntry.create({ data: { ...entry, partyId, categoryId, methodId, approvalStatus: statusForSave(entry.cashOut), createdById: user.id }, include });
   await audit(user.email, "ledger.add", `${row.id}: ${describe(row)} via mcp token ${tokenId}`);
   return { entry: toLedgerOut(row) };
 }
@@ -151,6 +153,7 @@ export async function updateLedger(user: CurrentUser, tokenId: string, id: strin
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) throw new ApiError(404, "not_found");
   if (await isLinkedLedgerEntry(id)) throw new ApiError(409, "linked_entry", { message: LINKED_LEDGER_MESSAGE });
+  if (isLocked(approvalOf(existing.approvalStatus)) && existing.cashOut > 0) throw new ApiError(409, "approved_locked", { message: "This expense is approved and locked." });
   const memo = memoOf(body.memo);
   if (memo !== undefined && memo !== existing.comments) refuseIfPhi(user, memo, id);
   const next = {
@@ -168,7 +171,7 @@ export async function updateLedger(user: CurrentUser, tokenId: string, id: strin
   if (body.methodId === null || body.method === null) next.methodId = null;
   const error = ledgerEntryError(next);
   if (error) throw new ApiError(400, "invalid", { message: error });
-  const row = await db.ledgerEntry.update({ where: { id }, data: next, include });
+  const row = await db.ledgerEntry.update({ where: { id }, data: { ...next, approvalStatus: statusForSave(next.cashOut, approvalOf(existing.approvalStatus)) }, include });
   await audit(user.email, "ledger.edit", `${id}: ${describe(existing)} -> ${describe(row)} via mcp token ${tokenId}`);
   return { entry: toLedgerOut(row) };
 }
@@ -177,6 +180,7 @@ export async function deleteLedger(user: CurrentUser, tokenId: string, id: strin
   const existing = await db.ledgerEntry.findUnique({ where: { id } });
   if (!existing) throw new ApiError(404, "not_found");
   if (await isLinkedLedgerEntry(id)) throw new ApiError(409, "linked_entry", { message: LINKED_LEDGER_MESSAGE });
+  if (isLocked(approvalOf(existing.approvalStatus)) && existing.cashOut > 0) throw new ApiError(409, "approved_locked", { message: "This expense is approved and locked." });
   await db.ledgerEntry.delete({ where: { id } });
   await audit(user.email, "ledger.delete", `${id}: ${describe(existing)} via mcp token ${tokenId}`);
   return { deleted: id };

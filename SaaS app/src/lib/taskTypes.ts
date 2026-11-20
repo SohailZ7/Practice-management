@@ -34,6 +34,7 @@ export type TaskDTO = {
   expiresAt: string | null;
   completed: boolean;
   status: TaskStatus;
+  priority: TaskPriority;
   /** Epoch milliseconds when it was completed, or null (not done, or finished before dates were tracked). */
   completedAt: number | null;
   inToday: boolean;
@@ -41,17 +42,34 @@ export type TaskDTO = {
   /** Created by a recurring task. */
   recurring: boolean;
   links: LinkDTO[];
+  /** Dated updates (newest last). Optional so older callers keep working. */
+  updates?: TaskUpdateDTO[];
 };
 
 export type TaskPatch = Partial<
-  Pick<TaskDTO, "title" | "notes" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "status" | "inToday">
+  Pick<TaskDTO, "title" | "notes" | "categoryId" | "assigneeId" | "dueDate" | "expiresAt" | "completed" | "status" | "priority" | "inToday">
 >;
+
+export const TASK_PRIORITIES = ["high", "normal", "low"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = { high: "High", normal: "Normal", low: "Low" };
+export const isTaskPriority = (v: unknown): v is TaskPriority => typeof v === "string" && (TASK_PRIORITIES as readonly string[]).includes(v);
+export const taskPriority = (v: unknown): TaskPriority => (isTaskPriority(v) ? v : "normal");
+const PRIO_RANK: Record<TaskPriority, number> = { high: 0, normal: 1, low: 2 };
+
+/** Auto sort: high before normal before low, then earliest due date (no date last), then the saved manual order. */
+export function autoCompare(a: { priority: TaskPriority; dueDate: string | null; sortOrder: number }, b: { priority: TaskPriority; dueDate: string | null; sortOrder: number }): number {
+  return PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || (a.dueDate ?? "9999") .localeCompare(b.dueDate ?? "9999") || a.sortOrder - b.sortOrder;
+}
+
+export type TaskUpdateDTO = { id: string; author: string; body: string; at: number; seen: boolean };
+export const MAX_UPDATE = 2000;
 
 export const MAX_NOTES = 20000;
 
 export type CategoryDTO = { id: string; name: string };
 
-export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
+export function toTaskDTO(t: Task & { links: TaskLink[]; updates?: { id: string; authorName: string; body: string; createdAt: Date; seenAt: Date | null }[] }): TaskDTO {
   return {
     id: t.id,
     title: t.title,
@@ -62,11 +80,13 @@ export function toTaskDTO(t: Task & { links: TaskLink[] }): TaskDTO {
     expiresAt: t.expiresAt,
     completed: t.completed,
     status: taskStatus(t),
+    priority: taskPriority(t.priority),
     completedAt: t.completedAt ? t.completedAt.getTime() : null,
     inToday: t.inToday,
     sortOrder: t.sortOrder,
     recurring: t.recurringId !== null,
     links: t.links.map((l) => ({ id: l.id, url: l.url, label: l.label, type: l.type })),
+    updates: (t.updates ?? []).map((u) => ({ id: u.id, author: u.authorName, body: u.body, at: u.createdAt.getTime(), seen: u.seenAt !== null })),
   };
 }
 
@@ -94,8 +114,8 @@ export const isExpired = (t: { completed: boolean; expiresAt: string | null }, t
  * - Completed: done tasks.
  */
 export function splitTasks<
-  T extends Pick<TaskDTO, "id" | "completed" | "dueDate" | "expiresAt" | "inToday" | "sortOrder">,
->(tasks: T[], today: string) {
+  T extends Pick<TaskDTO, "id" | "completed" | "dueDate" | "expiresAt" | "inToday" | "sortOrder"> & { priority?: TaskPriority },
+>(tasks: T[], today: string, auto = false) {
   const expired = tasks.filter((t) => isExpired(t, today));
   const expiredIds = new Set(expired.map((t) => t.id));
   const open = tasks.filter((t) => !t.completed && !expiredIds.has(t.id));
@@ -106,11 +126,12 @@ export function splitTasks<
   const rest = open.filter((t) => !past.has(t.id));
   const todayList = rest.filter((t) => t.inToday || t.dueDate === today);
   const inToday = new Set(todayList.map((t) => t.id));
+  const order = (l: T[]) => (auto ? [...l].sort((a, b) => autoCompare({ ...a, priority: taskPriority(a.priority) }, { ...b, priority: taskPriority(b.priority) })) : l);
   return {
     expired,
-    pastDue,
-    today: todayList,
-    backlog: rest.filter((t) => !inToday.has(t.id)),
+    pastDue: order(pastDue),
+    today: order(todayList),
+    backlog: order(rest.filter((t) => !inToday.has(t.id))),
     completed: tasks.filter((t) => t.completed),
   };
 }

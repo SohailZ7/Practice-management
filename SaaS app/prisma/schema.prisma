@@ -19,6 +19,8 @@ model User {
   showFullNames           Boolean             @default(false)
   // May approve, request changes on, or reject Feedback items that are On staging. Set by an admin per user.
   feedbackApprover        Boolean             @default(false)
+  // Final approver of Ledger expenses (Sohail). Set by an admin per user; existing users default to false.
+  ledgerApprover          Boolean             @default(false)
   // Last Desktop version this person's recorder reported, and the newest version whose update banner they dismissed.
   desktopVersion          String?
   desktopSeenAt           DateTime?
@@ -129,6 +131,8 @@ model Task {
   // not_started | in_progress | done. `completed` stays the source of truth for Done (old rows and the sync read it);
   // this column only tells not_started from in_progress while a task is open. See taskStatus() in taskTypes.ts.
   status         String         @default("not_started")
+  // high | normal | low. Additive (default normal). Auto sort orders by priority, then due date; drag order is the manual override.
+  priority       String         @default("normal")
   completedAt    DateTime?
   inToday        Boolean        @default(false)
   sortOrder      Int            @default(0)
@@ -137,6 +141,7 @@ model Task {
   category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   assignee       Employee?      @relation(fields: [assigneeId], references: [id])
   links          TaskLink[]
+  updates        TaskUpdate[]
   recurringId    String?
   occurrenceDate String?
   // Set when the task is mirrored from another app (the Sohail Todo App): source name and that app's id.
@@ -463,6 +468,12 @@ model LedgerEntry {
   categoryId  String?
   methodId    String?
   comments    String          @default("")
+  // pending | approved | rejected. Existing and cash-in rows are approved (default); every new expense (cash out) starts pending.
+  // Approved entries are locked. Only a ledgerApprover can approve or reject.
+  approvalStatus String       @default("approved")
+  approvedById   String?
+  approvedAt     DateTime?
+  approvalNote   String       @default("")
   createdById String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @default(now()) @updatedAt
@@ -738,4 +749,19 @@ model HiddenOption {
   hiddenAt      DateTime @default(now())
 
   @@unique([kind, value])
+}
+
+// A dated update posted on a task (separate from its notes). The assignee sees an "Update" badge until they open it (seenAt).
+// Text is checked for patient information before it is stored and is never written to the audit log.
+model TaskUpdate {
+  id          String    @id @default(cuid())
+  taskId      String
+  authorEmail String
+  authorName  String
+  body        String
+  createdAt   DateTime  @default(now())
+  seenAt      DateTime?
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }

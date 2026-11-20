@@ -17,5 +17,6 @@ export async function loadTaskScope(user: CurrentUser) {
   const meId = me?.id ?? null;
   const viewIds = viewableEmployeeIds({ isAdmin, meId, grantedIds: grants.map((g) => g.employeeId), allIds: tabIds });
   const editIds = isAdmin ? tabIds : editableGrantIds(grants, tabIds, meId).filter((id) => viewIds.includes(id));
-  return { isAdmin, tabs, tabIds, me, meId, viewIds, editIds };
+  // `webViewIds`: the Tasks screen shows every tab to everyone (read-only unless own or granted), Sohail 2026-11-19. API scoping keeps viewIds.
+  return { isAdmin, tabs, tabIds, me, meId, viewIds, editIds, webViewIds: tabIds };
 }

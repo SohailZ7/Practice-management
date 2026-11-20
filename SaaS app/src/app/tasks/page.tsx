@@ -23,7 +23,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
 
   // TSK-6 / TSK-59: a non-admin only ever gets their own list and the lists the Admin granted them (read-only or
   // editable per grant), whatever the URL says. TSK-7: the Admin gets every list, plus Unassigned.
-  const { tabs: employees, me, viewIds: allowed, editIds } = await loadTaskScope(user);
+  const { tabs: employees, me, webViewIds: allowed, editIds } = await loadTaskScope(user);
   const wanted = searchParams.emp;
   const selected: string | null = isAdmin && wanted === UNASSIGNED ? null : pickEmployee(wanted, allowed, me?.id ?? null);
 
@@ -33,7 +33,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
     ? []
     : await db.task.findMany({
         where: { assigneeId: selected },
-        include: { links: true },
+        include: { links: true, updates: { orderBy: { createdAt: "asc" } } },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       });
   const grouped = noProfile
@@ -79,6 +79,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { emp?
             categories={categories.map((c) => ({ id: c.id, name: c.name }))}
             employees={employees.map((e) => ({ id: e.id, name: e.name }))}
             canEdit={canEdit}
+            access={{ isAdmin, moduleEdit, meId: me?.id ?? null, editIds }}
             canUnassign={isAdmin}
             boardAssigneeId={selected}
             today={todayISO()}

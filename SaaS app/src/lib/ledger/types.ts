@@ -7,9 +7,11 @@ export type LedgerDTO = {
   categoryId: string | null;
   methodId: string | null;
   comments: string;
+  approval: "pending" | "approved" | "rejected";
+  approvalNote?: string;
 };
 
-export type LedgerPatch = Partial<Omit<LedgerDTO, "id">>;
+export type LedgerPatch = Partial<Omit<LedgerDTO, "id" | "approval" | "approvalNote">>;
 
 export type LedgerFilters = {
   from: string;
