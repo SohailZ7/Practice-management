@@ -144,6 +144,9 @@ pub fn recover(support: &Path, key: &[u8; 32], active: Option<&str>) -> usize {
 pub struct Live {
     pub journal: Mutex<Journal>,
     pub stop: AtomicBool,
+    /// Set on pause: transcribe and save everything recorded so far right now (not only whole chunks), so a kill
+    /// during the pause loses nothing that was said before it.
+    pub flush: AtomicBool,
 }
 
 pub fn start(app_model: PathBuf, support: PathBuf, key: [u8; 32], shared: Arc<Mutex<Channels>>, live: Arc<Live>) -> std::thread::JoinHandle<()> {
@@ -151,27 +154,43 @@ pub fn start(app_model: PathBuf, support: PathBuf, key: [u8; 32], shared: Arc<Mu
         let mut engine: Option<transcribe::Engine> = None;
         let _ = live.journal.lock().map(|j| j.save(&support, &key));
         while !live.stop.load(Ordering::SeqCst) {
-            std::thread::sleep(std::time::Duration::from_secs(3));
+            for _ in 0..15 {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                if live.stop.load(Ordering::SeqCst) || live.flush.load(Ordering::SeqCst) { break; }
+            }
             if live.stop.load(Ordering::SeqCst) { break; }
+            let flushing = live.flush.swap(false, Ordering::SeqCst);
             for channel in ["mic", "system"] {
                 let (done, window) = {
                     let j = match live.journal.lock() { Ok(j) => j, Err(_) => return };
                     let done = if channel == "mic" { j.done_mic } else { j.done_sys };
                     let avail = match shared.lock() { Ok(c) => if channel == "mic" { c.mic.len() } else { c.system.len() }, Err(_) => return };
-                    (done, next_window(done, avail))
+                    // A flush takes everything recorded so far (at least one second), whole chunks or not.
+                    let window = if flushing && avail >= done + SAMPLE_RATE as usize { Some(done..avail) } else { next_window(done, avail) };
+                    (done, window)
                 };
                 let Some(range) = window else { continue };
                 // Cut the window at the planned chunk end, so a word is not split; only the first chunk per round.
                 let samples: Vec<i16> = match shared.lock() { Ok(c) => { let src = if channel == "mic" { &c.mic } else { &c.system }; src[range.clone()].to_vec() }, Err(_) => return };
                 let chunks = transcribe::plan_chunks(&samples, transcribe::CHUNK_SECS * SAMPLE_RATE as usize, transcribe::SEEK_BACK_SECS * SAMPLE_RATE as usize);
-                let Some(first) = chunks.first().cloned() else { continue };
+                // Normally only the first chunk per round; a flush takes all of them.
+                let take = if flushing { chunks.len() } else { 1 };
+                let chunks: Vec<_> = chunks.into_iter().take(take).collect();
+                if chunks.is_empty() { continue }
                 if engine.is_none() { engine = transcribe::Engine::load(&app_model).ok(); }
                 let Some(eng) = engine.as_mut() else { continue };
-                let part = &samples[first.clone()];
-                let new = transcribe::transcribe_channel_at(channel, part, range.start, |c| eng.run(c));
-                let Ok(new) = new else { continue };
+                let mut new = Vec::new();
+                let mut ok = true;
+                for c in &chunks {
+                    match transcribe::transcribe_channel_at(channel, &samples[c.clone()], range.start + c.start, |x| eng.run(x)) {
+                        Ok(mut v) => new.append(&mut v),
+                        Err(_) => { ok = false; break; }
+                    }
+                }
+                if !ok { continue }
+                let last_end = chunks.last().map(|c| c.end).unwrap_or(0);
                 if let Ok(mut j) = live.journal.lock() {
-                    if channel == "mic" { j.done_mic = range.start + first.end; } else { j.done_sys = range.start + first.end; }
+                    if channel == "mic" { j.done_mic = range.start + last_end; } else { j.done_sys = range.start + last_end; }
                     j.segments.extend(new);
                     j.segments = transcribe::merge_channels(std::mem::take(&mut j.segments));
                     j.seq += 1;
@@ -217,7 +236,7 @@ mod tests {
         let shared = Arc::new(Mutex::new(Channels { mic: Vec::new(), system: Vec::new() }));
         let live = Arc::new(Live { journal: Mutex::new(Journal { recording_id: id.clone(), visit_id: "v1".into(), environment: "staging".into(),
             created_at: "2026-11-19T00:00:00Z".into(), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0 }),
-            stop: AtomicBool::new(false) });
+            stop: AtomicBool::new(false), flush: AtomicBool::new(false) });
         let _h = start(model, d.clone(), key, Arc::clone(&shared), Arc::clone(&live));
         for sec in 0..secs {
             { let mut c = shared.lock().unwrap(); c.mic.extend(&audio[sec * sr..((sec + 1) * sr).min(audio.len())]); }
@@ -248,7 +267,7 @@ mod tests {
         let shared = Arc::new(Mutex::new(Channels { mic: Vec::new(), system: Vec::new() }));
         let live = Arc::new(Live { journal: Mutex::new(Journal { recording_id: id.clone(), visit_id: "v1".into(), environment: "staging".into(),
             created_at: "2026-11-20T00:00:00Z".into(), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0 }),
-            stop: AtomicBool::new(false) });
+            stop: AtomicBool::new(false), flush: AtomicBool::new(false) });
         let _h = start(model, d.clone(), key, Arc::clone(&shared), Arc::clone(&live));
         for sec in 0..50 {   // speaking
             { let mut c = shared.lock().unwrap(); c.mic.extend(&audio[sec * sr..((sec + 1) * sr).min(audio.len())]); }
@@ -262,6 +281,32 @@ mod tests {
         println!("RESULT segments={} done_mic_secs={} text_start={:?}", j.segments.len(), j.done_mic / sr, j.text().chars().take(160).collect::<String>());
         assert!(j.text().to_lowercase().contains("heron"), "speech from before the pause was lost: {}", j.text());
         assert!(j.done_mic <= before, "the journal claims more audio than was recorded");
+    }
+
+    /// The last phrase before a pause must be on disk quickly: speak a short phrase (far less than one chunk), pause,
+    /// and kill a few seconds later. Run by hand: needs CKPT_MODEL and /tmp/ckpt/marker.wav.
+    #[test]
+    #[ignore]
+    fn the_last_phrase_before_a_pause_is_saved_at_once() {
+        let model = PathBuf::from(std::env::var("CKPT_MODEL").expect("CKPT_MODEL"));
+        let marker: Vec<i16> = hound::WavReader::open("/tmp/ckpt/marker.wav").unwrap().samples::<i16>().map(|s| s.unwrap()).collect();
+        let sr = SAMPLE_RATE as usize;
+        let d = tmp("flush"); let key = [8u8; 32];
+        let id = new_uuid();
+        let shared = Arc::new(Mutex::new(Channels { mic: Vec::new(), system: Vec::new() }));
+        let live = Arc::new(Live { journal: Mutex::new(Journal { recording_id: id.clone(), visit_id: "v1".into(), environment: "staging".into(),
+            created_at: "2026-11-20T00:00:00Z".into(), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0 }),
+            stop: AtomicBool::new(false), flush: AtomicBool::new(false) });
+        let _h = start(model, d.clone(), key, Arc::clone(&shared), Arc::clone(&live));
+        { let mut c = shared.lock().unwrap(); c.mic.extend(vec![0i16; 2 * sr]); c.mic.extend(&marker); c.mic.extend(vec![0i16; sr]); }
+        std::thread::sleep(std::time::Duration::from_secs(4));   // nothing is saved yet: less than one chunk
+        assert!(Journal::load(&d, &key, &id).unwrap().segments.is_empty());
+        live.flush.store(true, Ordering::SeqCst);   // what pausing does
+        std::thread::sleep(std::time::Duration::from_secs(12));
+        // "kill -9" during the pause
+        let j = Journal::load(&d, &key, &id).unwrap();
+        println!("RESULT segments={} text={:?}", j.segments.len(), j.text());
+        assert!(j.text().to_lowercase().contains("heron"), "the last phrase before the pause was lost: {}", j.text());
     }
 
     #[test]

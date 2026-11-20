@@ -455,6 +455,7 @@ async fn start_recording(
                         append: append.unwrap_or(false), earlier: earlier_text.unwrap_or_default(), separator: separator.unwrap_or_default(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0,
                     }),
                     stop: std::sync::atomic::AtomicBool::new(false),
+                    flush: std::sync::atomic::AtomicBool::new(false),
                 });
                 let h = journal::start(model, support_dir(), key, recorder.shared(), std::sync::Arc::clone(&live));
                 if let Ok(mut l) = LIVE.lock() { *l = Some((live, h)); }
@@ -483,6 +484,8 @@ pub struct MicHealth { lost: bool, silent: bool }
 async fn set_recording_paused(paused: bool) -> Result<(), String> {
     if !recording_running() { return Err("no recording is running".into()); }
     capture::PAUSED.store(paused, std::sync::atomic::Ordering::SeqCst);
+    // On pause, save everything said so far at once (not only at the next 30 s checkpoint).
+    if paused { if let Ok(g) = LIVE.lock() { if let Some((live, _)) = g.as_ref() { live.flush.store(true, std::sync::atomic::Ordering::SeqCst); } } }
     if let Ok(mut w) = MIC_WATCH.lock() { *w = None; }
     Ok(())
 }

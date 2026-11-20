@@ -40,3 +40,4 @@ v1.0.37 | 2026-11-20 | built on 78209f8 | P3 main screen says plainly if it is s
 v1.0.38 | 2026-11-20 | built on da60ff0 | P1 Start recording strip: today's scheduled visits, one tap starts a recording tied to that visit; P6 live microphone level meter with 'picking up your voice' check
 v1.0.39 | 2026-11-20 | built on bdf5f0c | P9 one-tap consent: single 'Patient agrees, start' button replaces the checkbox; consent still saved on this Mac before capture and sent with the transcript (wording version 2026-11-20-draft-3)
 v1.0.40 | 2026-11-20 | built on fc79f92 | Pause/Resume button readable on the dark recording panel (contrast test for every panel button); real-speech test: speech before a pause survives kill during pause; mic-check wording test
+v1.0.41 | 2026-11-20 | built on 47ec366 | P10 pause saves everything said so far at once (flush), so a kill during a pause loses nothing from before it; real-speech test; self-update-only-when-idle test
