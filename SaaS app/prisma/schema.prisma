@@ -245,6 +245,8 @@ model Visit {
   status                String          @default("scheduled")
   transcript            String          @default("")
   transcriptAt          DateTime?
+  // Display-only speaker names for the transcript, e.g. {"Speaker 1":"Provider"}. Nullable and additive; the stored transcript text is never rewritten.
+  speakerLabels         Json?
   createdByEmail        String
   createdAt             DateTime        @default(now())
   // Unification, Release A (docs/release-a-runbook.md): the Visit becomes the one appointment record. Every column below is

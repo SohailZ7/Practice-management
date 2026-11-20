@@ -1,12 +1,13 @@
 "use client";
 
 import { hasSpeakers, parseTurns, speakerRole } from "@/lib/transcript/turns";
+import { applyLabels, type SpeakerLabels } from "@/lib/transcript/labels";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
 import type { VisitOptions } from "@/lib/notes/options";
-import { setClockStyle, getVisitTranscript, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
+import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
 import { DocumentDialog } from "./DocumentDialog";
@@ -15,7 +16,7 @@ import { RecordingConsentDialog } from "./RecordingConsentDialog";
 import { Modal } from "../Modal";
 import { VisitsTable } from "./VisitsTable";
 import { PromoteDialog } from "./PromoteDialog";
-import { normalizeTyped, formatTimeText, TIME_PRESETS } from "@/lib/notes/scheduleTime";
+import { normalizeTyped, formatTimeText, isTypedTimeOk, TIME_PRESETS } from "@/lib/notes/scheduleTime";
 import Link from "next/link";
 import { askConfirm } from "@/lib/confirm";
 
@@ -166,7 +167,7 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
 
       {promoting && promote && <PromoteDialog visitId={promoting.id} who={promoting.initials} prodUrl={promote.prodUrl} clientId={promote.clientId} onClose={() => setPromoting(null)} />}
 
-      {reading && <TranscriptView visitId={reading} onClose={() => setReading(null)} />}
+      {reading && <TranscriptView visitId={reading} canEdit={canEdit} onClose={() => setReading(null)} />}
 
       {consenting && (
         <RecordingConsentDialog
@@ -284,7 +285,7 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
     void visitOptions().then(setOpts);
   }, []);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
-  const timeOk = !f.apptTime.trim() || /^\d{4}(-\d{4})?$/.test(f.apptTime.trim()) || /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(f.apptTime.trim()) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(f.apptTime.trim());
+  const timeOk = isTypedTimeOk(f.apptTime);
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>
@@ -335,11 +336,13 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
   );
 }
 
-function TranscriptView({ visitId, onClose }: { visitId: string; onClose: () => void }) {
+function TranscriptView({ visitId, canEdit, onClose }: { visitId: string; canEdit: boolean; onClose: () => void }) {
   const [state, setState] = useState<{ text: string; at: string } | { error: string } | null>(null);
+  const [labels, setLabels] = useState<SpeakerLabels>({});
+  const [saveError, setSaveError] = useState("");
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    void getVisitTranscript(visitId).then((r) => setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }));
+    void getVisitTranscript(visitId).then((r) => { setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }); if (r.ok) setLabels(r.labels); });
   }, [visitId]);
   return (
     <Modal
@@ -363,7 +366,26 @@ function TranscriptView({ visitId, onClose }: { visitId: string; onClose: () => 
       {!state && <p className="muted">Loading…</p>}
       {state && "text" in state && (hasSpeakers(parseTurns(state.text))
         ? <div style={{ userSelect: "text", display: "grid", gap: 10 }}>
-            {parseTurns(state.text).map((t, i) => (
+            {canEdit && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <span className="small muted">Who is who:</span>
+                {[...new Set(parseTurns(state.text).map((t) => t.speaker).filter(Boolean))].map((sp) => (
+                  <label key={sp} className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    {sp}
+                    <select aria-label={`Who is ${sp}`} value={labels[sp] ?? sp} onChange={async (e) => {
+                      const next = { ...labels }; if (e.target.value === sp) delete next[sp]; else next[sp] = e.target.value;
+                      const r = await saveSpeakerLabels(visitId, next);
+                      if (r.ok) { setLabels(r.labels); setSaveError(""); } else setSaveError(r.error);
+                    }}>
+                      <option value={sp}>{sp}</option>
+                      {["Provider", "Patient"].filter((o) => o !== sp).map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </label>
+                ))}
+                {saveError && <span role="alert" className="docdlg-bad small">{saveError}</span>}
+              </div>
+            )}
+            {applyLabels(parseTurns(state.text), labels).map((t, i) => (
               <div key={i} data-role={speakerRole(t.speaker)}>
                 {t.speaker && <div className="small" style={{ fontWeight: 600 }}>{t.speaker}{t.time && <span className="muted" style={{ fontWeight: 400 }}> · {t.time}</span>}</div>}
                 <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{t.text}</div>

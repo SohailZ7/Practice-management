@@ -39,3 +39,15 @@ describe("times", () => {
     for (const p of TIME_PRESETS) expect(parseSpan(p)?.exact).toBe(false);
   });
 });
+
+import { isTypedTimeOk as _ok, TIME_PRESETS as _presets } from "@/lib/notes/scheduleTime";
+import { describe as _d, it as _it, expect as _e } from "vitest";
+_d("isTypedTimeOk (Block Times pick list)", () => {
+  _it("accepts every pre-made range and normal typing", () => {
+    for (const t of _presets) _e(_ok(t)).toBe(true);
+    for (const t of ["", "2:00 PM", "14:00", "2 PM", "0900", "0900-1200", "9:00 AM-12:00 PM"]) _e(_ok(t)).toBe(true);
+  });
+  _it("rejects nonsense", () => {
+    for (const t of ["lunch", "9-", "1:2:3", "9:00 AM-10:00 AM-11:00 AM"] ) _e(_ok(t)).toBe(false);
+  });
+});

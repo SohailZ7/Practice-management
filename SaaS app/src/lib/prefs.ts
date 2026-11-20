@@ -1,12 +1,14 @@
 // Per-browser display preferences (compact density, privacy mode). Not patient data; kept in localStorage only.
 export type Prefs = { compact: boolean; privacy: boolean; fullNames: boolean };
 const KEY = "bb-prefs";
-export const DEFAULT_PREFS: Prefs = { compact: false, privacy: false, fullNames: false };
+// Full names default ON: a name only reaches the page when an admin allowed it for this user (User.showFullNames), so the
+// switch only lets a permitted user hide them again. Privacy mode still wins.
+export const DEFAULT_PREFS: Prefs = { compact: false, privacy: false, fullNames: true };
 
 export function parsePrefs(raw: string | null): Prefs {
   try {
     const v = JSON.parse(raw ?? "{}") as Partial<Prefs>;
-    return { compact: v.compact === true, privacy: v.privacy === true, fullNames: v.fullNames === true };
+    return { compact: v.compact === true, privacy: v.privacy === true, fullNames: v.fullNames !== false };
   } catch {
     return DEFAULT_PREFS;
   }

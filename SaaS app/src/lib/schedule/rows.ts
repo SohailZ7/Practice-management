@@ -1,6 +1,7 @@
 // Release B1: the Schedule reads Visits (the unified appointment). Rows that are not a Visit yet (no patient) still come
 // from ScheduleEntry as "staging" rows. This module turns both into the one EntryDTO the grid already uses.
 
+import { sortRows } from "@/lib/notes/scheduleTime";
 import type { UnmatchedAppointment, Visit } from "@prisma/client";
 import type { ScheduleEntry } from "../scheduleTypes";
 import { db } from "../db";
@@ -61,7 +62,13 @@ export async function scheduleRows(r: ScheduleRange): Promise<{ visits: EntryDTO
       include: { patient: { select: { lastName: true, firstName: true } } },
     });
     const hidden = new Set(await trackingOnlyNames()); // tracking-only providers stay off the schedule grid
-    visits = await entryDTOs(vs.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort(byTime).map(visitAsEntry));
+    // Same rule as the Notes board (sortRows): sorted by the time a visit must be seen by, exact time ahead of a range ending
+    // at the same time, rows with no readable time last in creation order. Days stay in date order first.
+    const kept = vs.filter((v) => !hidden.has(v.providerName.toLowerCase())).sort((a, b) => a.visitDate.localeCompare(b.visitDate) || a.createdAt.getTime() - b.createdAt.getTime());
+    const byDay = new Map<string, typeof kept>();
+    for (const v of kept) byDay.set(v.visitDate, [...(byDay.get(v.visitDate) ?? []), v]);
+    const ordered = [...byDay.values()].flatMap((day) => sortRows(day));
+    visits = await entryDTOs(ordered.map(visitAsEntry));
   }
   let staging: EntryDTO[] = [];
   if (r.includeStaging) {

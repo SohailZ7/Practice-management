@@ -9,10 +9,10 @@ import { PatientName } from "../src/components/PatientName";
 const css = readFileSync("src/app/globals.css", "utf8");
 
 describe("See full names", () => {
-  it("is off by default, like the Desktop app, and only a true value turns it on", () => {
-    expect(DEFAULT_PREFS.fullNames).toBe(false);
-    expect(parsePrefs(null).fullNames).toBe(false);
-    expect(parsePrefs('{"fullNames":"yes"}').fullNames).toBe(false);
+  it("is on by default (names only arrive for users an admin allowed); only an explicit false hides them", () => {
+    expect(DEFAULT_PREFS.fullNames).toBe(true);
+    expect(parsePrefs(null).fullNames).toBe(true);
+    expect(parsePrefs('{"fullNames":false}').fullNames).toBe(false);
     expect(parsePrefs('{"fullNames":true}').fullNames).toBe(true);
   });
   it("the label flips between initials and full name", () => {

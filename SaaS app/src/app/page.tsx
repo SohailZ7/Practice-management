@@ -4,6 +4,7 @@ import { canAccess, canOpenAdmin } from "@/lib/access";
 import { db } from "@/lib/db";
 import { PRACTICE_TIMEZONE, todayISO } from "@/lib/dates";
 import { ensureRecurringTasks } from "@/lib/recurring";
+import { worklistCounts } from "@/lib/overview/worklist";
 import { visitsForDate, type VisitRow } from "@/lib/notes/queries";
 import { PatientName } from "@/components/PatientName";
 import { statusLabel, statusTone } from "@/lib/notes/visitStatus";
@@ -25,6 +26,8 @@ export default async function Home() {
 
   const showVisits = lv.schedule !== "none";
   const showBilling = canAccess(user, "billing", "view");
+  const showWork = lv.schedule !== "none" || lv.notes !== "none";
+  const work = showWork ? await worklistCounts(today) : null;
   const [visits, tasks, openCount, waitingBilling] = await Promise.all([
     showVisits ? visitsForDate(today).catch(() => [] as VisitRow[]) : Promise.resolve([] as VisitRow[]),
     lv.tasks !== "none"
@@ -80,6 +83,24 @@ export default async function Home() {
         </div>
         {lv.schedule !== "none" && <Link className="btn secondary" href="/schedule">View schedule</Link>}
       </div>
+
+      {work && (
+        <section aria-label="Worklist" className="row" style={{ gap: ".75rem", flexWrap: "wrap", margin: "0 0 1.25rem" }}>
+          {[
+            { n: work.todayVisits, label: "Today's visits", href: "/schedule" },
+            { n: work.overdue, label: "Overdue visits (over 7 days)", href: "/schedule?view=month" },
+            { n: work.needsPatient, label: "Need a patient", href: "/schedule" },
+            { n: work.missingDocs, label: "Seen, no document", href: "/patients" },
+            { n: work.unverifiedDocs, label: "Documents to review", href: "/patients" },
+            ...(showBilling ? [{ n: waitingBilling, label: "Waiting for GetIX", href: "/billing" }] : []),
+          ].map((c) => (
+            <Link key={c.label} href={c.href} className="card" style={{ minWidth: "9rem", padding: ".7rem .9rem", textDecoration: "none" }}>
+              <strong style={{ fontSize: "1.6rem", display: "block" }}>{c.n}</strong>
+              <span className="small muted">{c.label}</span>
+            </Link>
+          ))}
+        </section>
+      )}
 
       {showVisits && (
         <section className="hero" aria-label="Your practice, in focus">

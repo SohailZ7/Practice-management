@@ -115,6 +115,8 @@ export async function setFeedbackWorkflow(
     if (input.status === "build_it") triage = LEGACY_MAP.build_it.triage ?? undefined;
   }
   if (target !== undefined) {
+    // An agent's move from New to Triaged counts as Accepted (Sohail, 2026-11-19); it cannot reject or ask for more info.
+    if (actor.kind === "agent" && target === "triaged") triage = "accepted";
     const m = checkMove(actor, cur, target, { scope, comment, testNotes, triage });
     if (!m.ok) throw fail(m.error);
     data.status = target;
