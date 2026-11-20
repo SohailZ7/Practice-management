@@ -712,7 +712,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
   async function startNow() {
     setBusy(true);
     try {
-      const { warning, recording_id } = await engine.startRecording(true, { visitId: visit.id, environment: env, append: hasExisting });
+      const { warning, recording_id } = await engine.startRecording(true, { visitId: visit.id, environment: env, append: hasExisting, earlierText: earlier.current?.text, separator: earlier.current ? addedSeparator(new Date()) : undefined });
       recId.current = recording_id ?? null;
       recStart.current = Date.now();
       setSecs(0);

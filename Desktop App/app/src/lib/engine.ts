@@ -42,7 +42,7 @@ export type QueueItem = {
 
 export type MicHealth = { lost: boolean; silent: boolean };
 export type Checkpoint = { recording_id: string; seq: number; text: string; seconds: number };
-export type RecordingContext = { visitId: string; environment: EnvironmentId; append: boolean };
+export type RecordingContext = { visitId: string; environment: EnvironmentId; append: boolean; earlierText?: string; separator?: string };
 
 /** `mfa` is set when a two-factor step is still to do; `mfaToken` is its single-use step token (memory only). */
 export type SignInOutcome = { mfa: "enroll" | "verify" | null; mfaToken: string | null };
@@ -126,7 +126,7 @@ async function nativeEngine(): Promise<Engine> {
     accessToken: (environment) => invoke<string | null>("get_access_token", { environment }),
     refreshAccessToken: (environment, stale) => invoke<string | null>("refresh_access_token", { environment, stale }),
     startRecording: (withSystemAudio, ctx) =>
-      invoke<{ warning: string | null; recording_id?: string | null }>("start_recording", { withSystemAudio, visitId: ctx?.visitId ?? null, environment: ctx?.environment ?? null, append: ctx?.append ?? false }),
+      invoke<{ warning: string | null; recording_id?: string | null }>("start_recording", { withSystemAudio, visitId: ctx?.visitId ?? null, environment: ctx?.environment ?? null, append: ctx?.append ?? false, earlierText: ctx?.earlierText ?? null, separator: ctx?.separator ?? null }),
     recordingCheckpoint: () => invoke<Checkpoint | null>("recording_checkpoint"),
     recordingHealth: () => invoke<MicHealth>("recording_health"),
     queueSweep: () => invoke<number>("queue_sweep"),

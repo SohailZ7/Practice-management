@@ -434,7 +434,7 @@ pub struct StartResult {
 /// Begins recording the microphone and, for a telehealth visit, the system audio.
 #[tauri::command]
 async fn start_recording(
-    app: tauri::AppHandle, with_system_audio: bool, visit_id: Option<String>, environment: Option<String>, append: Option<bool>,
+    app: tauri::AppHandle, with_system_audio: bool, visit_id: Option<String>, environment: Option<String>, append: Option<bool>, earlier_text: Option<String>, separator: Option<String>,
 ) -> Result<StartResult, String> {
     let mut slot = RECORDER.lock().map_err(|_| "the recorder is busy".to_string())?;
     if slot.is_some() {
@@ -452,7 +452,7 @@ async fn start_recording(
                 let live = std::sync::Arc::new(journal::Live {
                     journal: std::sync::Mutex::new(journal::Journal {
                         recording_id: id.clone(), visit_id: v, environment: e, created_at: queue::rfc3339_utc(now_unix()),
-                        append: append.unwrap_or(false), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0,
+                        append: append.unwrap_or(false), earlier: earlier_text.unwrap_or_default(), separator: separator.unwrap_or_default(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0,
                     }),
                     stop: std::sync::atomic::AtomicBool::new(false),
                 });
@@ -932,7 +932,7 @@ fn selfcheck_net(base: &str) -> i32 {
     let support = support_dir();
     let key = [7u8; 32];
     let j = journal::Journal { recording_id: id.clone(), visit_id: "selfcheck-visit".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000),
-        append: false, done_mic: 0, done_sys: 0, seq: 1,
+        append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, seq: 1,
         segments: vec![queue::Segment { id: "s1".into(), text: "hello".into(), timestamp: "[00:00]".into(), channel: "mic".into(), speaker: "Provider".into(), audio_start_time: Some(0.0), audio_end_time: Some(1.0), sequence_id: 1 }] };
     if let Err(e) = j.save(&support, &key) { fails.push(format!("journal save: {e}")); }
     if journal::recover(&support, &key, None) != 1 { fails.push("journal recovery did not produce one queue item".into()); }
@@ -981,7 +981,7 @@ fn selfcheck_staging() -> i32 {
 
 fn wrong_key_reads(support: &Path) -> bool {
     let id = journal::new_uuid();
-    let j = journal::Journal { recording_id: id.clone(), visit_id: "k".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000), append: false, done_mic: 0, done_sys: 0, seq: 1, segments: vec![] };
+    let j = journal::Journal { recording_id: id.clone(), visit_id: "k".into(), environment: "production".into(), created_at: queue::rfc3339_utc(1_700_000_000), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, seq: 1, segments: vec![] };
     let _ = j.save(support, &[1u8; 32]);
     let r = journal::Journal::load(support, &[2u8; 32], &id).is_ok();
     journal::Journal::remove(support, &id);

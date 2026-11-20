@@ -161,7 +161,7 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
         delivered = await sendConfirmed(s, item, text, consent);
       }
       let warning: string | undefined;
-      if (delivered && !delivered.linked && item.recording_id) warning = "Safe on the server. Link it to a visit under Needs link.";
+      if (delivered && !delivered.linked && item.recording_id) warning = "Recovered recording saved. The visit has not changed yet. Link it under Needs link.";
       try {
         // The queue copy is shredded next, so the optional plain-text copy is written first.
         await engine.saveTranscriptCopy(item.visit_id, labels.get(item.visit_id) ?? `visit_${item.created_at.slice(0, 16)}_${item.visit_id.slice(0, 8)}`);
