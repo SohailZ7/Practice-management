@@ -1,12 +1,12 @@
 // Recording-consent gate: the ONE place the consent wording and its version live (no database import, so the browser can
 // use it). Web and Desktop send the version they showed; change the text only together with a new version string.
-// DRAFT: the attorney has not signed off.
+// DRAFT: the attorney has not signed off. The wording and version match Desktop (Desktop App/app/src/lib/consent.ts, CONSENT_TEXT_VERSION); change both together.
 
 export const RECORDING_CONSENT = {
-  version: "2026-11-19-draft-2",
+  version: "2026-11-20-draft-3",
   title: "Before recording",
   text:
-    "Before recording: have you told everyone present that this visit will be transcribed by an AI tool to help write the note, that no audio is saved, and that they can say no? Patient and all other participants consented.",
+    "Say this to everyone present before recording: \"I use an AI tool to help write the note from our visit. It turns our conversation into text on this computer, and no audio is saved. You can say no, and you can ask me to stop at any time, and your care will be the same.\" Then ask: \"Is that okay with everyone?\" Patient and all other participants must agree before you start.",
   checkboxLabel: "Patient (and everyone present) gave consent.",
   confirmLabel: "Continue",
   cancelLabel: "Don't record",

@@ -18,7 +18,8 @@ beforeEach(() => { store.rows.length = 0; });
 
 describe("consent text", () => {
   it("has one version and the drafted wording", () => {
-    expect(RECORDING_CONSENT.version).toMatch(/\S/);
+    expect(RECORDING_CONSENT.version).toBe("2026-11-20-draft-3");
+    expect(RECORDING_CONSENT.text).toContain("Is that okay with everyone?");
     expect(RECORDING_CONSENT.text).toContain("no audio is saved");
     expect(RECORDING_CONSENT.checkboxLabel).toBe("Patient (and everyone present) gave consent.");
   });
