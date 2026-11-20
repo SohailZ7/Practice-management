@@ -305,3 +305,5 @@ button { font-size: 12px; line-height: 1.25; padding: 9px 14px; border-radius: 7
 .mic-check { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .mic-bar { flex: 0 0 160px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .mic-bar i { display: block; height: 100%; background: var(--ok); transition: width .3s; }
+.stage .mic-bar { background: var(--stage-line); }
+.stage .stage-actions .ghost:hover { background: color-mix(in srgb, #fff 10%, transparent); }

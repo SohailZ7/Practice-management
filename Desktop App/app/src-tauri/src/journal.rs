@@ -230,6 +230,40 @@ mod tests {
         assert!(j.text().to_lowercase().contains("heron"), "the early marker was lost: {}", j.text());
     }
 
+    /// Real-model check for pause: speech, then a pause (no audio reaches the buffers, exactly what the paused capture
+    /// sinks do), then a kill -9 DURING the pause. The speech before the pause must be on disk, and the pause must add
+    /// nothing. Run by hand: needs CKPT_MODEL and /tmp/ckpt/*.wav.
+    #[test]
+    #[ignore]
+    fn speech_before_a_pause_survives_a_kill_during_the_pause() {
+        let model = PathBuf::from(std::env::var("CKPT_MODEL").expect("CKPT_MODEL"));
+        let read = |p: &str| -> Vec<i16> { hound::WavReader::open(p).unwrap().samples::<i16>().map(|s| s.unwrap()).collect() };
+        let (marker, filler) = (read("/tmp/ckpt/marker.wav"), read("/tmp/ckpt/filler.wav"));
+        let sr = SAMPLE_RATE as usize;
+        let mut audio = vec![0i16; 2 * sr];
+        audio.extend(&marker);
+        while audio.len() < 50 * sr { audio.extend(vec![0i16; 3 * sr]); audio.extend(&filler); }
+        let d = tmp("pause"); let key = [6u8; 32];
+        let id = new_uuid();
+        let shared = Arc::new(Mutex::new(Channels { mic: Vec::new(), system: Vec::new() }));
+        let live = Arc::new(Live { journal: Mutex::new(Journal { recording_id: id.clone(), visit_id: "v1".into(), environment: "staging".into(),
+            created_at: "2026-11-20T00:00:00Z".into(), append: false, earlier: String::new(), separator: String::new(), done_mic: 0, done_sys: 0, segments: Vec::new(), seq: 0 }),
+            stop: AtomicBool::new(false) });
+        let _h = start(model, d.clone(), key, Arc::clone(&shared), Arc::clone(&live));
+        for sec in 0..50 {   // speaking
+            { let mut c = shared.lock().unwrap(); c.mic.extend(&audio[sec * sr..((sec + 1) * sr).min(audio.len())]); }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        let before = shared.lock().unwrap().mic.len();
+        for _ in 0..45 { std::thread::sleep(std::time::Duration::from_secs(1)); }   // paused: the sinks drop audio, buffers do not grow
+        assert_eq!(shared.lock().unwrap().mic.len(), before);
+        // "kill -9" during the pause: do not stop; read only what is on disk
+        let j = Journal::load(&d, &key, &id).unwrap();
+        println!("RESULT segments={} done_mic_secs={} text_start={:?}", j.segments.len(), j.done_mic / sr, j.text().chars().take(160).collect::<String>());
+        assert!(j.text().to_lowercase().contains("heron"), "speech from before the pause was lost: {}", j.text());
+        assert!(j.done_mic <= before, "the journal claims more audio than was recorded");
+    }
+
     #[test]
     fn uuid_is_v4_and_unique() {
         let a = new_uuid(); let b = new_uuid();

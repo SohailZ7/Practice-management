@@ -867,7 +867,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
                 {!paused && (
                   <div className="mic-check" data-testid="mic-check">
                     <div className="mic-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}><i style={{ width: `${level}%` }} /></div>
-                    <span className="stage-soft">{heard ? "Microphone is picking up your voice." : secs >= 5 ? "No sound yet. Check your microphone, then speak." : "Say a few words: the bar should move."}</span>
+                    <span className="stage-soft">{micCheckMessage(heard, secs)}</span>
                   </div>
                 )}
                 <div className="wave" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 12) * 0.09}s` }} />)}</div>
@@ -877,7 +877,7 @@ function Row({ visit, date, selecting, queueItem, selected, onSelect, state, rea
                     earlier.current = null;
                     onState(visit.id, { phase: "idle" });
                   }}>Discard</button>
-                  <button className="secondary" data-testid="pause-resume" disabled={busy} onClick={() => void togglePause()}>{paused ? "Resume" : "Pause"}</button>
+                  <button className="ghost" data-testid="pause-resume" disabled={busy} onClick={() => void togglePause()}>{paused ? "Resume" : "Pause"}</button>
                   <button className="finish" onClick={stop} disabled={busy}>Stop and save</button>
                 </div>
               </section>, slot) : (
@@ -1177,4 +1177,10 @@ function QuickStart({ visits, disabled }: { visits: Visit[]; disabled: boolean }
       ))}
     </div>
   );
+}
+
+/** The line under the level meter: a dead or muted microphone never reads as fine. */
+export function micCheckMessage(heard: boolean, secs: number): string {
+  if (heard) return "Microphone is picking up your voice.";
+  return secs >= 5 ? "No sound yet. Check your microphone, then speak." : "Say a few words: the bar should move.";
 }
