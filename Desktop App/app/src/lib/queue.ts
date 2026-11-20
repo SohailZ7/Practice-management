@@ -72,6 +72,10 @@ let lastOk: number | null = null;
 /** When the server last confirmed an upload in this session (for the Health screen). */
 export const lastUploadAt = (): number | null => lastOk;
 
+/** Recordings the server holds but that are NOT on a visit (they wait under Needs link). Not an upload to be proud of. */
+const notOnVisit = new Set<string>();
+export const notOnVisitCount = (): number => notOnVisit.size;
+
 const inFlight = new Map<string, Promise<UploadResult>>();
 
 /**
@@ -172,7 +176,9 @@ export function uploadQueued(engine: Engine, item: QueueItem, session?: Session 
       }
       await engine.queueComplete(item.visit_id);
       labels.delete(item.visit_id);
-      lastOk = Date.now();
+      // "Confirmed" means the text reached the visit. A recording parked under Needs link is tracked separately.
+      if (delivered && !delivered.linked && item.recording_id) notOnVisit.add(item.recording_id);
+      else lastOk = Date.now();
       return { visitId: item.visit_id, ok: true, reason: warning };
     } catch (e) {
       const failure: UploadFailure = e instanceof LocalReadFailure

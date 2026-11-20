@@ -2,7 +2,7 @@ import { useState } from "react";
 import { sendDiagnostics, type Session } from "./lib/api";
 import type { Engine, EngineStatus, QueueItem } from "./lib/engine";
 import { labelFor, type EnvironmentId } from "./lib/environments";
-import { lastUploadAt, type UploadFailure } from "./lib/queue";
+import { lastUploadAt, notOnVisitCount, type UploadFailure } from "./lib/queue";
 
 const ago = (iso: string | number | null): string => {
   if (iso === null) return "never in this session";
@@ -32,7 +32,8 @@ export function Health({ status, env, session, queue, failures, retrying, onRetr
         {row("Signed in", !!signed, signed ? `Signed in to ${labelFor(env)}. Renewed automatically.` : `Not signed in to ${labelFor(env)}. Open Setup and sign in; recordings stay on this Mac meanwhile.`)}
         {row("Transcription model", status.whisper_model, status.whisper_model ? "Found on this Mac." : "Missing. Go to Schedule and click Download model.")}
         {row("Recordings waiting", waiting.length === 0, waiting.length === 0 ? "Nothing waiting: everything is safe on the server." : `${waiting.length} saved on this Mac, oldest ${ago(oldest)}. They send automatically; nothing is lost.`)}
-        {row("Last upload", true, `Confirmed by the server ${ago(lastUploadAt())}.`)}
+        {row("Recordings not on a visit", notOnVisitCount() === 0, notOnVisitCount() === 0 ? "None: every sent recording reached its visit." : `${notOnVisitCount()} saved on the server but not added to a visit. The visit has not changed. Open Needs link in the practice app and choose Link or Append.`)}
+        {row("Last upload", lastUploadAt() !== null || notOnVisitCount() === 0, lastUploadAt() === null && notOnVisitCount() > 0 ? "No recording has reached a visit yet in this session." : `Confirmed by the server ${ago(lastUploadAt())}.`)}
       </ul>
       {waiting.length > 0 && (
         <ul className="saved-list">

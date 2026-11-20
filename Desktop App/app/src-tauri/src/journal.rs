@@ -114,16 +114,21 @@ pub fn recover(support: &Path, key: &[u8; 32], active: Option<&str>) -> usize {
         // An appended recording is rebuilt with the earlier text in front, so it can be linked without replacing it with
         // less. A journal with no earlier text (older app, or none could be read) still waits for linking by hand.
         let rebuilt = j.append && !j.earlier.trim().is_empty();
-        let by_hand = (j.append && !rebuilt) || folder_taken || crate::safe_component(&j.visit_id).is_err();
-        let folder = if by_hand { j.recording_id.clone() } else { j.visit_id.clone() };
+        let safe_id = crate::safe_component(&j.visit_id).is_ok();
+        // The queue folder is the visit's own only when nothing else uses it; otherwise it is the recording's id. The
+        // folder name never decides the link: a rebuilt append carries the earlier text, so it is linked even when the
+        // visit's folder is taken (an earlier sent copy still waits to be swept).
+        let own_folder = !folder_taken && safe_id && (!j.append || rebuilt);
+        let folder = if own_folder { j.visit_id.clone() } else { j.recording_id.clone() };
+        let link = safe_id && (rebuilt || (!j.append && !folder_taken));
         let secs = segs.iter().filter_map(|s| s.audio_end_time).fold(0.0, f64::max);
         let meta = queue::Metadata {
             version: "1.0".into(), visit_id: folder, environment: j.environment.clone(), created_at: j.created_at.clone(),
             duration_seconds: secs, status: queue::Status::Pending, recording_id: Some(j.recording_id.clone()),
-            link_visit: if by_hand { None } else { Some(j.visit_id.clone()) }, confirmed_at: None,
+            link_visit: if link { Some(j.visit_id.clone()) } else { None }, confirmed_at: None,
         };
         let note = "[Recovered after the app closed unexpectedly; the last seconds may be missing.]\n\n";
-        let preface = if rebuilt && !by_hand {
+        let preface = if rebuilt {
             let sep = if j.separator.is_empty() { "\n\n" } else { j.separator.as_str() };
             format!("{}{}{}", j.earlier.trim_end(), sep, note)
         } else { note.to_string() };
@@ -244,6 +249,25 @@ mod tests {
         let (a, b, c) = (t.find("Earlier visit text."), t.find("--- Added 3:04 PM ---"), t.find("made-up words"));
         assert!(a.is_some() && b.is_some() && c.is_some() && a < b && b < c, "OLD, then the time line, then NEW: {t}");
         assert!(t.contains("Recovered after the app closed"));
+    }
+
+    #[test]
+    fn a_crashed_append_is_rebuilt_and_linked_even_when_the_visit_queue_folder_is_taken() {
+        // Real case (item 10b): the visit's earlier copy was sent but its queue folder still waits to be swept.
+        let d = tmp("app4"); let key = [7u8; 32];
+        let first = new_uuid();
+        sample(&first).save(&d, &key).unwrap();
+        assert_eq!(recover(&d, &key, None), 1); // leaves the folder "v1" in the queue
+        let id = new_uuid();
+        let mut j = sample(&id);
+        j.append = true; j.earlier = "OLD TEXT".into(); j.separator = "\n\n--- Added 9:00 AM ---\n\n".into();
+        j.save(&d, &key).unwrap();
+        assert_eq!(recover(&d, &key, None), 1);
+        let m = queue::read_metadata(&d, &key, &id).unwrap();
+        assert_eq!(m.link_visit.as_deref(), Some("v1"), "must be linked to the visit, not parked");
+        let t = queue::read_text(&d, &key, &id).unwrap();
+        assert!(t.find("OLD TEXT").unwrap() < t.find("made-up words").unwrap(), "earlier text first: {t}");
+        assert!(queue::read_metadata(&d, &key, "v1").is_ok(), "the first item is untouched");
     }
 
     #[test]

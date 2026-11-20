@@ -23,4 +23,10 @@ describe("a crashed appended recording keeps the earlier text", () => {
     expect(read("src/lib/api.ts")).toMatch(/mode\?: "append"/);
     expect(read("src/lib/queue.ts")).toContain("the visit already has different text, so it was not changed");
   });
+
+  it("never shows 'Confirmed by the server' for a recording that did not reach a visit", () => {
+    const q = read("src/lib/queue.ts");
+    expect(q).toMatch(/notOnVisit\.add\(item\.recording_id\);\s*else lastOk = Date\.now\(\)/);
+    expect(read("src/Health.tsx")).toContain("Recordings not on a visit");
+  });
 });
