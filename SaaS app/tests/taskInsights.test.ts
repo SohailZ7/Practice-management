@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { boardColumns, progressLine, taskProgress } from "@/lib/taskInsights";
 import type { TaskDTO } from "@/lib/taskTypes";
 
-const base: TaskDTO = { id: "", title: "t", notes: "", categoryId: null, assigneeId: null, dueDate: null, expiresAt: null, completed: false, status: "not_started", completedAt: null, inToday: false, sortOrder: 0, recurring: false, links: [] };
+const base: TaskDTO = { id: "", title: "t", notes: "", categoryId: null, assigneeId: null, dueDate: null, expiresAt: null, completed: false, status: "not_started", priority: "normal", completedAt: null, inToday: false, sortOrder: 0, recurring: false, links: [] };
 const T = (o: Partial<TaskDTO>): TaskDTO => ({ ...base, ...o });
 const noon = Date.UTC(2026, 10, 18, 20); // 2026-11-18 noon in Los Angeles
 

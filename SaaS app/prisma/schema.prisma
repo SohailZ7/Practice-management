@@ -112,6 +112,8 @@ model Task {
   // not_started | in_progress | done. `completed` stays the source of truth for Done (old rows and the sync read it);
   // this column only tells not_started from in_progress while a task is open. See taskStatus() in taskTypes.ts.
   status         String         @default("not_started")
+  // high | normal | low. Additive (default normal). Auto sort orders by priority, then due date; drag order is the manual override.
+  priority       String         @default("normal")
   completedAt    DateTime?
   inToday        Boolean        @default(false)
   sortOrder      Int            @default(0)

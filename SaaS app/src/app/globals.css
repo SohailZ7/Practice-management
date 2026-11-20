@@ -188,6 +188,8 @@ label.check { display: inline-flex; gap: .25rem; align-items: center; font-size:
 .todo-check:checked { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E") center/80% no-repeat; border-color: var(--accent); }
 .todo-check:disabled { cursor: default; opacity: .6; }
 .pick { appearance: none; -webkit-appearance: none; background: color-mix(in srgb, var(--muted) 14%, var(--card)) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b9eb9' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") right .5rem center/12px no-repeat; border: 0; border-radius: 999px; padding: .12rem 1.4rem .12rem .6rem; font-size: .8rem; color: var(--text); max-width: 150px; cursor: pointer; }
+.pick.prio-high { color: var(--danger); font-weight: 700; }
+.pick.prio-low { color: var(--muted); }
 .pick:disabled { cursor: default; opacity: .8; }
 .due-pill { border: 1px solid transparent; border-radius: 999px; padding: .08rem .6rem; font-size: .8rem; font-weight: 700; background: color-mix(in srgb, var(--muted) 14%, var(--card)); color: var(--muted); cursor: pointer; }
 .due-today { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--card)); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }

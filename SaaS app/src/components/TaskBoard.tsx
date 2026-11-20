@@ -27,7 +27,7 @@ import { PhiConfirm } from "./PhiConfirm";
 import { PHI_WARNING, isPhiBlock } from "@/lib/phiGuard";
 import { TodoSyncButton } from "./TodoSyncButton";
 import { linkTypeMeta } from "@/lib/links";
-import { applyReorder, splitTasks, TASK_STATUSES, TASK_STATUS_LABEL, type CategoryDTO, type TaskDTO, type TaskPatch, type TaskStatus } from "@/lib/taskTypes";
+import { applyReorder, splitTasks, TASK_STATUSES, TASK_STATUS_LABEL, type CategoryDTO, type TaskDTO, type TaskPatch, type TaskStatus, TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "@/lib/taskTypes";
 import { StatusButtons } from "./StatusButtons";
 import {
   addCategory,
@@ -82,6 +82,8 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
   const [tab, setTab] = useState<"todos" | "analytics">("todos");
   const [showCategories, setShowCategories] = useState(false);
   const [view, setView] = useState<"list" | "board">("list");
+  // Auto: priority, then due date. Manual: the saved drag order (admin can drag). Per browser tab.
+  const [auto, setAuto] = useState(true);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -168,7 +170,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
     }
   }
 
-  const { expired, pastDue, today: todayList, backlog, completed } = useMemo(() => splitTasks(tasks, today), [tasks, today]);
+  const { expired, pastDue, today: todayList, backlog, completed } = useMemo(() => splitTasks(tasks, today, auto), [tasks, today, auto]);
   const toggle = (id: string) =>
     setCollapsed((c) => {
       const n = new Set(c);
@@ -203,6 +205,7 @@ export function TaskBoard({ initialTasks, categories: initialCategories, employe
         {tab === "todos" && (
           <div className="tab-switcher" role="group" aria-label="Layout">
             <button type="button" aria-pressed={view === "list"} className={`tab-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")}>List</button>
+            <button type="button" aria-pressed={auto} className={`tab-btn ${auto ? "active" : ""}`} title={auto ? "Sorted by priority, then due date. Click for your manual order." : "Manual order. Click to sort by priority and due date."} onClick={() => setAuto((a) => !a)}>{auto ? "Auto sort" : "Manual order"}</button>
             <button type="button" aria-pressed={view === "board"} className={`tab-btn ${view === "board" ? "active" : ""}`} onClick={() => setView("board")}>Board</button>
           </div>
         )}
@@ -599,6 +602,18 @@ function TaskItem({
           ))}
         </select>
         )}
+        <select
+          className={`pick prio-${task.priority}`}
+          value={task.priority}
+          disabled={!canEdit}
+          aria-label="Priority"
+          title="Priority"
+          onChange={(e) => onPatch(task.id, { priority: e.target.value as TaskPriority })}
+        >
+          {TASK_PRIORITIES.map((p) => (
+            <option key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</option>
+          ))}
+        </select>
         <select
           className="pick"
           value={task.assigneeId ?? ""}

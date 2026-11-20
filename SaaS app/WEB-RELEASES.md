@@ -46,3 +46,4 @@ Web 1.43 | Unification Release B2a: new additive UnmatchedAppointment table (row
 Web 1.44 | Unification Release B2b: ScheduleEntry model removed (table dropped only through the approved, preflighted schema step: verified backup id, snapshot, exact copy counts); Release A backfill tooling retired | bdecc02 local, not pushed | staging practice-mgmt-00149-nuf; ScheduleEntry dropped on staging only
 Web 1.45 | Unlink on a copied unmatched row now clears its patient link (found in the staging browser check); no schema | e2140b3 pushed | staging 00151-naj, smoke 142/0, unlink re-checked in browser
 Web 1.50 | Transcript viewer shows speaker turns with the speaker label and time on each (read from the stored text, nothing stored or rewritten); design note for speaker correction and segments | pending
+Web 1.51 | Tasks: priority (High / Normal / Low, new nullable-default column), Auto sort by priority then due date with a Manual order toggle | PENDING
