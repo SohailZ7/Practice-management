@@ -32,7 +32,9 @@ export function PromoteDialog({ visitId, who, prodUrl, clientId, onClose }: { vi
 
   useEffect(() => {
     let dead = false;
-    void preflightProduction(prodUrl, clientId).then((p) => { if (!dead) setState(p.ok ? { kind: "ready" } : { kind: "blocked", text: p.message }); });
+    void preflightProduction(prodUrl, clientId)
+      .then((p) => { if (!dead) setState(p.ok ? { kind: "ready" } : { kind: "blocked", text: p.message }); })
+      .catch(() => { if (!dead) setState({ kind: "blocked", text: "Could not check production. Close and try again, or tell the team." }); });
     return () => { dead = true; };
   }, [prodUrl, clientId]);
   const btn = useRef<HTMLDivElement>(null);

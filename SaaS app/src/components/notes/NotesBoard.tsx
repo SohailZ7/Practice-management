@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { VisitRow } from "@/lib/notes/queries";
 import { useEffect } from "react";
+import { TRANSCRIPT_LOAD_ERROR, withTimeout } from "@/lib/loadGuard";
 import { searchPatients, createPatient, type PatientOption } from "@/app/schedule/patient-actions";
 import type { VisitOptions } from "@/lib/notes/options";
 import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
@@ -293,7 +294,7 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => {
-    void visitOptions().then(setOpts);
+    void withTimeout(visitOptions()).then(setOpts).catch(() => setErr("Could not load the pick lists. Close and try again, or tell the team."));
   }, []);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const timeOk = isTypedTimeOk(f.apptTime);
@@ -385,9 +386,15 @@ function TranscriptView({ visitId, canEdit, onClose }: { visitId: string; canEdi
   const [labels, setLabels] = useState<SpeakerLabels>({});
   const [saveError, setSaveError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    void getVisitTranscript(visitId).then((r) => { setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }); if (r.ok) setLabels(r.labels); });
-  }, [visitId]);
+    let alive = true;
+    setState(null);
+    withTimeout(getVisitTranscript(visitId))
+      .then((r) => { if (!alive) return; setState(r.ok ? { text: r.transcript, at: r.updatedAt } : { error: r.error }); if (r.ok) setLabels(r.labels); })
+      .catch(() => { if (alive) setState({ error: TRANSCRIPT_LOAD_ERROR }); });
+    return () => { alive = false; };
+  }, [visitId, attempt]);
   return (
     <Modal
       title="Transcript"
@@ -397,6 +404,7 @@ function TranscriptView({ visitId, canEdit, onClose }: { visitId: string; canEdi
       }
       footer={
         <>
+          {state && "error" in state && <button className="secondary" onClick={() => setAttempt((n) => n + 1)}>Retry</button>}
           <button className="secondary" disabled={!state || "error" in state} onClick={async () => {
             if (state && "text" in state) {
               try { await navigator.clipboard.writeText(state.text); setCopied(true); } catch { setCopied(false); }
