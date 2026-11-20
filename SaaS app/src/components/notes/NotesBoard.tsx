@@ -16,7 +16,7 @@ import { RecordingConsentDialog } from "./RecordingConsentDialog";
 import { Modal } from "../Modal";
 import { VisitsTable } from "./VisitsTable";
 import { PromoteDialog } from "./PromoteDialog";
-import { normalizeTyped, formatTimeText, TIME_PRESETS } from "@/lib/notes/scheduleTime";
+import { normalizeTyped, formatTimeText, isTypedTimeOk, TIME_PRESETS } from "@/lib/notes/scheduleTime";
 import Link from "next/link";
 import { askConfirm } from "@/lib/confirm";
 
@@ -285,7 +285,7 @@ function AddVisit({ date, defaultProvider, onDone }: { date: string; defaultProv
     void visitOptions().then(setOpts);
   }, []);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
-  const timeOk = !f.apptTime.trim() || /^\d{4}(-\d{4})?$/.test(f.apptTime.trim()) || /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(f.apptTime.trim()) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(f.apptTime.trim());
+  const timeOk = isTypedTimeOk(f.apptTime);
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Add a visit for {longDate(date)}</h2>

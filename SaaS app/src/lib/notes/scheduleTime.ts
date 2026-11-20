@@ -80,3 +80,12 @@ export function normalizeTyped(text: string): string {
   }
   return out.join("-");
 }
+
+/** Client-side check for the Add visit and time boxes: a single time or a range (pick-list ranges like "9:00 AM-12:00 PM" included), 12-hour, H:MM or military. Empty is fine (no time). */
+export function isTypedTimeOk(text: string): boolean {
+  const t = normalizeTyped((text ?? "").trim());
+  if (!t) return true;
+  const parts = t.split(/\s*-\s*/);
+  if (parts.length > 2) return false;
+  return parts.every((p) => /^\d{1,2}:\d{2}(\s*[ap]\.?m\.?)?$/i.test(p) || /^\d{1,2}\s*[ap]\.?m\.?$/i.test(p));
+}
