@@ -2,7 +2,7 @@
 // column flagged `name`; the redacted export drops those columns (and the Patients report numbers people instead).
 export type ReportVisit = {
   id: string; date: string; time: string; status: string; program: string; type: string; provider: string; trackingOnly: boolean;
-  patientId: string; patientName: string; chargeCode: string; billed: boolean; hasEncounter: boolean; docCount: number; docDraft: boolean;
+  patientId: string; patientName: string; chargeCode: string; billed: boolean; hasEncounter: boolean; docCount: number; docDraft: boolean; docDoneDate: string;
 };
 export type Drill = "s" | "p" | "t" | "c";
 export type Cell = string | number;
@@ -39,6 +39,11 @@ const eq = (a: string, b: string) => (b === "(none)" ? a.trim() === "" : a.trim(
 /** Drill-down: keeps only visits matching the clicked status label (s), provider (p), visit type (t) or charge code (c). */
 export function filterVisits(vs: ReportVisit[], f: VisitFilter): ReportVisit[] {
   return vs.filter((v) => (!f.s || statusText(v.status) === f.s) && (!f.p || eq(v.provider, f.p)) && (!f.t || eq(v.type, f.t)) && (!f.c || eq(v.chargeCode, f.c)));
+}
+/** Average days from the visit date to the day its documents were all final, over seen visits that have one; "" if none. */
+export function turnaround(l: ReportVisit[]): string {
+  const d = l.filter((v) => isSeen(v.status) && v.docDoneDate).map((v) => Math.max(0, Math.round((Date.parse(v.docDoneDate) - Date.parse(v.date)) / 86_400_000)));
+  return d.length ? (d.reduce((a, b) => a + b, 0) / d.length).toFixed(1) : "";
 }
 const weekStart = (iso: string) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
 const overdueNow = (v: ReportVisit, today: string) => (v.status === "scheduled" || v.status === "other") && (Date.parse(today) - Date.parse(v.date)) / 86_400_000 > 7;
@@ -93,12 +98,12 @@ export function buildReport(id: string, all: ReportVisit[], opts: { today: strin
       return [{ title: "By provider", drill: { col: 0, param: "p" }, columns: [{ key: "p", label: "Provider" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "b", label: "Billed" }, { key: "t", label: "" }], rows }];
     }
     case "trends": {
-      const rows = tally(vs, (v) => weekStart(v.date)).map(([k, l]) => [k, l.length, l.filter((v) => isSeen(v.status)).length, l.filter((v) => isNotSeen(v.status)).length, l.filter((v) => isSeen(v.status) && v.trackingOnly).length, l.filter((v) => overdueNow(v, opts.today)).length] as Cell[]);
+      const rows = tally(vs, (v) => weekStart(v.date)).map(([k, l]) => [k, l.length, l.filter((v) => isSeen(v.status)).length, l.filter((v) => isNotSeen(v.status)).length, l.filter((v) => isSeen(v.status) && v.trackingOnly).length, l.filter((v) => overdueNow(v, opts.today)).length, turnaround(l)] as Cell[]);
       const age = (v: ReportVisit) => Math.floor((Date.parse(opts.today) - Date.parse(v.date)) / 86_400_000);
       const od = vs.filter((v) => overdueNow(v, opts.today));
       const ageRows: Cell[][] = [["8 to 14 days", od.filter((v) => age(v) <= 14).length], ["15 to 30 days", od.filter((v) => age(v) > 14 && age(v) <= 30).length], ["Over 30 days", od.filter((v) => age(v) > 30).length]];
       const left = tally(vs.filter((v) => isSeen(v.status) && v.trackingOnly), (v) => v.chargeCode || "(none)").map(([k, l]) => [k, l.length] as Cell[]);
-      return [{ title: "Per week (weeks start Monday)", columns: [{ key: "w", label: "Week of" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "t", label: "Seen, tracking only" }, { key: "o", label: "Overdue now" }], rows },
+      return [{ title: "Per week (weeks start Monday)", columns: [{ key: "w", label: "Week of" }, { key: "n", label: "Visits" }, { key: "s", label: "Seen" }, { key: "ns", label: "Not seen" }, { key: "t", label: "Seen, tracking only" }, { key: "o", label: "Overdue now" }, { key: "tt", label: "Avg days to documents final" }], rows },
         { title: "Overdue ageing (Scheduled or Other, past 7 days)", columns: [{ key: "a", label: "Age" }, { key: "n", label: "Visits" }], rows: ageRows },
         { title: "Seen by tracking-only providers, by charge code (not billed by us)", columns: [{ key: "c", label: "Charge code" }, { key: "n", label: "Visits" }], rows: left },
       ];

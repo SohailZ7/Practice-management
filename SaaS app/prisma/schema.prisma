@@ -310,6 +310,8 @@ model VisitDocument {
   label         String
   markdown      String
   draft         Boolean                @default(true)
+  // When the document stopped being a draft (written/approved). Null while draft and on older documents. Additive; feeds Reports > Trends turnaround.
+  finalizedAt   DateTime?
   attention     String                 @default("")
   // Template-based documents (progress_note | psych_eval | admit_order | discharge_order). Null on documents written
   // before templates existed; those read as a single "content" field whose version 1 is the stored markdown.

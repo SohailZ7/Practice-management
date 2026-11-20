@@ -5,6 +5,13 @@ import type { ReportVisit } from "./build";
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export const cleanRange = (from: unknown, to: unknown) => ({ from: typeof from === "string" && ISO.test(from) ? from : "", to: typeof to === "string" && ISO.test(to) ? to : "" });
 
+/** Date (practice time zone) the last document was finalized, when every document is final and dated; else "". */
+function doneDate(docs: { draft: boolean; finalizedAt: Date | null }[]): string {
+  if (docs.length === 0 || docs.some((d) => d.draft || !d.finalizedAt)) return "";
+  const last = Math.max(...docs.map((d) => d.finalizedAt!.getTime()));
+  return new Date(last).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+
 /** Visits in [from, to] (blank = all, capped at 5000) as report rows. `providerOnly` limits a non-admin to their own provider's visits. */
 export async function loadReportVisits(f: { from: string; to: string; providerOnly: string | null }): Promise<{ visits: ReportVisit[]; capped: boolean }> {
   const where = {
@@ -14,7 +21,7 @@ export async function loadReportVisits(f: { from: string; to: string; providerOn
   const [rows, tracking] = await Promise.all([
     db.visit.findMany({
       where, orderBy: { visitDate: "asc" }, take: 5001,
-      select: { id: true, visitDate: true, apptTime: true, status: true, program: true, appointmentType: true, providerName: true, patientId: true, encounter: { select: { chargeCode: true, getixEntered: true, deletedAt: true } }, patient: { select: { firstName: true, lastName: true } }, documents: { select: { draft: true } } },
+      select: { id: true, visitDate: true, apptTime: true, status: true, program: true, appointmentType: true, providerName: true, patientId: true, encounter: { select: { chargeCode: true, getixEntered: true, deletedAt: true } }, patient: { select: { firstName: true, lastName: true } }, documents: { select: { draft: true, finalizedAt: true } } },
     }),
     db.provider.findMany({ where: { trackingOnly: true }, select: { name: true } }),
   ]);
@@ -26,7 +33,7 @@ export async function loadReportVisits(f: { from: string; to: string; providerOn
     return {
       id: r.id, date: r.visitDate, time: r.apptTime, status: r.status, program: r.program, type: r.appointmentType, provider: r.providerName,
       trackingOnly: trackSet.has(r.providerName.trim().toLowerCase()), patientId: r.patientId, patientName: `${r.patient.lastName}, ${r.patient.firstName}`,
-      chargeCode: code, billed: !!enc && (enc.getixEntered || code.toUpperCase() === "NB DC"), hasEncounter: !!enc, docCount: r.documents.length, docDraft: r.documents.some((d) => d.draft),
+      chargeCode: code, billed: !!enc && (enc.getixEntered || code.toUpperCase() === "NB DC"), hasEncounter: !!enc, docCount: r.documents.length, docDraft: r.documents.some((d) => d.draft), docDoneDate: doneDate(r.documents),
     };
   });
   return { visits, capped };

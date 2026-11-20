@@ -89,7 +89,7 @@ export async function saveDocument(documentId: string, markdown: string) {
 
   await db.$transaction([
     db.visitDocumentVersion.create({ data: { documentId, markdown: doc.markdown, savedByEmail: user.email } }),
-    db.visitDocument.update({ where: { id: documentId }, data: { markdown, draft: isDraft(markdown) } }),
+    db.visitDocument.update({ where: { id: documentId }, data: { markdown, draft: isDraft(markdown), finalizedAt: isDraft(markdown) ? null : doc.finalizedAt ?? new Date() } }),
   ]);
   await audit(user.email, "notes.document.save", `document ${documentId} draft=${isDraft(markdown)}`);
   revalidatePath("/notes"); revalidatePath("/schedule");

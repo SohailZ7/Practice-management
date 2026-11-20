@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildReport, redact, toCsv, type ReportVisit } from "../src/lib/reports/build";
 
-const v = (o: Partial<ReportVisit>): ReportVisit => ({ id: "x", date: "2026-11-05", time: "9:00", status: "seen", program: "KIOP", type: "Follow-up", provider: "Dr A", trackingOnly: false, patientId: "p1", patientName: "Doe, Jane", chargeCode: "99213", billed: false, hasEncounter: true, docCount: 0, docDraft: false, ...o });
+const v = (o: Partial<ReportVisit>): ReportVisit => ({ id: "x", date: "2026-11-05", time: "9:00", status: "seen", program: "KIOP", type: "Follow-up", provider: "Dr A", trackingOnly: false, patientId: "p1", patientName: "Doe, Jane", chargeCode: "99213", billed: false, hasEncounter: true, docCount: 0, docDraft: false, docDoneDate: "", ...o });
 const data = [
   v({ id: "1" }),
   v({ id: "2", status: "no_show", patientId: "p2", patientName: "Roe, Sam" }),
@@ -51,7 +51,15 @@ describe("drill-down and trends", () => {
   });
   it("trends group by Monday week and count overdue", () => {
     const t = buildReport("trends", [...data, v({ id: "9", status: "scheduled", date: "2026-10-01" })], { today: "2026-11-10" })[0];
-    expect(t.rows[0]).toEqual(["2026-09-28", 1, 0, 0, 0, 1]);
+    expect(t.rows[0]).toEqual(["2026-09-28", 1, 0, 0, 0, 1, ""]);
     expect(t.rows.find((r) => r[0] === "2026-11-02")![1]).toBe(4);
+  });
+});
+
+import { turnaround } from "../src/lib/reports/build";
+describe("documentation turnaround", () => {
+  it("averages days from visit to final documents over seen visits that have them", () => {
+    expect(turnaround([v({ docDoneDate: "2026-11-07" }), v({ docDoneDate: "2026-11-06" }), v({}), v({ status: "no_show", docDoneDate: "2026-11-30" })])).toBe("1.5");
+    expect(turnaround([v({})])).toBe("");
   });
 });
