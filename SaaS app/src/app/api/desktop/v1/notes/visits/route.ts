@@ -4,6 +4,8 @@ import { isISODate, todayISO } from "@/lib/dates";
 import { ApiError, authenticate, handle, json, readJson } from "@/lib/desktop/api";
 import { patientInitials } from "@/lib/notes/patientFolder";
 import { addVisit, VisitError } from "@/lib/notes/visitService";
+import { mineName } from "@/lib/notes/mineScope";
+import { sameProvider } from "@/lib/notes/suggestVisit";
 import { LIVE_VISITS } from "@/lib/unify/visible";
 
 export const dynamic = "force-dynamic";
@@ -15,17 +17,22 @@ export const dynamic = "force-dynamic";
 export const GET = handle(async (req) => {
   // Listing needs Notes VIEW, the same as the web Notes board. Visits are not scoped by creator or provider.
   const { user } = await authenticate(req, { module: "notes", level: "view" });
-  const date = new URL(req.url).searchParams.get("date") ?? todayISO();
+  const params = new URL(req.url).searchParams;
+  const date = params.get("date") ?? todayISO();
   if (!isISODate(date)) throw new ApiError(400, "bad_date");
+  // Optional scope for the recorder: mine=1 (the signed-in provider's own visits) or myProviderName=<name>. Without either, every provider's visits, as before.
+  const mine = mineName({ mine: params.get("mine"), myProviderName: params.get("myProviderName"), userName: user.name });
 
-  const visits = await db.visit.findMany({
+  const all = await db.visit.findMany({
     where: { visitDate: date, ...LIVE_VISITS },
     include: { patient: true, documents: { select: { id: true } } },
     orderBy: { createdAt: "asc" },
   });
-  await audit(user.email, "desktop.notes.visits", `${date} visits=${visits.length}`);
+  const visits = mine === null ? all : all.filter((v) => sameProvider(v.providerName, mine));
+  await audit(user.email, "desktop.notes.visits", `${date} visits=${visits.length}${mine === null ? "" : " scope=mine"}`);
   return json({
     date,
+    scope: mine === null ? "all" : "mine",
     visits: visits.map((v) => ({
       id: v.id,
       initials: patientInitials(v.patient.lastName, v.patient.firstName),
