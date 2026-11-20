@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 
 vi.mock("../src/app/ledger/actions", () => ({
   createLedgerEntry: vi.fn(), updateLedgerEntry: vi.fn(), deleteLedgerEntry: vi.fn(), listLedger: vi.fn(),
@@ -76,5 +77,22 @@ describe("Ledger table layout", () => {
   it("shows the empty message spanning the table when there are no rows", () => {
     expect(render(true, [])).toContain('colSpan="8"');
     expect(render(false, [])).toContain('colSpan="7"');
+  });
+
+  // Root cause of the 2026-11-20 prod report (rows 40 to 226 px tall): the fixed column widths added up to more than the
+  // table's minimum width once the Approval column was added, so the one free column (Comments) shrank to almost nothing
+  // and every comment wrapped a few letters per line. The free column must always keep real room.
+  it("the Comments column always keeps at least 200px: fixed widths leave room inside the table min-width", () => {
+    const html = render(true);
+    const fixed = [...html.match(/<colgroup>([\s\S]*?)<\/colgroup>/)![1].matchAll(/width:(\d+)px/g)].reduce((n, m) => n + Number(m[1]), 0);
+    const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+    const min = Number(css.match(/table\.xl\.ledger\s*\{\s*min-width:\s*(\d+)px/)![1]);
+    expect(min - fixed).toBeGreaterThanOrEqual(200);
+  });
+
+  it("plain-text cells never wrap, so a long comment cannot make a tall row", () => {
+    const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+    expect(css).toMatch(/table\.xl\.ledger tbody td:not\(:has\(input, select, button\)\)\s*\{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/table\.xl\.ledger tbody td\s*\{[^}]*height:\s*2\.4rem/);
   });
 });

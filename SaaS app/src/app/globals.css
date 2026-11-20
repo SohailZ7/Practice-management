@@ -303,7 +303,7 @@ tr.xl-draft td { background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
 a.tab-btn { text-decoration: none; display: inline-block; }
 
 /* ledger */
-table.xl.ledger { min-width: 1000px; }
+table.xl.ledger { min-width: 1100px; }
 /* Every ledger row is the same height whether it holds inputs (editor) or plain text (viewer); long comments never grow a row. */
 table.xl.ledger tbody td { height: 2.4rem; vertical-align: middle; }
 table.xl.ledger tbody td:not(:has(input, select, button)) { padding: 0 .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
