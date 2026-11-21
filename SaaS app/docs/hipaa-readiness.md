@@ -157,4 +157,4 @@ Limits are counted per Cloud Run instance, in memory (`src/lib/security/rateLimi
 3 instances (`maxScale=3`), so the effective limit is at most 3 times the number in the rules, and a restart resets the counts. This is a speed bump
 against scripted guessing, not a hard limit. Sign-in itself is Google's (the app never sees passwords), so guessing risk is low. Options if a hard limit is
 ever required: set max instances to 1 (config change, hurts bursts) or add a shared store (Memorystore Redis, a monthly cost) or Cloud Armor.
-Decision 2026-11-21: documented and accepted; no shared store until Sohail asks for one.
+Proposed 2026-11-21: documented as is, no shared store unless Sohail asks for one.
