@@ -158,3 +158,11 @@ Limits are counted per Cloud Run instance, in memory (`src/lib/security/rateLimi
 against scripted guessing, not a hard limit. Sign-in itself is Google's (the app never sees passwords), so guessing risk is low. Options if a hard limit is
 ever required: set max instances to 1 (config change, hurts bursts) or add a shared store (Memorystore Redis, a monthly cost) or Cloud Armor.
 Proposed 2026-11-21: documented as is, no shared store unless Sohail asks for one.
+
+## Backup and restore proof (F6), staging, 2026-11-21
+- Production: automated daily backups and point-in-time recovery were already on (7 backups, 7 days of logs).
+- Staging: backups and point-in-time recovery turned on 2026-11-21 (same settings). An on-demand backup succeeded.
+- Restore test (no production data): staging instance cloned into a throwaway instance. It finished in about 24 minutes (about 4 minutes of that is the start), came up RUNNABLE
+  with the `practice` database present and the same disk size.
+- NOT yet verified: row counts on the restored copy. The instance has a private IP only, so counts must run inside the VPC (a Cloud Run job pointed at the clone).
+- Production restore proof still to do the same way when Sohail agrees (a restore into a throwaway copies patient data, so it needs his typed yes).
