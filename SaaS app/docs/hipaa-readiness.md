@@ -164,5 +164,9 @@ Proposed 2026-11-21: documented as is, no shared store unless Sohail asks for on
 - Staging: backups and point-in-time recovery turned on 2026-11-21 (same settings). An on-demand backup succeeded.
 - Restore test (no production data): staging instance cloned into a throwaway instance. It finished in about 24 minutes (about 4 minutes of that is the start), came up RUNNABLE
   with the `practice` database present and the same disk size.
-- NOT yet verified: row counts on the restored copy. The instance has a private IP only, so counts must run inside the VPC (a Cloud Run job pointed at the clone).
+- Row counts verified: a temporary run of the staging job `bbc-schema-push` (counts only, read-only, no patient data in output) counted every table on staging and on the restored copy. All static tables matched
+  (for example Patient 55, Visit 35, User 18, Task 45, FeedbackItem 11, LedgerEntry 11). Only the three tables that keep growing were lower on the copy (AuditLog 3784 vs 4049, DesktopSession 320 vs 350,
+  RecordingInbox 354 vs 361) because staging kept receiving traffic after the clone was taken. The job was set back to its normal command afterwards.
+- Steps for next time: on-demand backup, `gcloud sql instances clone <instance> <throwaway>` (private IP only, so counts must run in the VPC; the repo's env guard refuses unknown hosts, so a small read-only script was used),
+  compare counts, turn off deletion protection on the throwaway only, delete it. Deleted 2026-11-21.
 - Production restore proof still to do the same way when Sohail agrees (a restore into a throwaway copies patient data, so it needs his typed yes).
