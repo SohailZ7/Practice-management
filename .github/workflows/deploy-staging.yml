@@ -44,7 +44,7 @@ jobs:
         with:
           workload_identity_provider: projects/321509350517/locations/global/workloadIdentityPools/github/providers/github-main
           service_account: gh-deploy@bbc-practice-mgmt-staging.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
       - name: Build and push image
         working-directory: "SaaS app"
         run: |
