@@ -1,0 +1,28 @@
+# Monthly dependency hygiene (F7). Dependabot opens grouped PRs; nothing merges or deploys by itself.
+# High/critical advisories still show in the CI npm audit job. Majors (Next, Prisma) are handled by hand, not here.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/SaaS app"
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: docker
+    directory: "/SaaS app"
+    schedule: { interval: monthly }
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: monthly }
