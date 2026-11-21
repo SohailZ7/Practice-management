@@ -37,7 +37,7 @@ jobs:
       DATABASE_URL: postgresql://ci:ci-throwaway@localhost:5432/ci
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -69,7 +69,7 @@ jobs:
     # When F1 and F2 are done, delete the next line so a high or critical finding fails the build.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -80,6 +80,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build (not pushed anywhere)
         run: docker build -t practice-mgmt-ci .
