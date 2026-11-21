@@ -12,4 +12,4 @@ Policies (each in its own JSON file):
 4. cloudsql-health.json: Cloud SQL instance down, or disk above 85 percent.
 5. app-error-log.json: log-based alert on audit-trigger or schema-gate failure lines (severity ERROR, text match).
 
-Status 2026-11-21: staging and production projects have NO alert policies and no notification channels yet.
+Status 2026-11-21: applied to staging and production (email channel to the practice admin address, 4 policies, uptime check + "Login page down" alert in each). Applied via the Monitoring API; files here are the source.
