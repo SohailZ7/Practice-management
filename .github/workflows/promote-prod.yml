@@ -1,0 +1,60 @@
+# PRODUCTION promote. Manual start only. The job waits for the reviewer set on the GitHub Environment "production" (that approve click is the
+# only human step). Runs SaaS app/scripts/promote.sh: HOLD check, staging-ran-this-commit check, build, additive-only schema gate, backup,
+# schema apply + "database matches schema" re-check, no-traffic deploy, smoke, traffic, error check with automatic rollback.
+#
+# NOT ACTIVE YET. Before the first real run Sohail must (IAM, outside this repo):
+#   1) create the Environment "production" with himself as required reviewer (Settings > Environments),
+#   2) create the prod deploy identity + Workload Identity provider in project bbc-practice-mgmt (mirror of the staging one) and put the two
+#      values below, 3) run once with dry_run=true twice (checks and image build only, nothing deployed).
+name: Promote to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit on main to promote (leave empty = the commit staging is serving)"
+        required: false
+      dry_run:
+        description: "Dry run: all checks and the image build, no backup/deploy/traffic"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: promote-prod
+  cancel-in-progress: false
+
+env:
+  PROD_WIF_PROVIDER: "TODO projects/<prod-project-number>/locations/global/workloadIdentityPools/github/providers/github-main"
+  PROD_DEPLOY_SA: "TODO gh-deploy@bbc-practice-mgmt.iam.gserviceaccount.com"
+  STAGING_WIF_PROVIDER: projects/321509350517/locations/global/workloadIdentityPools/github/providers/github-main
+  STAGING_DEPLOY_SA: gh-deploy@bbc-practice-mgmt-staging.iam.gserviceaccount.com
+
+jobs:
+  promote:
+    name: checks, backup, schema, deploy no-traffic, smoke, traffic
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.PROD_WIF_PROVIDER }}
+          service_account: ${{ env.PROD_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Promote
+        env:
+          SHA: ${{ github.event.inputs.sha }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: bash "SaaS app/scripts/promote.sh"
+      - name: Summary
+        if: always()
+        run: |
+          echo "Promote of ${{ github.event.inputs.sha || 'staging commit' }} (dry_run=${{ github.event.inputs.dry_run }}) result ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
