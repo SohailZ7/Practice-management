@@ -27,7 +27,7 @@ async function create() {
     await db.desktopSession.create({ data: { userId: user.id, tokenHash: t.hash, deviceLabel: "smoke test", expiresAt: new Date(Date.now() + 6 * 3600_000) } });
     out[s.key] = t.token;
   }
-  console.log("SMOKE_TOKENS " + JSON.stringify(out));
+  console.log("SMOKE_TOKENS " + (process.argv[3] ?? "norun") + " " + JSON.stringify(out)); // run id lets the gate match THIS run, not an older revoked one
 }
 async function revoke() {
   const users = await db.user.findMany({ where: { email: { startsWith: "smoke-", endsWith: "@bbc.invalid" } }, select: { id: true } });

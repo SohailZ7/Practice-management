@@ -17,6 +17,9 @@ const call = async (who: string, method: string, path: string, body?: unknown) =
       if (r.status === 429) { await new Promise((s) => setTimeout(s, 2000 * (i + 1))); continue; }
       const text = await r.text(); let j: Record<string, unknown> = {}; try { j = JSON.parse(text); } catch { /* not json */ }
       return { status: r.status, json: j };
+    } catch (e) { // aborted or network error: count as a failed call, never crash the whole run
+      if (i < 2) { await new Promise((s) => setTimeout(s, 1000)); continue; }
+      return { status: 0, json: { error: String((e as Error)?.name ?? e) } as Record<string, unknown> };
     } finally { clearTimeout(t); }
   }
   return { status: 429, json: {} as Record<string, unknown> };
@@ -71,4 +74,4 @@ async function main() {
   console.log(`\n${pass} passed, ${fails.length} failed`);
   process.exit(fails.length ? 1 : 0);
 }
-main();
+main().catch((e) => { console.error(`${pass} passed, ${fails.length} failed, then crashed: ${String(e).slice(0, 200)}`); process.exit(1); });

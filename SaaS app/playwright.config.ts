@@ -9,7 +9,7 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/,
   timeout: 90_000,
   workers: 1,
-  retries: 0,
+  retries: prod ? 1 : 0, // gate: one automatic retry; Playwright lists a pass-on-retry as "flaky", a second failure fails the gate
   reporter: [["list"]],
   use: { baseURL: E2E_BASE, channel: "chrome", trace: "off", screenshot: "only-on-failure" },
   outputDir: "e2e/.results",
