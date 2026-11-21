@@ -1,0 +1,1 @@
+{"displayName":"Cloud SQL down","combiner":"OR","conditions":[{"displayName":"database not up for 5 min","conditionAbsent":{"filter":"resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/up\"","aggregations":[{"alignmentPeriod":"300s","perSeriesAligner":"ALIGN_MEAN"}],"duration":"300s"}}]}

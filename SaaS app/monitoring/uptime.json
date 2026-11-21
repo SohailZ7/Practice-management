@@ -1,0 +1,1 @@
+{"displayName":"Login page uptime check","checkRequest":{"httpCheck":{"path":"/login","port":443,"useSsl":true,"requestMethod":"GET"},"period":"300s","timeout":"10s","monitoredResource":{"type":"uptime_url","labels":{"host":"REPLACE_WITH_SERVICE_HOST","project_id":"REPLACE_WITH_PROJECT"}}}}
