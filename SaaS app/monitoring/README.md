@@ -1,7 +1,7 @@
 # Monitoring and alerting (F5)
 
 Alert policies as files so they are reviewed and repeatable. Nothing here contains secrets or patient data.
-Apply with `./apply.sh <project> <notification-channel-id>`. Create the email channel once (Console > Monitoring >
+Apply to PRODUCTION ONLY with `./apply.sh bbc-practice-mgmt <notification-channel-id>`. Create the email channel once (Console > Monitoring >
 Alerting > Notification channels, or `gcloud beta monitoring channels create --type=email`). Creating a channel sends
 the owner a verification email, so Sohail asks for it first.
 
@@ -12,4 +12,4 @@ Policies (each in its own JSON file):
 4. cloudsql-health.json: Cloud SQL instance down, or disk above 85 percent.
 5. app-error-log.json: log-based alert on audit-trigger or schema-gate failure lines (severity ERROR, text match).
 
-Status 2026-11-21: applied to staging and production (email channel to the practice admin address, 4 policies, uptime check + "Login page down" alert in each). Applied via the Monitoring API; files here are the source.
+Status 2026-11-21: applied to PRODUCTION ONLY (Sohail: no alerts from staging). Email channel to the practice admin address, 4 policies, uptime check + "Login page down" alert. Staging alerts, uptime check and channel were created and then deleted the same day; do not apply to staging. Applied via the Monitoring API; files here are the source.
