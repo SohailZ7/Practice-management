@@ -151,3 +151,10 @@ Sign-in needs a real Google account, so these cannot be fully automated. With a 
 7. **Tasks guard:** type "call re MRN 12345" as a task title: it is refused with a message that does not repeat the number; ticking the confirmation box saves it and the log shows `task.phi_confirmed`.
 8. **Security headers:** `curl -I https://<your domain>/login` shows `Content-Security-Policy`, `Strict-Transport-Security`, `Cache-Control: no-store`, `X-Frame-Options: DENY`. In the browser console there are no CSP violations on Schedule, Tasks, Billing, Ledger, Admin and the import wizard.
 9. **Access review:** `/admin/access-review` shows every user, the admin count and flags; both CSV exports download; the page, the viewer and each export create audit entries. A non-admin is refused.
+
+## Rate limiting (F3)
+Limits are counted per Cloud Run instance, in memory (`src/lib/security/rateLimit.ts`, applied in `src/middleware.ts`). Production is capped at
+3 instances (`maxScale=3`), so the effective limit is at most 3 times the number in the rules, and a restart resets the counts. This is a speed bump
+against scripted guessing, not a hard limit. Sign-in itself is Google's (the app never sees passwords), so guessing risk is low. Options if a hard limit is
+ever required: set max instances to 1 (config change, hurts bursts) or add a shared store (Memorystore Redis, a monthly cost) or Cloud Armor.
+Decision 2026-11-21: documented and accepted; no shared store until Sohail asks for one.
