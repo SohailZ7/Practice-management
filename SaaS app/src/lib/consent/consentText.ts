@@ -11,3 +11,9 @@ export const RECORDING_CONSENT = {
   confirmLabel: "Continue",
   cancelLabel: "Don't record",
 } as const;
+
+/** True when the visit already has a "given" confirmation recorded for the CURRENT wording version. Anything else
+ *  (no rows, declined, older wording, malformed data) means the consent dialog is still shown. */
+export function hasCurrentConsent(rows: ReadonlyArray<{ given?: boolean; textVersion?: string }> | null | undefined): boolean {
+  return !!rows && rows.some((c) => c && c.given === true && c.textVersion === RECORDING_CONSENT.version);
+}

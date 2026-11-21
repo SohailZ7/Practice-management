@@ -11,6 +11,7 @@ import { TRANSCRIPT_LOAD_ERROR, withTimeout } from "@/lib/loadGuard";
 import { searchPatients, createPatient, type PatientOption } from "@/app/schedule/patient-actions";
 import type { VisitOptions } from "@/lib/notes/options";
 import { shouldAutoGenerate } from "@/lib/notes/autoGenerate";
+import { hasCurrentConsent } from "@/lib/consent/consentText";
 import { setClockStyle, getVisitTranscript, saveSpeakerLabels, visitOptions, addVisitAction, priorVisits, deleteVisitAction, deleteVisitsAction, loadPastedSchedule, saveTranscript, updateVisitAction, warmUp } from "@/app/notes/actions";
 import type { DocSummary } from "@/lib/notes/docsClient";
 import { typeIcon } from "@/lib/notes/docUi";
@@ -52,6 +53,16 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
   const [generating, setGenerating] = useState<VisitRow | null>(null);
   // Consent is asked first; Generate opens only after it is confirmed and saved for the visit.
   const [consenting, setConsenting] = useState<VisitRow | null>(null);
+  /** Generate: skip the consent dialog only when this visit already has a confirmation for the current wording; any doubt (fetch fails, older wording, declined) shows it. */
+  async function startGenerate(v: VisitRow) {
+    void warmUp();
+    let ok = false;
+    try {
+      const r = await fetch(`/api/notes/visits/${encodeURIComponent(v.id)}/consent`, { credentials: "same-origin" });
+      if (r.ok) ok = hasCurrentConsent(((await r.json()) as { consents?: { given?: boolean; textVersion?: string }[] }).consents);
+    } catch { ok = false; }
+    if (ok) setGenerating(v); else setConsenting(v);
+  }
   // Documents just generated, shown at once; the server's list replaces them after the refresh.
   const [fresh, setFresh] = useState<Record<string, DocSummary[]>>({});
   const docsOf = (v: VisitRow): DocSummary[] => {
@@ -136,11 +147,11 @@ export function NotesBoard({ date, visits, canEdit, defaultProvider, embedded = 
           onStatus={(v, status) => start(async () => {
             const r = await updateVisitAction(v.id, { status });
             if (!r.ok) setNote(r.error);
-            else if (shouldAutoGenerate(v, status, canEdit)) { void warmUp(); setConsenting(v); }
+            else if (shouldAutoGenerate(v, status, canEdit)) startGenerate(v);
             router.refresh();
           })}
           onOpenDoc={(v, d) => setOpenDoc({ visitId: v.id, id: d.id, label: d.title })}
-          onGenerate={(v) => { void warmUp(); setConsenting(v); }}
+          onGenerate={startGenerate}
           onTranscript={(v) => setReading(v.id)}
           onPasteTranscript={(v) => setPasteFor(v)}
           onPromote={promote ? (v) => setPromoting(v) : undefined}
